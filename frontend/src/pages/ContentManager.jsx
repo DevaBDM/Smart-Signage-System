@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import Sidebar from "../components/Sidebar";
 import api from "../api/axios";
+import FabricDesigner from "../components/FabricDesigner";
 
 export default function ContentManager() {
   const [posts, setPosts] = useState([]);
@@ -11,6 +12,7 @@ export default function ContentManager() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
+  const [showDesigner, setShowDesigner] = useState(false);
   const fileRef = useRef();
 
   const fetchAll = () => {
@@ -34,6 +36,12 @@ export default function ContentManager() {
     setPreview(f ? URL.createObjectURL(f) : null);
   };
 
+  const handleDesignExport = (file, previewUrl) => {
+    setFile(file);
+    setPreview(previewUrl);
+    setShowDesigner(false); // close designer, back to upload form
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!file) return setError("Please select an image.");
@@ -50,7 +58,7 @@ export default function ContentManager() {
       setForm({ title: "", target_device_id: "" });
       setFile(null);
       setPreview(null);
-      fileRef.current.value = "";
+      if (fileRef.current) fileRef.current.value = "";
       fetchAll();
     } catch {
       setError("Failed to publish. Try again.");
@@ -74,7 +82,12 @@ export default function ContentManager() {
           Upload signage images and publish them to displays.
         </p>
 
-        <div style={styles.grid}>
+        <div
+          style={{
+            ...styles.grid,
+            gridTemplateColumns: showDesigner ? "1fr" : "1fr 1fr",
+          }}
+        >
           {/* Upload Form */}
           <section style={styles.card}>
             <h2 style={styles.cardTitle}>📤 Publish New Post</h2>
@@ -110,15 +123,44 @@ export default function ContentManager() {
               </select>
 
               <label style={styles.label}>Signage Image</label>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                onChange={handleFile}
-                style={styles.fileInput}
-              />
 
-              {preview && (
+              {/* Toggle between upload and designer */}
+              <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                <button
+                  type="button"
+                  style={{
+                    ...styles.modeBtn,
+                    background: !showDesigner ? "#2563eb" : "#f3f4f6",
+                    color: !showDesigner ? "#fff" : "#374151",
+                  }}
+                  onClick={() => setShowDesigner(false)}
+                >
+                  📁 Upload File
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    ...styles.modeBtn,
+                    background: showDesigner ? "#2563eb" : "#f3f4f6",
+                    color: showDesigner ? "#fff" : "#374151",
+                  }}
+                  onClick={() => setShowDesigner(true)}
+                >
+                  🎨 Design Here
+                </button>
+              </div>
+
+              {!showDesigner && (
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFile}
+                  style={styles.fileInput}
+                />
+              )}
+
+              {preview && !showDesigner && (
                 <img
                   src={preview}
                   alt="preview"
@@ -137,6 +179,20 @@ export default function ContentManager() {
               </button>
             </form>
           </section>
+
+          {/* Designer section */}
+          {showDesigner && (
+            <section
+              style={{ ...styles.card, marginTop: 24, gridColumn: "span 2" }}
+            >
+              <h2 style={styles.cardTitle}>🎨 Signage Designer</h2>
+              <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 16 }}>
+                Design your announcement, then click <strong>Use This Design</strong> to
+                attach it to the form above.
+              </p>
+              <FabricDesigner onExport={handleDesignExport} />
+            </section>
+          )}
 
           {/* Posts List */}
           <section style={styles.card}>
@@ -268,4 +324,13 @@ const styles = {
     cursor: "pointer",
   },
   empty: { color: "#9ca3af", fontSize: 14, textAlign: "center", padding: 24 },
+  modeBtn: {
+    padding: "7px 14px",
+    borderRadius: 6,
+    border: "1px solid #d1d5db",
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+  },
 };
+
