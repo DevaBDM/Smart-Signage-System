@@ -4,6 +4,8 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import ContentManager from "./pages/ContentManager";
 import DeviceMonitor from "./pages/DeviceMonitor";
+import SensorLogs from "./pages/SensorLogs";
+import PublicFeed from "./pages/PublicFeed";
 
 function ProtectedRoute({ children }) {
   const { user } = useAuth();
@@ -42,6 +44,15 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/sensors"
+        element={
+          <ProtectedRoute>
+            <SensorLogs />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/feed" element={<PublicFeed />} />
       <Route path="*" element={<Navigate to="/dashboard" />} />
     </Routes>
   );
