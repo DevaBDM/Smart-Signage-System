@@ -1,6 +1,6 @@
 // src/components/FabricDesigner.jsx
 import { useEffect, useRef, useState } from "react";
-import { fabric } from "fabric";
+import { Canvas, Textbox, Rect, Circle, FabricImage } from "fabric";
 
 const CANVAS_W = 1280;
 const CANVAS_H = 720;
@@ -41,11 +41,10 @@ export default function FabricDesigner({ onExport }) {
   const [bgColor, setBgColor] = useState("#1d4ed8");
 
   useEffect(() => {
-    const canvas = new fabric.Canvas(canvasEl.current, {
+    const canvas = new Canvas(canvasEl.current, {
       width: CANVAS_W,
       height: CANVAS_H,
       backgroundColor: bgColor,
-      selection: true,
     });
     fabricRef.current = canvas;
 
@@ -53,21 +52,22 @@ export default function FabricDesigner({ onExport }) {
     canvas.on("selection:updated", (e) => setSelected(e.selected[0]));
     canvas.on("selection:cleared", () => setSelected(null));
 
-    return () => canvas.dispose();
+    return () => {
+      canvas.dispose();
+    };
   }, []);
 
   // Sync background color
   useEffect(() => {
     if (!fabricRef.current) return;
-    fabricRef.current.setBackgroundColor(bgColor, () =>
-      fabricRef.current.renderAll(),
-    );
+    fabricRef.current.set({ backgroundColor: bgColor });
+    fabricRef.current.renderAll();
   }, [bgColor]);
 
   // ── Object actions ──────────────────────────────────────────
 
   const addText = () => {
-    const t = new fabric.Textbox(text, {
+    const t = new Textbox(text, {
       left: 100,
       top: 100,
       width: 600,
@@ -84,7 +84,7 @@ export default function FabricDesigner({ onExport }) {
 
   const addRect = () => {
     fabricRef.current.add(
-      new fabric.Rect({
+      new Rect({
         left: 200,
         top: 200,
         width: 300,
@@ -99,7 +99,7 @@ export default function FabricDesigner({ onExport }) {
 
   const addCircle = () => {
     fabricRef.current.add(
-      new fabric.Circle({
+      new Circle({
         left: 300,
         top: 250,
         radius: 80,
@@ -110,35 +110,52 @@ export default function FabricDesigner({ onExport }) {
     );
   };
 
-  const addImage = (e) => {
+  const addImage = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const url = URL.createObjectURL(file);
-    fabric.Image.fromURL(url, (img) => {
+    try {
+      const img = await FabricImage.fromURL(url);
       img.scaleToWidth(400);
       img.set({ left: 200, top: 150 });
       fabricRef.current.add(img);
-    });
+      fabricRef.current.renderAll();
+    } catch (err) {
+      console.error("Failed to load image", err);
+    }
   };
 
   const deleteSelected = () => {
     const obj = fabricRef.current.getActiveObject();
     if (obj) {
       fabricRef.current.remove(obj);
+      fabricRef.current.discardActiveObject();
+      fabricRef.current.renderAll();
       setSelected(null);
     }
   };
 
-  const bringForward = () =>
-    fabricRef.current.getActiveObject()?.bringForward();
-  const sendBackward = () =>
-    fabricRef.current.getActiveObject()?.sendBackwards();
+  const bringForward = () => {
+    const obj = fabricRef.current.getActiveObject();
+    if (obj) {
+      fabricRef.current.bringObjectForward(obj);
+      fabricRef.current.renderAll();
+    }
+  };
+
+  const sendBackward = () => {
+    const obj = fabricRef.current.getActiveObject();
+    if (obj) {
+      fabricRef.current.sendObjectBackwards(obj);
+      fabricRef.current.renderAll();
+    }
+  };
+
   const clearCanvas = () => {
     if (!confirm("Clear everything?")) return;
-    fabricRef.current.clear();
-    fabricRef.current.setBackgroundColor(bgColor, () =>
-      fabricRef.current.renderAll(),
-    );
+    fabricRef.current.remove(...fabricRef.current.getObjects());
+    fabricRef.current.set({ backgroundColor: bgColor });
+    fabricRef.current.renderAll();
   };
 
   const exportImage = () => {
