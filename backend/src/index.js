@@ -8,8 +8,15 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Serve uploaded images statically
-app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+// Serve uploaded images statically with CORS fix
+app.use(
+  "/uploads",
+  (req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    next();
+  },
+  express.static(path.join(__dirname, "../uploads")),
+);
 
 // Routes
 app.use("/api/auth", require("./routes/auth"));
