@@ -15,8 +15,8 @@ router.post("/heartbeat", async (req, res) => {
   res.json({ ok: true });
 });
 
-// Get all devices (admin only)
-router.get("/", auth(["admin"]), async (req, res) => {
+// Get all devices
+router.get("/", async (req, res) => {
   const result = await pool.query(
     "SELECT * FROM devices ORDER BY last_seen DESC",
   );

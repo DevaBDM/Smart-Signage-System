@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS devices (
   id SERIAL PRIMARY KEY,
   name VARCHAR(100),
-  ip_address VARCHAR(50),
+  ip_address VARCHAR(50) UNIQUE,
   location VARCHAR(100),
   status VARCHAR(20) DEFAULT 'offline',
   last_seen TIMESTAMP
