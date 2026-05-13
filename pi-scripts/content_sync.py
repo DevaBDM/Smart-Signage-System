@@ -2,7 +2,8 @@
 import requests, time
 from config import SERVER_URL, DEVICE_NAME, DEVICE_ID
 
-ANTHIAS_URL = "http://localhost:8080"   # Anthias runs locally on the Pi
+ANTHIAS_URL = "http://localhost"  # Anthias runs locally on the Pi
+
 
 def get_device():
     try:
@@ -14,16 +15,15 @@ def get_device():
         print(f"[content_sync] Could not fetch device: {e}")
     return None
 
+
 def get_posts():
     try:
         r = requests.get(f"{SERVER_URL}/posts", timeout=5)
-        return [
-            p for p in r.json()
-            if p.get("publish_to_signage") and p.get("images")
-        ]
+        return [p for p in r.json() if p.get("publish_to_signage") and p.get("images")]
     except Exception as e:
         print(f"[content_sync] Could not fetch posts: {e}")
         return []
+
 
 def get_anthias_assets():
     try:
@@ -31,6 +31,7 @@ def get_anthias_assets():
         return r.json()
     except:
         return []
+
 
 def push_to_anthias(post):
     """Add post image as an asset in Anthias."""
@@ -44,11 +45,11 @@ def push_to_anthias(post):
     title = post.get("title") or f"post-{post.get('post_id', 'unknown')}"
     image_url = f"{SERVER_URL.replace('/api', '')}{image_path}"
     payload = {
-        "name":       title,
-        "uri":        image_url,
-        "mimetype":   "image",
-        "duration":   post.get("duration_seconds", 10),
-        "is_active":  True,
+        "name": title,
+        "uri": image_url,
+        "mimetype": "image",
+        "duration": post.get("duration_seconds", 10),
+        "is_active": True,
         "is_enabled": True,
     }
     try:
@@ -57,8 +58,9 @@ def push_to_anthias(post):
     except Exception as e:
         print(f"[content_sync] Failed to push to Anthias: {e}")
 
+
 def sync():
-    posts         = get_posts()
+    posts = get_posts()
     anthias_assets = get_anthias_assets()
     existing_names = {a["name"] for a in anthias_assets}
 
@@ -71,7 +73,8 @@ def sync():
 
     print(f"[content_sync] Sync done. {new_count} new post(s) pushed.")
 
+
 if __name__ == "__main__":
     while True:
         sync()
-        time.sleep(60)   # check for new content every 60 seconds
+        time.sleep(60)  # check for new content every 60 seconds
