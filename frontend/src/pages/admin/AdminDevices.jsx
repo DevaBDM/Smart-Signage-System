@@ -8,6 +8,7 @@ export default function AdminDevices() {
   const [depts, setDepts] = useState([]);
   const [sel, setSel] = useState(null);
   const [sensors, setSensors] = useState([]);
+  const [sensorLoading, setSensorLoading] = useState(false);
   const [form, setForm] = useState({
     device_name: "",
     ip_address: "",
@@ -38,6 +39,17 @@ export default function AdminDevices() {
     return () => clearInterval(t);
   }, []);
 
+  const loadSensors = async (device) => {
+    if (!device) return;
+    setSensorLoading(true);
+    try {
+      const r = await api.get(`/devices/${device.id}`);
+      setSensors(r.data.sensor_logs || []);
+    } finally {
+      setSensorLoading(false);
+    }
+  };
+
   const select = async (d) => {
     setSel(d);
     setEditForm({
@@ -46,8 +58,7 @@ export default function AdminDevices() {
       location: d.location || "",
       department_id: d.department_id ? String(d.department_id) : "",
     });
-    const r = await api.get(`/devices/${d.id}`);
-    setSensors(r.data.sensor_logs || []);
+    loadSensors(d);
   };
 
   const register = async (e) => {
@@ -276,9 +287,24 @@ export default function AdminDevices() {
                 </button>
               </form>
             )}
-            <h3 style={{ fontWeight: 700, marginBottom: 10 }}>
-              Sensor Logs
-            </h3>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
+                marginBottom: 10,
+              }}
+            >
+              <h3 style={{ fontWeight: 700 }}>Sensor Logs</h3>
+              <button
+                onClick={() => loadSensors(sel)}
+                disabled={!sel || sensorLoading}
+                style={{ ...S.btn, padding: "6px 10px" }}
+              >
+                {sensorLoading ? "Refreshing..." : "Refresh"}
+              </button>
+            </div>
             <div
               style={{
                 display: "flex",
