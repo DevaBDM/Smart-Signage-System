@@ -12,7 +12,6 @@ export default function AdminUsers() {
     role: "creator",
     department_id: "",
   });
-  const [deptName, setDeptName] = useState("");
   const [error, setError] = useState("");
 
   const load = () => {
@@ -46,18 +45,6 @@ export default function AdminUsers() {
       load();
     } catch (e) {
       setError(e.response?.data?.error || "Failed");
-    }
-  };
-
-  const createDepartment = async (e) => {
-    e.preventDefault();
-    setError("");
-    try {
-      await api.post("/departments", { name: deptName });
-      setDeptName("");
-      load();
-    } catch (e) {
-      setError(e.response?.data?.error || "Failed to create department");
     }
   };
 
@@ -156,34 +143,6 @@ export default function AdminUsers() {
                 }}
               >
                 Create User
-              </button>
-            </form>
-            <form
-              onSubmit={createDepartment}
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 10,
-                marginTop: 22,
-                paddingTop: 18,
-                borderTop: "1px solid #e5e7eb",
-              }}
-            >
-              <h2 style={{ fontWeight: 700, marginBottom: 4 }}>
-                Add Department
-              </h2>
-              <label style={S.label}>Department Name</label>
-              <input
-                style={S.input}
-                value={deptName}
-                onChange={(e) => setDeptName(e.target.value)}
-                required
-              />
-              <button
-                type="submit"
-                style={{ ...S.btn, background: "#16a34a", color: "#fff" }}
-              >
-                Create Department
               </button>
             </form>
           </div>

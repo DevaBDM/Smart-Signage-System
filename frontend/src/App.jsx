@@ -9,6 +9,7 @@ import Login from "./pages/Login";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminDevices from "./pages/admin/AdminDevices";
 import AdminUsers from "./pages/admin/AdminUsers";
+import AdminDepartments from "./pages/admin/AdminDepartments";
 import AdminPosts from "./pages/admin/AdminPosts";
 import AdminPlaylists from "./pages/admin/AdminPlaylists";
 import AdminLogs from "./pages/admin/AdminLogs";
@@ -73,6 +74,14 @@ function AppRoutes() {
         element={
           <RequireRole role="admin">
             <AdminUsers />
+          </RequireRole>
+        }
+      />
+      <Route
+        path="/admin/departments"
+        element={
+          <RequireRole role="admin">
+            <AdminDepartments />
           </RequireRole>
         }
       />
