@@ -41,7 +41,11 @@ router.get("/", async (req, res) => {
   const where = {};
   if (feed === "true") where.publish_to_feed = true;
   if (feed === "true") where.status = "published";
-  if (department_id) where.department_id = Number(department_id);
+  
+  if (department_id && !isNaN(Number(department_id))) {
+    where.department_id = Number(department_id);
+  }
+  
   const posts = await prisma.post.findMany({
     where,
     include: {
