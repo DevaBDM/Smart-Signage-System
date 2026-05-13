@@ -1,0 +1,136 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Department {
+  id         Int       @id @default(autoincrement())
+  name       String    @unique
+  created_at DateTime  @default(now())
+
+  users      User[]
+  devices    Device[]
+  posts      Post[]
+  playlists  Playlist[]
+}
+
+model User {
+  id            Int        @id @default(autoincrement())
+  username      String     @unique
+  password_hash String
+  role          Role       @default(creator)
+  department    Department? @relation(fields: [department_id], references: [id])
+  department_id Int?
+  created_at    DateTime   @default(now())
+
+  posts         Post[]
+}
+
+enum Role {
+  admin
+  creator
+  viewer
+}
+
+model Post {
+  id                   Int               @id @default(autoincrement())
+  title                String
+  slug                 String            @unique
+  description_markdown String?
+  department           Department        @relation(fields: [department_id], references: [id])
+  department_id        Int
+  created_by           Int
+  author               User              @relation(fields: [created_by], references: [id])
+  publish_to_feed      Boolean           @default(false)
+  publish_to_signage   Boolean           @default(false)
+  status               PostStatus        @default(draft)
+  created_at           DateTime          @default(now())
+  updated_at           DateTime          @updatedAt
+
+  images               PostImage[]
+  signage_metadata     SignageMetadata?
+  playlist_items       PlaylistItem[]
+}
+
+enum PostStatus {
+  draft
+  published
+}
+
+model PostImage {
+  id          Int      @id @default(autoincrement())
+  post        Post     @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  post_id     Int
+  image_path  String
+  order_index Int      @default(0)
+  created_at  DateTime @default(now())
+}
+
+model SignageMetadata {
+  id               Int      @id @default(autoincrement())
+  post             Post     @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  post_id          Int      @unique
+  duration_seconds Int      @default(10)
+  start_date       DateTime?
+  end_date         DateTime?
+  priority         Int      @default(1)
+  display_group    String?
+  created_at       DateTime @default(now())
+}
+
+model Device {
+  id               Int        @id @default(autoincrement())
+  device_name      String
+  department       Department? @relation(fields: [department_id], references: [id])
+  department_id    Int?
+  ip_address       String     @unique
+  status           String     @default("offline")
+  last_seen        DateTime?
+  current_playlist Int?
+  created_at       DateTime   @default(now())
+
+  sensor_logs      SensorLog[]
+  error_logs       ErrorLog[]
+}
+
+model SensorLog {
+  id         Int      @id @default(autoincrement())
+  device     Device   @relation(fields: [device_id], references: [id])
+  device_id  Int
+  motion     Boolean  @default(false)
+  brightness Int      @default(0)
+  rain       Boolean  @default(false)
+  created_at DateTime @default(now())
+}
+
+model ErrorLog {
+  id         Int      @id @default(autoincrement())
+  device     Device   @relation(fields: [device_id], references: [id])
+  device_id  Int
+  error_type String
+  message    String
+  created_at DateTime @default(now())
+}
+
+model Playlist {
+  id            Int            @id @default(autoincrement())
+  name          String
+  department    Department     @relation(fields: [department_id], references: [id])
+  department_id Int
+  created_at    DateTime       @default(now())
+
+  items         PlaylistItem[]
+}
+
+model PlaylistItem {
+  id               Int      @id @default(autoincrement())
+  playlist         Playlist @relation(fields: [playlist_id], references: [id], onDelete: Cascade)
+  playlist_id      Int
+  post             Post     @relation(fields: [post_id], references: [id])
+  post_id          Int
+  duration_seconds Int      @default(10)
+  order_index      Int      @default(0)
+}

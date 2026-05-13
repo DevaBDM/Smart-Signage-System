@@ -1,35 +1,25 @@
-// Sample Arduino Sketch for Smart Signage Sensors
-
-const int proximityPin = 2; // Digital pin for proximity sensor
-const int lightPin = A0;    // Analog pin for light sensor
-const int rainPin = 3;      // Digital pin for rain sensor
+// arduino/sensors.ino
+const int motionPin = 2;
+const int lightPin = A0;
+const int rainPin = A1;
 
 void setup() {
   Serial.begin(9600);
-  pinMode(proximityPin, INPUT);
+  pinMode(motionPin, INPUT);
+  pinMode(lightPin, INPUT);
   pinMode(rainPin, INPUT);
 }
 
 void loop() {
-  // Read sensors
-  int proximityValue = digitalRead(proximityPin);
-  int lightValue = analogRead(lightPin);
-  int rainValue = digitalRead(rainPin);
+  int motionVal = digitalRead(motionPin);
+  int lightVal = analogRead(lightPin);
+  int rainVal = analogRead(rainPin);
 
-  // Send data in the format expected by sensor_bridge.py:
-  // SENSOR:<type>:<value>
-
-  // Proximity sensor (1 = detected, 0 = not detected)
-  Serial.print("SENSOR:proximity:");
-  Serial.println(proximityValue);
-
-  // Light sensor (analog 0–1023)
-  Serial.print("SENSOR:light:");
-  Serial.println(lightValue);
-
-  // Rain sensor (1 = rain detected, 0 = dry)
-  Serial.print("SENSOR:rain:");
-  Serial.println(rainValue);
-
-  delay(2000); // Send every 2 seconds
+  // New format: SENSOR:motion:1,brightness:742,rain:0
+  String msg = "SENSOR:motion:" + String(motionVal) +
+               ",brightness:" + String(lightVal) +
+               ",rain:" + String(rainVal);
+  
+  Serial.println(msg);
+  delay(2000);
 }
