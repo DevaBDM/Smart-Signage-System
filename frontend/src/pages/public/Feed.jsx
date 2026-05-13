@@ -46,28 +46,33 @@ export default function Feed() {
             </div>
           </div>
         </div>
-        <div style={{ textAlign: "right" }}>
-          <div
-            style={{
-              fontSize: 26,
-              fontWeight: 700,
-              color: "#2563eb",
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            {time.toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-              second: "2-digit",
-            })}
-          </div>
-          <div style={{ fontSize: 12, color: "#6b7280" }}>
-            {time.toLocaleDateString([], {
-              weekday: "long",
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
+        <div style={s.headerActions}>
+          <button onClick={() => navigate("/login")} style={s.loginBtn}>
+            Login
+          </button>
+          <div style={{ textAlign: "right" }}>
+            <div
+              style={{
+                fontSize: 26,
+                fontWeight: 700,
+                color: "#2563eb",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {time.toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+              })}
+            </div>
+            <div style={{ fontSize: 12, color: "#6b7280" }}>
+              {time.toLocaleDateString([], {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })}
+            </div>
           </div>
         </div>
       </header>
@@ -154,6 +159,21 @@ const s = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
+  },
+  headerActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: 18,
+  },
+  loginBtn: {
+    border: "1.5px solid #2563eb",
+    borderRadius: 8,
+    background: "#fff",
+    color: "#2563eb",
+    cursor: "pointer",
+    fontSize: 13,
+    fontWeight: 700,
+    padding: "8px 14px",
   },
   searchBar: {
     background: "#fff",
