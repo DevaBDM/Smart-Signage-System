@@ -18,7 +18,9 @@ export default function AdminPlaylists() {
       .then((r) => setDepts(r.data))
       .catch(() => {});
   };
-  useEffect(load, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   const create = async (e) => {
     e.preventDefault();

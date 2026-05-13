@@ -15,7 +15,9 @@ export default function AdminPosts() {
       .get("/posts")
       .then((r) => setPosts(r.data))
       .catch(() => {});
-  useEffect(load, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   const del = async (id) => {
     if (!confirm("Delete post?")) return;

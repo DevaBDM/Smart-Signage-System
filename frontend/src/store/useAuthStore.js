@@ -13,7 +13,9 @@ const useAuthStore = create((set) => ({
   },
 
   clearAuth: () => {
-    localStorage.clear();
+    localStorage.removeItem("token");
+    localStorage.removeItem("role");
+    localStorage.removeItem("department_id");
     set({ token: null, role: null, department_id: null });
   },
 }));

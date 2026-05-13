@@ -24,7 +24,9 @@ export default function AdminUsers() {
       .then((r) => setDepts(r.data))
       .catch(() => {});
   };
-  useEffect(load, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   const submit = async (e) => {
     e.preventDefault();

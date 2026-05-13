@@ -28,7 +28,9 @@ export default function CreatorPosts() {
       .get(`/posts?department_id=${department_id}`)
       .then((r) => setPosts(r.data))
       .catch(() => {});
-  useEffect(load, []);
+  useEffect(() => {
+    load();
+  }, [department_id]);
 
   const submit = async (e) => {
     e.preventDefault();
