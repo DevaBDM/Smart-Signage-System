@@ -5,7 +5,7 @@ After=network.target
 [Service]
 WorkingDirectory=/home/pi/signage
 ExecStartPre=/bin/sleep 10
-ExecStart=/bin/bash -c 'python3 heartbeat.py & python3 sensor_bridge.py & python3 content_sync.py'
+ExecStart=/usr/bin/python3 /home/pi/signage/socket_client.py
 Restart=always
 RestartSec=5
 User=pi

@@ -8,7 +8,7 @@ These scripts are designed to run on a Raspberry Pi to communicate with the cent
    ```bash
    sudo apt update
    sudo apt install python3-pip python3-serial -y
-   pip3 install requests pyserial
+   pip3 install requests pyserial "python-socketio[client]" websocket-client
    ```
 
 2. **Copy Scripts:**
@@ -34,3 +34,5 @@ These scripts are designed to run on a Raspberry Pi to communicate with the cent
    ```bash
    journalctl -u signage -f
    ```
+   After publishing a signage post from the dashboard, you should see a
+   `[socket] New playlist` line followed by `[content_sync] pushed ... to Anthias`.

@@ -1,24 +1,36 @@
 # ~/signage/content_sync.py
-import requests, time
-from config import SERVER_URL, DEVICE_NAME, DEVICE_ID
+import mimetypes
+import time
+from datetime import datetime, timedelta, timezone
+from urllib.parse import urljoin
 
-ANTHIAS_URL = "http://localhost"  # Anthias runs locally on the Pi
+import requests
+
+from config import ANTHIAS_URL, SERVER_URL
+
+REQUEST_TIMEOUT = 10
+API_BASE = ANTHIAS_URL.rstrip("/")
+SERVER_BASE = SERVER_URL.replace("/api", "").rstrip("/")
+ASSET_ENDPOINTS = ("/api/v2/assets", "/api/v1/assets")
 
 
-def get_device():
-    try:
-        r = requests.get(f"{SERVER_URL}/devices", timeout=5)
-        for d in r.json():
-            if d.get("id") == DEVICE_ID or d.get("device_name") == DEVICE_NAME:
-                return d
-    except Exception as e:
-        print(f"[content_sync] Could not fetch device: {e}")
-    return None
+def _response_text(response):
+    text = response.text.strip()
+    return text[:500] if text else "<empty response>"
+
+
+def _asset_list(payload):
+    if isinstance(payload, list):
+        return payload
+    if isinstance(payload, dict):
+        return payload.get("results") or payload.get("assets") or []
+    return []
 
 
 def get_posts():
     try:
-        r = requests.get(f"{SERVER_URL}/posts", timeout=5)
+        r = requests.get(f"{SERVER_URL}/posts", timeout=REQUEST_TIMEOUT)
+        r.raise_for_status()
         return [p for p in r.json() if p.get("publish_to_signage") and p.get("images")]
     except Exception as e:
         print(f"[content_sync] Could not fetch posts: {e}")
@@ -26,11 +38,41 @@ def get_posts():
 
 
 def get_anthias_assets():
-    try:
-        r = requests.get(f"{ANTHIAS_URL}/api/v1/assets", timeout=5)
-        return r.json()
-    except:
-        return []
+    for endpoint in ASSET_ENDPOINTS:
+        try:
+            r = requests.get(f"{API_BASE}{endpoint}", timeout=REQUEST_TIMEOUT)
+            if r.status_code == 404:
+                continue
+            r.raise_for_status()
+            return _asset_list(r.json())
+        except Exception as e:
+            print(f"[content_sync] Could not fetch Anthias assets from {endpoint}: {e}")
+    return []
+
+
+def build_image_url(image_path):
+    if image_path.startswith(("http://", "https://")):
+        return image_path
+    return urljoin(f"{SERVER_BASE}/", image_path.lstrip("/"))
+
+
+def image_mimetype(image_path):
+    mimetype, _ = mimetypes.guess_type(image_path)
+    return mimetype or "image/jpeg"
+
+
+def post_key(post):
+    return str(post.get("post_id") or post.get("id") or post.get("title") or "unknown")
+
+
+def format_anthias_date(value, fallback):
+    if value:
+        return value
+    return fallback.isoformat().replace("+00:00", "Z")
+
+
+def post_signage_metadata(post):
+    return post.get("signage_metadata") or {}
 
 
 def push_to_anthias(post):
@@ -40,36 +82,66 @@ def push_to_anthias(post):
         image_path = post["images"][0].get("image_path")
     if not image_path:
         print("[content_sync] post has no image_url or images")
-        return
+        return False
 
-    title = post.get("title") or f"post-{post.get('post_id', 'unknown')}"
-    image_url = f"{SERVER_URL.replace('/api', '')}{image_path}"
+    title = post.get("title") or f"post-{post_key(post)}"
+    image_url = build_image_url(image_path)
+    metadata = post_signage_metadata(post)
+    now = datetime.now(timezone.utc)
     payload = {
-        "name": title,
+        "name": f"{title} ({post_key(post)})",
         "uri": image_url,
-        "mimetype": "image",
-        "duration": post.get("duration_seconds", 10),
-        "is_active": True,
+        "start_date": format_anthias_date(
+            post.get("start_date") or metadata.get("start_date"),
+            now - timedelta(minutes=1),
+        ),
+        "end_date": format_anthias_date(
+            post.get("end_date") or metadata.get("end_date"),
+            now + timedelta(days=3650),
+        ),
+        "mimetype": image_mimetype(image_path),
+        "duration": post.get("duration_seconds") or metadata.get("duration_seconds") or 10,
         "is_enabled": True,
+        "nocache": True,
+        "skip_asset_check": True,
     }
-    try:
-        r = requests.post(f"{ANTHIAS_URL}/api/v1/assets", json=payload, timeout=10)
-        print(f"[content_sync] pushed '{title}' -> {r.status_code}")
-    except Exception as e:
-        print(f"[content_sync] Failed to push to Anthias: {e}")
+    for endpoint in ASSET_ENDPOINTS:
+        try:
+            r = requests.post(f"{API_BASE}{endpoint}", json=payload, timeout=REQUEST_TIMEOUT)
+            if r.status_code == 404:
+                continue
+            if r.status_code in (200, 201):
+                print(
+                    f"[content_sync] pushed '{title}' to Anthias via {endpoint} "
+                    f"-> {r.status_code}"
+                )
+                return True
+
+            print(
+                f"[content_sync] Anthias rejected '{title}' via {endpoint} -> "
+                f"{r.status_code}: {_response_text(r)}"
+            )
+            return False
+        except Exception as e:
+            print(f"[content_sync] Failed to push to Anthias via {endpoint}: {e}")
+    return False
 
 
 def sync():
     posts = get_posts()
     anthias_assets = get_anthias_assets()
-    existing_names = {a["name"] for a in anthias_assets}
+    existing_names = {a.get("name") for a in anthias_assets if a.get("name")}
 
     new_count = 0
     for post in posts:
-        title = post.get("title") or f"post-{post.get('id', 'unknown')}"
-        if title not in existing_names:
-            push_to_anthias(post)
-            new_count += 1
+        title = post.get("title") or f"post-{post_key(post)}"
+        asset_name = f"{title} ({post_key(post)})"
+        if asset_name not in existing_names:
+            if push_to_anthias(post):
+                existing_names.add(asset_name)
+                new_count += 1
+        else:
+            print(f"[content_sync] already in Anthias: {asset_name}")
 
     print(f"[content_sync] Sync done. {new_count} new post(s) pushed.")
 

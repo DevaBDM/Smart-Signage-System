@@ -77,6 +77,8 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
       title: post.title,
       image_url: image?.image_path,
       duration_seconds: Number(duration_seconds) || 10,
+      start_date: start_date || null,
+      end_date: end_date || null,
     });
 
   res.json({ ok: true, pi_notified: !!pushed });

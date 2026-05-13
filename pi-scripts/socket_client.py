@@ -1,4 +1,4 @@
-import socketio, time, threading, serial
+import socketio, time, threading
 from config import SERVER_URL, DEVICE_ID, SERIAL_PORT, BAUD_RATE
 
 RAIN_THRESHOLD = 500
@@ -21,15 +21,33 @@ def disconnect():
 @sio.on("playlist_update")
 def on_playlist_update(data):
     print(f"[socket] New playlist: {data}")
-    # Hand off to content_sync / anthias_controller
-    # Note: anthias_controller needs to be implemented or imported correctly
     try:
         from content_sync import push_to_anthias
 
-        push_to_anthias(data)
-        sio.emit("playlist_ack", {"device_id": DEVICE_ID})
+        if push_to_anthias(data):
+            sio.emit("playlist_ack", {"device_id": DEVICE_ID})
+        else:
+            sio.emit(
+                "error_log",
+                {
+                    "device_id": DEVICE_ID,
+                    "error_type": "anthias_push_failed",
+                    "message": f"Could not push asset to Anthias: {data}",
+                },
+            )
     except ImportError:
         print("[socket] content_sync.py or push_to_anthias not found")
+    except Exception as e:
+        print(f"[socket] playlist_update failed: {e}")
+        if sio.connected:
+            sio.emit(
+                "error_log",
+                {
+                    "device_id": DEVICE_ID,
+                    "error_type": "playlist_update_failed",
+                    "message": str(e),
+                },
+            )
 
 
 @sio.on("refresh_display")
@@ -64,6 +82,8 @@ def heartbeat_loop():
 
 def sensor_loop():
     try:
+        import serial
+
         ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=2)
         time.sleep(2)
         while True:
@@ -94,11 +114,27 @@ def sensor_loop():
         print(f"[sensor_loop] {e}")
 
 
+def content_sync_loop():
+    try:
+        from content_sync import sync
+    except ImportError:
+        print("[content_sync_loop] content_sync.py not found")
+        return
+
+    while True:
+        try:
+            sync()
+        except Exception as e:
+            print(f"[content_sync_loop] {e}")
+        time.sleep(60)
+
+
 # ── Main ──────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     threading.Thread(target=heartbeat_loop, daemon=True).start()
     threading.Thread(target=sensor_loop, daemon=True).start()
+    threading.Thread(target=content_sync_loop, daemon=True).start()
 
     while True:
         try:
