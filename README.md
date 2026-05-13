@@ -196,6 +196,7 @@ npx prisma generate
 ```bash
 cd backend
 npx prisma migrate reset
+npx prisma db push
 npx prisma migrate deploy
 npm prisma generate
 # you can delete the backend/uploads/images/*

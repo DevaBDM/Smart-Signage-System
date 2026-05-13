@@ -11,12 +11,19 @@ const BASE = (
 export default function CreatorPosts() {
   const { department_id } = useAuthStore();
   const [posts, setPosts] = useState([]);
+  const [devices, setDevices] = useState([]);
   const [form, setForm] = useState({
     title: "",
     description_markdown: "",
     publish_to_feed: false,
     publish_to_signage: false,
     status: "draft",
+    device_ids: [],
+    duration_seconds: 10,
+    start_date: "",
+    end_date: "",
+    priority: 1,
+    display_group: "",
   });
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -30,6 +37,10 @@ export default function CreatorPosts() {
       .catch(() => {});
   useEffect(() => {
     load();
+    api
+      .get("/devices")
+      .then((r) => setDevices(r.data))
+      .catch(() => {});
   }, [department_id]);
 
   const submit = async (e) => {
@@ -39,7 +50,7 @@ export default function CreatorPosts() {
     try {
       const fd = new FormData();
       Object.entries({ ...form, department_id }).forEach(([k, v]) =>
-        fd.append(k, v),
+        fd.append(k, Array.isArray(v) ? JSON.stringify(v) : v),
       );
       files.forEach((f) => fd.append("images", f));
       await api.post("/posts", fd);
@@ -50,6 +61,12 @@ export default function CreatorPosts() {
         publish_to_feed: false,
         publish_to_signage: false,
         status: "draft",
+        device_ids: [],
+        duration_seconds: 10,
+        start_date: "",
+        end_date: "",
+        priority: 1,
+        display_group: "",
       });
       setFiles([]);
       fileRef.current.value = "";
@@ -63,8 +80,21 @@ export default function CreatorPosts() {
 
   const del = async (id) => {
     if (!confirm("Delete?")) return;
-    await api.delete(`/posts/${id}`);
+    const deleteSignage = confirm("Also remove this post from signage displays?");
+    await api.delete(`/posts/${id}`, {
+      params: { delete_signage: deleteSignage },
+    });
     load();
+  };
+
+  const toggleDevice = (id) => {
+    const deviceId = Number(id);
+    setForm((current) => ({
+      ...current,
+      device_ids: current.device_ids.includes(deviceId)
+        ? current.device_ids.filter((x) => x !== deviceId)
+        : [...current.device_ids, deviceId],
+    }));
   };
 
   return (
@@ -164,9 +194,106 @@ export default function CreatorPosts() {
                       setForm({ ...form, publish_to_signage: e.target.checked })
                     }
                   />
-                  Publish to Signage
+                  Mark as Signage Ready
                 </label>
               </div>
+              {form.publish_to_signage && (
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10,
+                    padding: 12,
+                    border: "1px solid #e5e7eb",
+                    borderRadius: 8,
+                    background: "#f9fafb",
+                  }}
+                >
+                  <label style={S.label}>Target Displays</label>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {devices.length === 0 && (
+                      <span style={{ fontSize: 12, color: "#9ca3af" }}>
+                        No displays are assigned to your department yet.
+                      </span>
+                    )}
+                    {devices.map((d) => (
+                      <label
+                        key={d.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          fontSize: 13,
+                          cursor: "pointer",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={form.device_ids.includes(d.id)}
+                          onChange={() => toggleDevice(d.id)}
+                        />
+                        {d.device_name} ({d.status})
+                      </label>
+                    ))}
+                  </div>
+
+                  <label style={S.label}>Duration (seconds)</label>
+                  <input
+                    style={S.input}
+                    type="number"
+                    min={1}
+                    max={300}
+                    value={form.duration_seconds}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        duration_seconds: Number(e.target.value),
+                      })
+                    }
+                  />
+
+                  <label style={S.label}>Priority (1 = highest)</label>
+                  <input
+                    style={S.input}
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={form.priority}
+                    onChange={(e) =>
+                      setForm({ ...form, priority: Number(e.target.value) })
+                    }
+                  />
+
+                  <label style={S.label}>Start Date (optional)</label>
+                  <input
+                    style={S.input}
+                    type="datetime-local"
+                    value={form.start_date}
+                    onChange={(e) =>
+                      setForm({ ...form, start_date: e.target.value })
+                    }
+                  />
+
+                  <label style={S.label}>End Date (optional)</label>
+                  <input
+                    style={S.input}
+                    type="datetime-local"
+                    value={form.end_date}
+                    onChange={(e) =>
+                      setForm({ ...form, end_date: e.target.value })
+                    }
+                  />
+
+                  <label style={S.label}>Display Group (optional)</label>
+                  <input
+                    style={S.input}
+                    value={form.display_group}
+                    onChange={(e) =>
+                      setForm({ ...form, display_group: e.target.value })
+                    }
+                  />
+                </div>
+              )}
 
               <select
                 style={S.input}

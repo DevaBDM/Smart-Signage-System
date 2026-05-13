@@ -1,5 +1,6 @@
+import socket
 import socketio, time, threading
-from config import SERVER_URL, DEVICE_ID, SERIAL_PORT, BAUD_RATE
+from config import DEVICE_ID, DEVICE_NAME, LOCATION, SERVER_URL, SERIAL_PORT, BAUD_RATE
 
 RAIN_THRESHOLD = 500
 
@@ -24,8 +25,9 @@ def on_playlist_update(data):
     try:
         from content_sync import push_to_anthias
 
-        if push_to_anthias(data):
-            sio.emit("playlist_ack", {"device_id": DEVICE_ID})
+        result = push_to_anthias(data)
+        if result.get("ok"):
+            sio.emit("playlist_ack", {"device_id": DEVICE_ID, **result})
         else:
             sio.emit(
                 "error_log",
@@ -64,6 +66,43 @@ def on_restart(data):
     subprocess.run(["sudo", "systemctl", "restart", "anthias"])
 
 
+@sio.on("signage_command")
+def on_signage_command(data):
+    print(f"[socket] Signage command: {data}")
+    try:
+        from content_sync import (
+            delete_asset,
+            delete_post_assets,
+            list_anthias_assets,
+            playback_control,
+            push_to_anthias,
+            set_asset_enabled,
+        )
+
+        action = data.get("action")
+        if action == "list":
+            return {"ok": True, "assets": list_anthias_assets()}
+        if action == "publish_asset":
+            return push_to_anthias(data)
+        if action == "delete_asset":
+            return delete_asset(data.get("asset_id"))
+        if action == "delete_post_assets":
+            return delete_post_assets(
+                post_id=data.get("post_id"),
+                image_url=data.get("image_url"),
+            )
+        if action == "hide_asset":
+            return set_asset_enabled(data.get("asset_id"), False)
+        if action == "show_asset":
+            return set_asset_enabled(data.get("asset_id"), True)
+        if action in ("next", "previous", "start"):
+            return playback_control(action, asset_id=data.get("asset_id"))
+        return {"ok": False, "error": f"Unknown signage action: {action}"}
+    except Exception as e:
+        print(f"[socket] signage_command failed: {e}")
+        return {"ok": False, "error": str(e)}
+
+
 # ── Pi → Server: heartbeat loop ──────────────────────────────
 
 
@@ -71,10 +110,30 @@ def heartbeat_loop():
     while True:
         try:
             if sio.connected:
-                sio.emit("heartbeat", {"device_id": DEVICE_ID, "status": "online"})
+                sio.emit(
+                    "heartbeat",
+                    {
+                        "device_id": DEVICE_ID,
+                        "device_name": DEVICE_NAME,
+                        "location": LOCATION,
+                        "ip_address": get_local_ip(),
+                        "status": "online",
+                    },
+                )
         except Exception as e:
             print(f"[heartbeat] {e}")
         time.sleep(10)
+
+
+def get_local_ip():
+    try:
+        probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        probe.connect(("8.8.8.8", 80))
+        ip_address = probe.getsockname()[0]
+        probe.close()
+        return ip_address
+    except Exception:
+        return socket.gethostname()
 
 
 # ── Pi → Server: sensor loop (reads from Arduino serial) ─────
@@ -123,7 +182,14 @@ def content_sync_loop():
 
     while True:
         try:
-            sync()
+            pushed_assets = sync()
+            if sio.connected:
+                for result in pushed_assets:
+                    if result.get("ok"):
+                        sio.emit(
+                            "signage_asset_synced",
+                            {"device_id": DEVICE_ID, **result},
+                        )
         except Exception as e:
             print(f"[content_sync_loop] {e}")
         time.sleep(60)

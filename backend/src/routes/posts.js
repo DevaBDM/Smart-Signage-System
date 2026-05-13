@@ -4,6 +4,7 @@ const auth = require("../middleware/auth");
 const multer = require("multer");
 const path = require("path");
 const crypto = require("crypto");
+const { upsertSignageAsset } = require("../utils/signageAssets");
 
 const storage = multer.diskStorage({
   destination: "uploads/images/",
@@ -48,6 +49,19 @@ const slugify = (text) =>
 // Enforce department isolation for creators
 const canManage = (user, department_id) =>
   user.role === "admin" || user.department_id === Number(department_id);
+
+const parseDeviceIds = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.map(Number).filter(Boolean);
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed.map(Number).filter(Boolean);
+  } catch {}
+  return String(value)
+    .split(",")
+    .map(Number)
+    .filter(Boolean);
+};
 
 // GET all posts (public-safe, feed only returns published feed posts)
 router.get("/", async (req, res) => {
@@ -99,6 +113,7 @@ router.post(
       end_date,
       priority,
       display_group,
+      device_ids,
     } = req.body;
 
     const targetDepartmentId =
@@ -112,6 +127,30 @@ router.post(
 
     if (!canManage(req.user, targetDepartmentId))
       return res.status(403).json({ error: "Cannot manage this department" });
+
+    const selectedDeviceIds = parseDeviceIds(device_ids);
+    if (publish_to_signage === "true" && selectedDeviceIds.length === 0) {
+      return res.status(400).json({
+        error: "Select at least one display for signage publishing.",
+      });
+    }
+
+    const targetDevices =
+      selectedDeviceIds.length > 0
+        ? await prisma.device.findMany({
+            where: { id: { in: selectedDeviceIds } },
+          })
+        : [];
+
+    if (
+      targetDevices.some(
+        (device) =>
+          req.user.role !== "admin" &&
+          device.department_id !== req.user.department_id,
+      )
+    ) {
+      return res.status(403).json({ error: "Cannot publish to one or more displays" });
+    }
 
     try {
       const post = await prisma.post.create({
@@ -144,7 +183,104 @@ router.post(
         },
         include: { images: true, signage_metadata: true },
       });
-      res.json(post);
+
+      const emitToDeviceAck = req.app.get("emitToDeviceAck");
+      const image = post.images[0];
+      const deploymentResults = [];
+
+      if (publish_to_signage === "true" && image) {
+        for (const device of targetDevices) {
+          await prisma.signageDeployment.upsert({
+            where: {
+              device_id_post_id: {
+                device_id: device.id,
+                post_id: post.id,
+              },
+            },
+            update: {
+              duration_seconds: Number(duration_seconds) || 10,
+              start_date: start_date ? new Date(start_date) : null,
+              end_date: end_date ? new Date(end_date) : null,
+              priority: Number(priority) || 1,
+              display_group: display_group || null,
+              status: "pending",
+              last_error: null,
+            },
+            create: {
+              device_id: device.id,
+              post_id: post.id,
+              duration_seconds: Number(duration_seconds) || 10,
+              start_date: start_date ? new Date(start_date) : null,
+              end_date: end_date ? new Date(end_date) : null,
+              priority: Number(priority) || 1,
+              display_group: display_group || null,
+              status: "pending",
+            },
+          });
+
+          const existingAsset = await prisma.signageAsset.findFirst({
+            where: {
+              device_id: device.id,
+              post_id: post.id,
+            },
+          });
+
+          const result = existingAsset
+            ? { ok: true, already_exists: true, asset: existingAsset }
+            : emitToDeviceAck
+            ? await emitToDeviceAck(
+                device.id,
+                "signage_command",
+                {
+                  action: "publish_asset",
+                  post_id: post.id,
+                  title: post.title,
+                  image_url: image.image_path,
+                  duration_seconds: Number(duration_seconds) || 10,
+                  start_date: start_date || null,
+                  end_date: end_date || null,
+                },
+                12000,
+              )
+            : { ok: false, error: "Socket bridge is not ready" };
+
+          if (result.ok) {
+            await upsertSignageAsset(prisma, {
+              device_id: device.id,
+              post_id: post.id,
+              image_url: image.image_path,
+              asset: result.asset,
+            });
+            await prisma.signageDeployment.update({
+              where: {
+                device_id_post_id: {
+                  device_id: device.id,
+                  post_id: post.id,
+                },
+              },
+              data: { status: "synced", last_error: null },
+            });
+          } else {
+            await prisma.signageDeployment.update({
+              where: {
+                device_id_post_id: {
+                  device_id: device.id,
+                  post_id: post.id,
+                },
+              },
+              data: { status: "pending", last_error: result.error || null },
+            });
+          }
+
+          deploymentResults.push({
+            device_id: device.id,
+            device_name: device.device_name,
+            result,
+          });
+        }
+      }
+
+      res.json({ ...post, signage_deployments: deploymentResults });
     } catch (e) {
       res.status(400).json({ error: e.message });
     }
@@ -185,12 +321,57 @@ router.put("/:id", auth(["admin", "creator"]), async (req, res) => {
 router.delete("/:id", auth(["admin", "creator"]), async (req, res) => {
   const post = await prisma.post.findUnique({
     where: { id: Number(req.params.id) },
+    include: { images: { orderBy: { order_index: "asc" } } },
   });
   if (!post) return res.status(404).json({ error: "Not found" });
   if (!canManage(req.user, post.department_id))
     return res.status(403).json({ error: "Cannot manage this department" });
+
+  const removeFromSignage = req.query.delete_signage === "true";
+  let signage_results = [];
+  if (removeFromSignage) {
+    const emitToDeviceAck = req.app.get("emitToDeviceAck");
+    const devices = await prisma.device.findMany({
+      where:
+        req.user.role === "admin"
+          ? { department_id: post.department_id }
+          : { department_id: req.user.department_id },
+    });
+
+    if (emitToDeviceAck) {
+      signage_results = await Promise.all(
+        devices.map(async (device) => ({
+          device_id: device.id,
+          device_name: device.device_name,
+          result: await emitToDeviceAck(
+            device.id,
+            "signage_command",
+            {
+              action: "delete_post_assets",
+              post_id: post.id,
+              image_url: post.images?.[0]?.image_path,
+            },
+            12000,
+          ),
+        })),
+      );
+
+      const cleanedDeviceIds = signage_results
+        .filter((item) => item.result?.ok)
+        .map((item) => item.device_id);
+      if (cleanedDeviceIds.length > 0) {
+        await prisma.signageAsset.deleteMany({
+          where: {
+            post_id: post.id,
+            device_id: { in: cleanedDeviceIds },
+          },
+        });
+      }
+    }
+  }
+
   await prisma.post.delete({ where: { id: Number(req.params.id) } });
-  res.json({ ok: true });
+  res.json({ ok: true, signage_results });
 });
 
 module.exports = router;

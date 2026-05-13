@@ -1,5 +1,6 @@
 const { Server } = require("socket.io");
 const prisma = require("../db/prisma");
+const { upsertSignageAsset } = require("../utils/signageAssets");
 
 // Track connected Pi sockets: device_id → socket.id
 const deviceSockets = new Map();
@@ -20,11 +21,35 @@ module.exports = (httpServer) => {
       socket.deviceId = id;
 
       await prisma.device
-        .update({
+        .upsert({
           where: { id },
-          data: { status: "online", last_seen: new Date() },
+          update: {
+            device_name: data.device_name || undefined,
+            ip_address: data.ip_address || undefined,
+            location: data.location || undefined,
+            status: "online",
+            last_seen: new Date(),
+          },
+          create: {
+            id,
+            device_name: data.device_name || `Pi Display ${id}`,
+            ip_address:
+              data.ip_address ||
+              socket.handshake.address ||
+              `socket-${socket.id}`,
+            location: data.location || null,
+            status: "online",
+            last_seen: new Date(),
+          },
         })
-        .catch(() => {});
+        .catch(async () => {
+          await prisma.device
+            .updateMany({
+              where: { id },
+              data: { status: "online", last_seen: new Date() },
+            })
+            .catch(() => {});
+        });
 
       console.log(`[socket] heartbeat from device ${id}`);
     });
@@ -65,6 +90,28 @@ module.exports = (httpServer) => {
       );
     });
 
+    socket.on("signage_asset_synced", async (data) => {
+      await upsertSignageAsset(prisma, {
+        device_id: data.device_id,
+        post_id: data.post_id,
+        image_url: data.image_url,
+        asset: data.asset,
+      }).catch(() => {});
+      if (data.post_id) {
+        await prisma.signageDeployment
+          .update({
+            where: {
+              device_id_post_id: {
+                device_id: Number(data.device_id),
+                post_id: Number(data.post_id),
+              },
+            },
+            data: { status: "synced", last_error: null },
+          })
+          .catch(() => {});
+      }
+    });
+
     // ── Disconnect: mark offline ──────────────────────────────
     socket.on("disconnect", async () => {
       if (socket.deviceId) {
@@ -92,6 +139,23 @@ module.exports = (httpServer) => {
     return false;
   };
 
+  const emitToDeviceAck = (device_id, event, data, timeout = 10000) =>
+    new Promise((resolve) => {
+      const socketId = deviceSockets.get(Number(device_id));
+      if (!socketId) {
+        resolve({ ok: false, offline: true, error: "Device is offline" });
+        return;
+      }
+
+      io.timeout(timeout).to(socketId).emit(event, data, (err, responses) => {
+        if (err) {
+          resolve({ ok: false, error: "Device did not respond in time" });
+          return;
+        }
+        resolve(responses?.[0] || { ok: true });
+      });
+    });
+
   // ── Offline detection: mark devices offline if no heartbeat for 30s ─
   setInterval(async () => {
     const cutoff = new Date(Date.now() - 30_000);
@@ -101,5 +165,5 @@ module.exports = (httpServer) => {
     });
   }, 15_000);
 
-  return { io, emitToDevice };
+  return { io, emitToDevice, emitToDeviceAck };
 };

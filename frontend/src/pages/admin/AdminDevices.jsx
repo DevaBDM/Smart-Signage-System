@@ -11,8 +11,16 @@ export default function AdminDevices() {
   const [form, setForm] = useState({
     device_name: "",
     ip_address: "",
+    location: "",
     department_id: "",
   });
+  const [editForm, setEditForm] = useState({
+    device_name: "",
+    ip_address: "",
+    location: "",
+    department_id: "",
+  });
+  const [msg, setMsg] = useState("");
 
   const load = () => {
     api
@@ -32,6 +40,12 @@ export default function AdminDevices() {
 
   const select = async (d) => {
     setSel(d);
+    setEditForm({
+      device_name: d.device_name || "",
+      ip_address: d.ip_address || "",
+      location: d.location || "",
+      department_id: d.department_id ? String(d.department_id) : "",
+    });
     const r = await api.get(`/devices/${d.id}`);
     setSensors(r.data.sensor_logs || []);
   };
@@ -42,8 +56,25 @@ export default function AdminDevices() {
       ...form,
       department_id: form.department_id || null,
     });
-    setForm({ device_name: "", ip_address: "", department_id: "" });
+    setForm({ device_name: "", ip_address: "", location: "", department_id: "" });
     load();
+  };
+
+  const updateDevice = async (e) => {
+    e.preventDefault();
+    if (!sel) return;
+    setMsg("");
+    try {
+      const r = await api.put(`/devices/${sel.id}`, {
+        ...editForm,
+        department_id: editForm.department_id || null,
+      });
+      setSel(r.data);
+      setMsg("✅ Device updated.");
+      load();
+    } catch (e) {
+      setMsg(e.response?.data?.error || "❌ Device update failed.");
+    }
   };
 
   return (
@@ -86,6 +117,14 @@ export default function AdminDevices() {
                   setForm({ ...form, ip_address: e.target.value })
                 }
                 required
+              />
+              <label style={S.label}>Location</label>
+              <input
+                style={S.input}
+                value={form.location}
+                onChange={(e) =>
+                  setForm({ ...form, location: e.target.value })
+                }
               />
               <label style={S.label}>Department</label>
               <select
@@ -131,6 +170,11 @@ export default function AdminDevices() {
                   <div style={{ fontSize: 12, color: "#9ca3af" }}>
                     {d.ip_address} · {d.department?.name ?? "—"}
                   </div>
+                  {d.location && (
+                    <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
+                      {d.location}
+                    </div>
+                  )}
                   <span
                     style={{
                       fontSize: 12,
@@ -153,13 +197,88 @@ export default function AdminDevices() {
           {/* Sensor logs */}
           <div style={S.card}>
             <h2 style={{ fontWeight: 700, marginBottom: 14 }}>
-              {sel ? `Sensors — ${sel.device_name}` : "Sensor Logs"}
+              {sel ? `Settings — ${sel.device_name}` : "Device Settings"}
             </h2>
             {!sel && (
               <p style={{ color: "#9ca3af", textAlign: "center", padding: 24 }}>
                 Select a device
               </p>
             )}
+            {sel && (
+              <form
+                onSubmit={updateDevice}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                  marginBottom: 18,
+                }}
+              >
+                {msg && (
+                  <div
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: 8,
+                      fontSize: 13,
+                      background: msg.startsWith("✅") ? "#dcfce7" : "#fee2e2",
+                      color: msg.startsWith("✅") ? "#166534" : "#b91c1c",
+                    }}
+                  >
+                    {msg}
+                  </div>
+                )}
+                <label style={S.label}>Device Name</label>
+                <input
+                  style={S.input}
+                  value={editForm.device_name}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, device_name: e.target.value })
+                  }
+                  required
+                />
+                <label style={S.label}>IP Address</label>
+                <input
+                  style={S.input}
+                  value={editForm.ip_address}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, ip_address: e.target.value })
+                  }
+                  required
+                />
+                <label style={S.label}>Location</label>
+                <input
+                  style={S.input}
+                  value={editForm.location}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, location: e.target.value })
+                  }
+                />
+                <label style={S.label}>Department</label>
+                <select
+                  style={S.input}
+                  value={editForm.department_id}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, department_id: e.target.value })
+                  }
+                >
+                  <option value="">— None —</option>
+                  {depts.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="submit"
+                  style={{ ...S.btn, background: "#2563eb", color: "#fff" }}
+                >
+                  Save Device
+                </button>
+              </form>
+            )}
+            <h3 style={{ fontWeight: 700, marginBottom: 10 }}>
+              Sensor Logs
+            </h3>
             <div
               style={{
                 display: "flex",

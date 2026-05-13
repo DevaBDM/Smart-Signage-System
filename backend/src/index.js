@@ -20,8 +20,9 @@ app.use(
 );
 
 // Init Socket.IO and expose emitToDevice globally on app
-const { emitToDevice } = initSocket(server);
+const { emitToDevice, emitToDeviceAck } = initSocket(server);
 app.set("emitToDevice", emitToDevice);
+app.set("emitToDeviceAck", emitToDeviceAck);
 
 // Routes
 app.use("/api/auth", require("./routes/auth"));

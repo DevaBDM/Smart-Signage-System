@@ -21,7 +21,10 @@ export default function AdminPosts() {
 
   const del = async (id) => {
     if (!confirm("Delete post?")) return;
-    await api.delete(`/posts/${id}`);
+    const deleteSignage = confirm("Also remove this post from signage displays?");
+    await api.delete(`/posts/${id}`, {
+      params: { delete_signage: deleteSignage },
+    });
     load();
   };
 

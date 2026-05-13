@@ -29,21 +29,23 @@ model User {
 }
 
 model Post {
-  id                   Int              @id @default(autoincrement())
+  id                   Int                 @id @default(autoincrement())
   title                String
-  slug                 String           @unique
+  slug                 String              @unique
   description_markdown String?
   department_id        Int
   created_by           Int
-  publish_to_feed      Boolean          @default(false)
-  publish_to_signage   Boolean          @default(false)
-  status               PostStatus       @default(draft)
-  created_at           DateTime         @default(now())
-  updated_at           DateTime         @updatedAt
+  publish_to_feed      Boolean             @default(false)
+  publish_to_signage   Boolean             @default(false)
+  status               PostStatus          @default(draft)
+  created_at           DateTime            @default(now())
+  updated_at           DateTime            @updatedAt
   playlist_items       PlaylistItem[]
-  author               User             @relation(fields: [created_by], references: [id])
-  department           Department       @relation(fields: [department_id], references: [id])
+  author               User                @relation(fields: [created_by], references: [id])
+  department           Department          @relation(fields: [department_id], references: [id])
   images               PostImage[]
+  signage_assets       SignageAsset[]
+  signage_deployments  SignageDeployment[]
   signage_metadata     SignageMetadata?
 }
 
@@ -69,17 +71,66 @@ model SignageMetadata {
 }
 
 model Device {
-  id               Int         @id @default(autoincrement())
+  id               Int                 @id @default(autoincrement())
   device_name      String
   department_id    Int?
-  ip_address       String      @unique
-  status           String      @default("offline")
+  ip_address       String              @unique
+  location         String?
+  status           String              @default("offline")
   last_seen        DateTime?
   current_playlist Int?
-  created_at       DateTime    @default(now())
-  department       Department? @relation(fields: [department_id], references: [id])
+  created_at       DateTime            @default(now())
+  department       Department?         @relation(fields: [department_id], references: [id])
   error_logs       ErrorLog[]
   sensor_logs      SensorLog[]
+  signage_assets   SignageAsset[]
+  deployments      SignageDeployment[]
+}
+
+model SignageDeployment {
+  id               Int       @id @default(autoincrement())
+  device_id        Int
+  post_id          Int
+  duration_seconds Int       @default(10)
+  start_date       DateTime?
+  end_date         DateTime?
+  priority         Int       @default(1)
+  display_group    String?
+  status           String    @default("pending")
+  last_error       String?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+  device           Device    @relation(fields: [device_id], references: [id], onDelete: Cascade)
+  post             Post      @relation(fields: [post_id], references: [id], onDelete: Cascade)
+
+  @@unique([device_id, post_id])
+  @@index([device_id, status])
+  @@index([post_id])
+}
+
+model SignageAsset {
+  id             Int       @id @default(autoincrement())
+  device_id      Int
+  post_id        Int?
+  asset_id       String
+  asset_name     String?
+  image_url      String?
+  mimetype       String?
+  duration       Int?
+  is_enabled     Boolean   @default(true)
+  is_active      Boolean?
+  play_order     Int?
+  start_date     DateTime?
+  end_date       DateTime?
+  last_synced_at DateTime  @default(now())
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+  device         Device    @relation(fields: [device_id], references: [id], onDelete: Cascade)
+  post           Post?     @relation(fields: [post_id], references: [id], onDelete: SetNull)
+
+  @@unique([device_id, asset_id])
+  @@index([post_id])
+  @@index([device_id])
 }
 
 model SensorLog {
