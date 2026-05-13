@@ -18,9 +18,23 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
   fileFilter: (_, file, cb) => {
     const allowed = [".png", ".jpg", ".jpeg", ".webp"];
-    cb(null, allowed.includes(path.extname(file.originalname).toLowerCase()));
+    if (!allowed.includes(path.extname(file.originalname).toLowerCase())) {
+      return cb(new Error("Only PNG, JPG, JPEG, and WEBP images are allowed"));
+    }
+    cb(null, true);
   },
 });
+
+const uploadImages = (req, res, next) => {
+  upload.array("images", 10)(req, res, (err) => {
+    if (!err) return next();
+    const message =
+      err.code === "LIMIT_FILE_SIZE"
+        ? "Each image must be 10MB or smaller"
+        : err.message || "Image upload failed";
+    return res.status(400).json({ error: message });
+  });
+};
 
 // Slug helper
 const slugify = (text) =>
@@ -71,7 +85,7 @@ router.get("/:id", async (req, res) => {
 router.post(
   "/",
   auth(["admin", "creator"]),
-  upload.array("images", 10),
+  uploadImages,
   async (req, res) => {
     const {
       title,
@@ -87,7 +101,16 @@ router.post(
       display_group,
     } = req.body;
 
-    if (!canManage(req.user, department_id))
+    const targetDepartmentId =
+      req.user.role === "admin" ? Number(department_id) : req.user.department_id;
+
+    if (!targetDepartmentId) {
+      return res.status(400).json({
+        error: "Your account is not assigned to a department. Ask an admin to assign one.",
+      });
+    }
+
+    if (!canManage(req.user, targetDepartmentId))
       return res.status(403).json({ error: "Cannot manage this department" });
 
     try {
@@ -96,7 +119,7 @@ router.post(
           title,
           slug: slugify(title),
           description_markdown: description_markdown || null,
-          department_id: Number(department_id),
+          department_id: Number(targetDepartmentId),
           created_by: req.user.id,
           publish_to_feed: publish_to_feed === "true",
           publish_to_signage: publish_to_signage === "true",

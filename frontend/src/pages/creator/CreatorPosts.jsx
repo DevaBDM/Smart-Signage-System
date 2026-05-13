@@ -54,8 +54,8 @@ export default function CreatorPosts() {
       setFiles([]);
       fileRef.current.value = "";
       load();
-    } catch {
-      setMsg("❌ Failed to create post.");
+    } catch (e) {
+      setMsg(e.response?.data?.error || e.message || "Failed to create post.");
     } finally {
       setLoading(false);
     }
