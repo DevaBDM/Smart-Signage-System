@@ -1,33 +1,31 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
+import useAuthStore from "../store/useAuthStore";
 
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    const token = localStorage.getItem("token");
-    const role = localStorage.getItem("role");
-    return token ? { token, role } : null;
-  });
+  const { setAuth, clearAuth, role } = useAuthStore();
   const navigate = useNavigate();
 
   const login = async (username, password) => {
     const res = await api.post("/auth/login", { username, password });
-    localStorage.setItem("token", res.data.token);
-    localStorage.setItem("role", res.data.role);
-    setUser({ token: res.data.token, role: res.data.role });
-    navigate("/dashboard");
+    const { token, role, department_id } = res.data;
+    setAuth(token, role, department_id);
+    // Route to correct dashboard by role
+    if (role === "admin") navigate("/admin");
+    else if (role === "creator") navigate("/creator");
+    else navigate("/feed");
   };
 
   const logout = () => {
-    localStorage.clear();
-    setUser(null);
+    clearAuth();
     navigate("/login");
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ login, logout }}>
       {children}
     </AuthContext.Provider>
   );

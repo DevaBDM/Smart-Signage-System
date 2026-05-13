@@ -31,6 +31,7 @@ app.use("/api/devices", require("./routes/devices"));
 app.use("/api/sensors", require("./routes/sensors"));
 app.use("/api/playlists", require("./routes/playlists"));
 app.use("/api/signage", require("./routes/signage"));
+app.use("/api/users", require("./routes/users"));
 
 app.get("/api/health", (_, res) => res.json({ status: "ok" }));
 
