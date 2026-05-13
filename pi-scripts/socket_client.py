@@ -1,6 +1,8 @@
 import socketio, time, threading, serial
 from config import SERVER_URL, DEVICE_ID, SERIAL_PORT, BAUD_RATE
 
+RAIN_THRESHOLD = 500
+
 sio = socketio.Client()
 
 # ── Server → Pi events ───────────────────────────────────────
@@ -59,13 +61,17 @@ def sensor_loop():
             # SENSOR:motion:1,brightness:742,rain:0
             try:
                 _, payload = line.split(':', 1)
+                # Write to temp file for other scripts (like brightness_control.py)
+                with open("/tmp/signage_sensors", "w") as f:
+                    f.write(payload)
+                
                 values = dict(p.split(':') for p in payload.split(','))
                 if sio.connected:
                     sio.emit('sensor_update', {
                         'device_id':  DEVICE_ID,
                         'motion':     values.get('motion',     '0') == '1',
                         'brightness': int(values.get('brightness', 0)),
-                        'rain':       values.get('rain',       '0') == '1',
+                        'rain':       int(values.get('rain', 0)) >= RAIN_THRESHOLD,
                     })
             except Exception as e:
                 print(f"[sensor_loop] parse error: {e}")
