@@ -26,6 +26,22 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
     include: { images: true, signage_metadata: true },
   });
   if (!post) return res.status(404).json({ error: "Post not found" });
+  if (req.user.role !== "admin" && post.department_id !== req.user.department_id) {
+    return res.status(403).json({ error: "Cannot publish this post" });
+  }
+  const image = post.images[0];
+  if (!image) return res.status(400).json({ error: "Post has no image" });
+
+  const device = await prisma.device.findUnique({
+    where: { id: Number(device_id) },
+  });
+  if (!device) return res.status(404).json({ error: "Device not found" });
+  if (
+    req.user.role !== "admin" &&
+    device.department_id !== req.user.department_id
+  ) {
+    return res.status(403).json({ error: "Cannot publish to this device" });
+  }
 
   // Upsert signage metadata
   await prisma.signageMetadata.upsert({
@@ -54,11 +70,11 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
   });
 
   // Notify Pi via Socket.IO
-  const image = post.images[0];
   const pushed =
     _emitToDevice &&
     _emitToDevice(device_id, "playlist_update", {
       post_id: post.id,
+      title: post.title,
       image_url: image?.image_path,
       duration_seconds: Number(duration_seconds) || 10,
     });

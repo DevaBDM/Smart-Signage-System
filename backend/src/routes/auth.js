@@ -2,9 +2,24 @@ const router = require("express").Router();
 const prisma = require("../db/prisma");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const auth = require("../middleware/auth");
 
-router.post("/register", async (req, res) => {
+const requireAdminAfterFirstUser = async (req, res, next) => {
+  const userCount = await prisma.user.count();
+  if (userCount === 0) return next();
+  return auth(["admin"])(req, res, next);
+};
+
+router.post("/register", requireAdminAfterFirstUser, async (req, res) => {
   const { username, password, role, department_id } = req.body;
+  if (!username || !password) {
+    return res.status(400).json({ error: "Username and password are required" });
+  }
+
+  if (!["admin", "creator", "viewer"].includes(role)) {
+    return res.status(400).json({ error: "Invalid role" });
+  }
+
   const hash = await bcrypt.hash(password, 10);
   try {
     const user = await prisma.user.create({

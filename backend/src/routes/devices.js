@@ -2,9 +2,12 @@ const router = require("express").Router();
 const prisma = require("../db/prisma");
 const auth = require("../middleware/auth");
 
-// List all devices
-router.get("/", auth(["admin"]), async (req, res) => {
+// List devices. Admins see all; creators see their department displays.
+router.get("/", auth(["admin", "creator"]), async (req, res) => {
+  const where =
+    req.user.role === "admin" ? {} : { department_id: req.user.department_id };
   const devices = await prisma.device.findMany({
+    where,
     include: { department: true },
     orderBy: { last_seen: "desc" },
   });
@@ -24,8 +27,8 @@ router.get("/:id", auth(["admin"]), async (req, res) => {
   res.json(device);
 });
 
-// Register device (called once manually or on first boot)
-router.post("/register", async (req, res) => {
+// Register device from the admin dashboard.
+router.post("/register", auth(["admin"]), async (req, res) => {
   const { device_name, ip_address, department_id } = req.body;
   try {
     const device = await prisma.device.upsert({
