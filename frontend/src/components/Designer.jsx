@@ -31,6 +31,8 @@ export default function Designer({ onExport }) {
 
   // Markdown mode state
   const [markdown, setMarkdown] = useState("# New Announcement\n\nWrite your message here...");
+  const [mdFontSize, setMdFontSize] = useState(32);
+  const [mdFontFamily, setMdFontFamily] = useState("Inter");
 
   // ── Actions ─────────────────────────────────────────────────
   const addText = () => {
@@ -173,14 +175,34 @@ export default function Designer({ onExport }) {
             </div>
           </>
         ) : (
-          <div style={{ ...styles.toolGroup, borderRight: 'none', flex: 1 }}>
-            <span style={styles.groupLabel}>Markdown Source</span>
-            <textarea 
-              style={{ ...styles.textInput, width: '100%', minHeight: 80, fontFamily: 'monospace' }} 
-              value={markdown} 
-              onChange={(e) => setMarkdown(e.target.value)}
-            />
-          </div>
+          <>
+            <div style={{ ...styles.toolGroup, borderRight: 'none', flex: 1 }}>
+              <span style={styles.groupLabel}>Markdown Source</span>
+              <textarea 
+                style={{ ...styles.textInput, width: '100%', minHeight: 80, fontFamily: 'monospace' }} 
+                value={markdown} 
+                onChange={(e) => setMarkdown(e.target.value)}
+              />
+            </div>
+            <div style={styles.toolGroup}>
+              <span style={styles.groupLabel}>MD Style</span>
+              <select 
+                style={styles.select} 
+                value={mdFontFamily} 
+                onChange={(e) => setMdFontFamily(e.target.value)}
+              >
+                {["Inter", ...FONTS].map((f) => <option key={f} value={f}>{f}</option>)}
+              </select>
+              <input 
+                type="number" 
+                style={{ ...styles.select, width: 60 }} 
+                value={mdFontSize} 
+                min={10} 
+                max={100} 
+                onChange={(e) => setMdFontSize(Number(e.target.value))} 
+              />
+            </div>
+          </>
         )}
 
         <button style={styles.exportBtn} onClick={exportImage}>✅ Use This Design</button>
@@ -197,7 +219,12 @@ export default function Designer({ onExport }) {
             />
           </div>
           <div style={{ display: mode === 'markdown' ? 'block' : 'none' }}>
-            <MarkdownCanvas markdown={markdown} markdownRef={markdownRef} />
+            <MarkdownCanvas 
+              markdown={markdown} 
+              markdownRef={markdownRef} 
+              fontSize={mdFontSize}
+              fontFamily={mdFontFamily}
+            />
           </div>
         </div>
         <div style={styles.canvasMeta}>1280 × 720 px · 16:9</div>
