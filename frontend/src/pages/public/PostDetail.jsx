@@ -1,10 +1,64 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import remarkWikiLink from "remark-wiki-link";
 import axios from "axios";
+import "katex/dist/katex.min.css"; // For LaTeX math
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 const BASE = API.replace("/api", "");
+
+// Custom renderer for Obsidian Callouts
+const CustomBlockquote = ({ children }) => {
+  const content = children[1]?.props?.children?.[0] || "";
+  const match = String(content).match(/^\[!(INFO|NOTE|WARNING|ERROR|SUCCESS|TIP|IMPORTANT|TODO)\]/i);
+  
+  if (match) {
+    const type = match[1].toUpperCase();
+    const cleanChildren = [...children];
+    // Remove the [!TYPE] marker from the first paragraph
+    if (cleanChildren[1]?.props?.children) {
+      cleanChildren[1] = {
+        ...cleanChildren[1],
+        props: {
+          ...cleanChildren[1].props,
+          children: cleanChildren[1].props.children.slice(1)
+        }
+      };
+    }
+    
+    const colors = {
+      INFO: { bg: "#e0f2fe", border: "#0ea5e9", color: "#0369a1", icon: "ℹ️" },
+      NOTE: { bg: "#f3f4f6", border: "#6b7280", color: "#374151", icon: "📝" },
+      WARNING: { bg: "#fef3c7", border: "#f59e0b", color: "#b45309", icon: "⚠️" },
+      ERROR: { bg: "#fee2e2", border: "#ef4444", color: "#b91c1c", icon: "❌" },
+      SUCCESS: { bg: "#dcfce7", border: "#22c55e", color: "#15803d", icon: "✅" },
+      TIP: { bg: "#f0fdf4", border: "#10b981", color: "#166534", icon: "💡" },
+      IMPORTANT: { bg: "#f5f3ff", border: "#8b5cf6", color: "#6d28d9", icon: "🔥" },
+    };
+    const style = colors[type] || colors.INFO;
+
+    return (
+      <div style={{
+        background: style.bg,
+        borderLeft: `4px solid ${style.border}`,
+        padding: "12px 16px",
+        borderRadius: "0 8px 8px 0",
+        margin: "16px 0",
+      }}>
+        <div style={{ fontWeight: 700, color: style.color, marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>
+          <span>{style.icon}</span> {type}
+        </div>
+        <div style={{ color: "#374151" }}>{cleanChildren}</div>
+      </div>
+    );
+  }
+  return <blockquote style={s.classicQuote}>{children}</blockquote>;
+};
 
 export default function PostDetail() {
   const { id } = useParams();
@@ -44,6 +98,7 @@ export default function PostDetail() {
 
   return (
     <div style={s.page}>
+      <style>{markdownCss}</style>
       {/* Nav */}
       <div style={s.nav}>
         <button onClick={() => navigate("/feed")} style={s.backBtn}>
@@ -112,8 +167,16 @@ export default function PostDetail() {
         <div style={s.content}>
           <h1 style={s.title}>{post.title}</h1>
           {post.description_markdown ? (
-            <div style={s.markdown}>
-              <ReactMarkdown>{post.description_markdown}</ReactMarkdown>
+            <div className="markdown-body">
+              <ReactMarkdown 
+                remarkPlugins={[remarkGfm, remarkMath, remarkWikiLink]} 
+                rehypePlugins={[rehypeRaw, rehypeKatex]}
+                components={{
+                  blockquote: CustomBlockquote
+                }}
+              >
+                {post.description_markdown}
+              </ReactMarkdown>
             </div>
           ) : (
             <p style={{ color: "#9ca3af", fontStyle: "italic" }}>
@@ -126,7 +189,73 @@ export default function PostDetail() {
   );
 }
 
+const markdownCss = `
+  .markdown-body {
+    font-size: 15px;
+    line-height: 1.7;
+    color: #374151;
+  }
+  .markdown-body h1, .markdown-body h2, .markdown-body h3 {
+    margin-top: 24px;
+    margin-bottom: 12px;
+    font-weight: 700;
+    color: #111827;
+  }
+  .markdown-body h1 { font-size: 1.8em; border-bottom: 1px solid #eaecef; padding-bottom: 0.3em; }
+  .markdown-body h2 { font-size: 1.4em; border-bottom: 1px solid #eaecef; padding-bottom: 0.3em; }
+  .markdown-body p { margin-bottom: 16px; }
+  .markdown-body ul, .markdown-body ol { padding-left: 2em; margin-bottom: 16px; }
+  .markdown-body li { margin-bottom: 4px; }
+  .markdown-body table {
+    border-spacing: 0;
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 16px;
+    overflow-x: auto;
+    display: block;
+  }
+  .markdown-body table th, .markdown-body table td {
+    padding: 8px 14px;
+    border: 1px solid #dfe2e5;
+  }
+  .markdown-body table tr:nth-child(2n) { background-color: #f6f8fa; }
+  .markdown-body code {
+    padding: 0.2em 0.4em;
+    margin: 0;
+    font-size: 85%;
+    background-color: rgba(27,31,35,0.05);
+    border-radius: 6px;
+    font-family: monospace;
+  }
+  .markdown-body pre {
+    padding: 16px;
+    overflow: auto;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f6f8fa;
+    border-radius: 6px;
+    margin-bottom: 16px;
+  }
+  .markdown-body pre code {
+    background: none;
+    padding: 0;
+  }
+  .markdown-body img { max-width: 100%; box-sizing: content-box; background-color: #fff; }
+  .markdown-body hr { height: 0.25em; padding: 0; margin: 24px 0; background-color: #e1e4e8; border: 0; }
+  .markdown-body input[type="checkbox"] { margin-right: 8px; vertical-align: middle; }
+  
+  /* LaTeX centering */
+  .katex-display { margin: 1em 0; overflow-x: auto; overflow-y: hidden; }
+`;
+
 const s = {
+  classicQuote: {
+    padding: "10px 20px",
+    color: "#6a737d",
+    borderLeft: "0.25em solid #dfe2e5",
+    margin: "0 0 16px 0",
+    background: "#f9fafb",
+  },
   page: { minHeight: "100vh", background: "#f4f6f9" },
   center: {
     display: "flex",
