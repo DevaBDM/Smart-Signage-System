@@ -23,6 +23,7 @@ model User {
   password_hash String
   role          Role        @default(creator)
   department_id Int?
+  auto_approve  Boolean     @default(true)
   created_at    DateTime    @default(now())
   posts         Post[]
   department    Department? @relation(fields: [department_id], references: [id])
@@ -35,8 +36,10 @@ model Post {
   description_markdown String?
   department_id        Int
   created_by           Int
-  publish_to_feed      Boolean             @default(false)
-  publish_to_signage   Boolean             @default(false)
+  allowed_on_feed      Boolean             @default(false)
+  allowed_on_signage   Boolean             @default(false)
+  requested_feed       Boolean             @default(false)
+  requested_signage    Boolean             @default(false)
   status               PostStatus          @default(draft)
   created_at           DateTime            @default(now())
   updated_at           DateTime            @updatedAt

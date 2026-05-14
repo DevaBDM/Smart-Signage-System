@@ -64,10 +64,27 @@ const upsertSignageAsset = async (prisma, payload) => {
 
 const syncSignageAssetList = async (prisma, device_id, assets) => {
   const rows = [];
+  const foundAssetIds = [];
+
   for (const asset of assets || []) {
     const row = await upsertSignageAsset(prisma, { device_id, asset });
-    if (row) rows.push(row);
+    if (row) {
+      rows.push(row);
+      foundAssetIds.push(row.asset_id);
+    }
   }
+
+  // PRUNE: Remove DB rows not returned by the Pi. Skip when the list is empty — an empty
+  // response would otherwise match every asset_id and wipe all tracking (causing republishes / duplicates).
+  if (foundAssetIds.length > 0) {
+    await prisma.signageAsset.deleteMany({
+      where: {
+        device_id: Number(device_id),
+        asset_id: { notIn: foundAssetIds },
+      },
+    });
+  }
+
   return rows;
 };
 

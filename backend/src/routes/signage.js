@@ -32,6 +32,12 @@ const getAllowedDevice = async (req, res) => {
     res.status(403).json({ error: "Cannot control this device" });
     return null;
   }
+  if (device.status !== "online") {
+    res.status(400).json({
+      error: `Display "${device.device_name}" is offline. Operation cancelled.`,
+    });
+    return null;
+  }
   return device;
 };
 
@@ -42,14 +48,16 @@ const sendSignageCommand = async (device_id, payload) => {
   return _emitToDeviceAck(device_id, "signage_command", payload, 12000);
 };
 
-// Device pull endpoint used by the Pi's periodic sync. This is intentionally
-// device-scoped so one display cannot accidentally pull every signage post.
+// Device pull endpoint used by the Pi's periodic sync.
 router.get("/device/:device_id/deployments", async (req, res) => {
   const deployments = await prisma.signageDeployment.findMany({
     where: {
       device_id: Number(req.params.device_id),
       status: { not: "removed" },
-      post: { status: "published" }, // NEW: Only show published content on screens
+      post: { 
+        status: "published",
+        allowed_on_signage: true // ONLY pull if allowed
+      },
     },
     include: {
       post: {
@@ -92,7 +100,7 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
 
   const post = await prisma.post.findUnique({
     where: { id: Number(post_id) },
-    include: { images: true, signage_metadata: true },
+    include: { images: true, signage_metadata: true, author: true },
   });
   if (!post) return res.status(404).json({ error: "Post not found" });
   if (
@@ -115,10 +123,6 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
     return res.status(403).json({ error: "Cannot publish to this device" });
   }
 
-  if (device.status !== "online") {
-    return res.status(400).json({ error: `Display "${device.device_name}" is offline. Asset was not published.` });
-  }
-
   // Upsert signage metadata
   await prisma.signageMetadata.upsert({
     where: { post_id: Number(post_id) },
@@ -139,10 +143,15 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
     },
   });
 
-  // Mark post as published signage
+  const isAutoApprove = post.author?.auto_approve || req.user.role === 'admin';
+
+  // Mark signage intent / permission (post status stays draft until creator publishes)
   await prisma.post.update({
     where: { id: Number(post_id) },
-    data: { publish_to_signage: true, status: "published" },
+    data: { 
+       requested_signage: true,
+       allowed_on_signage: isAutoApprove, 
+    },
   });
 
   const payload = {
@@ -189,44 +198,82 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
     },
   });
 
-  const result = existingAsset
-    ? { ok: true, already_exists: true, asset: existingAsset }
-    : await sendSignageCommand(device_id, {
+  // ONLY notify if actually allowed (offline: DB deployment saved; Pi pulls when online)
+  let result = { ok: true, note: "Deployment saved. Awaiting admin approval." };
+  if (isAutoApprove) {
+    if (device.status !== "online") {
+      await prisma.signageDeployment.update({
+        where: {
+          device_id_post_id: {
+            device_id: Number(device_id),
+            post_id: post.id,
+          },
+        },
+        data: {
+          status: "pending",
+          last_error:
+            "Display offline — deployment saved; will sync when the display is online.",
+        },
+      });
+      result = { ok: true, offline_queued: true };
+    } else if (existingAsset) {
+      result = { ok: true, already_exists: true, asset: existingAsset };
+      await upsertSignageAsset(prisma, {
+        device_id,
+        post_id: post.id,
+        image_url: image?.image_path,
+        asset: existingAsset,
+      });
+      await prisma.signageDeployment.update({
+        where: {
+          device_id_post_id: {
+            device_id: Number(device_id),
+            post_id: post.id,
+          },
+        },
+        data: { status: "synced", last_error: null },
+      });
+    } else {
+      result = await sendSignageCommand(device_id, {
         action: "publish_asset",
         ...payload,
       });
 
-  if (result.ok) {
-    await upsertSignageAsset(prisma, {
-      device_id,
-      post_id: post.id,
-      image_url: image?.image_path,
-      asset: result.asset,
-    });
-    await prisma.signageDeployment.update({
-      where: {
-        device_id_post_id: {
-          device_id: Number(device_id),
-          post_id: post.id,
-        },
-      },
-      data: { status: "synced", last_error: null },
-    });
-  } else {
-    await prisma.signageDeployment.update({
-      where: {
-        device_id_post_id: {
-          device_id: Number(device_id),
-          post_id: post.id,
-        },
-      },
-      data: { status: "pending", last_error: result.error || null },
-    });
+      if (result.ok) {
+        if (result.asset) {
+          await upsertSignageAsset(prisma, {
+            device_id,
+            post_id: post.id,
+            image_url: image?.image_path,
+            asset: result.asset,
+          });
+        }
+        await prisma.signageDeployment.update({
+          where: {
+            device_id_post_id: {
+              device_id: Number(device_id),
+              post_id: post.id,
+            },
+          },
+          data: { status: "synced", last_error: null },
+        });
+      } else {
+        await prisma.signageDeployment.update({
+          where: {
+            device_id_post_id: {
+              device_id: Number(device_id),
+              post_id: post.id,
+            },
+          },
+          data: { status: "pending", last_error: result.error || null },
+        });
+      }
+    }
   }
 
   res.json({
     ok: true,
-    pi_notified: !!result.ok,
+    pi_notified: !!(isAutoApprove && result.ok && !result.offline_queued),
     pi_result: result,
   });
 });
@@ -388,7 +435,7 @@ router.delete(
         if (remainingDeployments === 0) {
           await prisma.post.update({
             where: { id: trackedAsset.post_id },
-            data: { publish_to_signage: false },
+            data: { allowed_on_signage: false },
           });
         }
       }

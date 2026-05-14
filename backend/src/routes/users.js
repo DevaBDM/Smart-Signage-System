@@ -10,6 +10,7 @@ router.get("/", auth(["admin"]), async (req, res) => {
       username: true,
       role: true,
       department_id: true,
+      auto_approve: true,
       department: true,
       created_at: true,
     },
@@ -19,19 +20,21 @@ router.get("/", auth(["admin"]), async (req, res) => {
 });
 
 router.put("/:id", auth(["admin"]), async (req, res) => {
-  const { role, department_id } = req.body;
+  const { role, department_id, auto_approve } = req.body;
   try {
     const user = await prisma.user.update({
       where: { id: Number(req.params.id) },
       data: {
         ...(role && { role }),
-        department_id: department_id ? Number(department_id) : null,
+        department_id: department_id !== undefined ? (department_id ? Number(department_id) : null) : undefined,
+        auto_approve: auto_approve !== undefined ? Boolean(auto_approve) : undefined,
       },
       select: {
         id: true,
         username: true,
         role: true,
         department_id: true,
+        auto_approve: true,
         department: true,
         created_at: true,
       },

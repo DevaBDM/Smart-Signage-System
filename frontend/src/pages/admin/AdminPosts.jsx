@@ -29,7 +29,7 @@ export default function AdminPosts() {
   };
 
   const toggle = async (post, field) => {
-    await api.put(`/posts/${post.id}`, { ...post, [field]: !post[field] });
+    await api.put(`/posts/${post.id}`, { [field]: !post[field] });
     load();
   };
 
@@ -101,22 +101,43 @@ export default function AdminPosts() {
                   </td>
                   <td style={S.td}>
                     <strong>{p.title}</strong>
+                    {p.author && (
+                      <div style={{ fontSize: 11, color: '#6b7280' }}>
+                        By: {p.author.username} {!p.author.auto_approve && '(Manual Approval)'}
+                      </div>
+                    )}
                   </td>
                   <td style={S.td}>{p.department?.name ?? "—"}</td>
-                  <td style={S.td}>
+                  <td 
+                    style={{ 
+                      ...S.td, 
+                      background: (!p.allowed_on_feed && p.requested_feed) ? '#fffbeb' : 'transparent',
+                      cursor: 'pointer',
+                      textAlign: 'center'
+                    }}
+                    onClick={() => toggle(p, "allowed_on_feed")}
+                  >
                     <span
-                      style={{ cursor: "pointer", fontSize: 18 }}
-                      onClick={() => toggle(p, "publish_to_feed")}
+                      style={{ fontSize: 18 }}
+                      title={p.allowed_on_feed ? "Live on Feed" : (p.requested_feed ? "Requested - Click to Allow" : "Not Allowed")}
                     >
-                      {p.publish_to_feed ? "✅" : "⬜"}
+                      {p.allowed_on_feed ? "✅" : (p.requested_feed ? "⏳" : "⬜")}
                     </span>
                   </td>
-                  <td style={S.td}>
+                  <td 
+                    style={{ 
+                      ...S.td, 
+                      background: (!p.allowed_on_signage && p.requested_signage) ? '#fffbeb' : 'transparent',
+                      cursor: 'pointer',
+                      textAlign: 'center'
+                    }}
+                    onClick={() => toggle(p, "allowed_on_signage")}
+                  >
                     <span
-                      style={{ cursor: "pointer", fontSize: 18 }}
-                      onClick={() => toggle(p, "publish_to_signage")}
+                      style={{ fontSize: 18 }}
+                      title={p.allowed_on_signage ? "Live on Signage" : (p.requested_signage ? "Requested - Click to Allow" : "Not Allowed")}
                     >
-                      {p.publish_to_signage ? "✅" : "⬜"}
+                      {p.allowed_on_signage ? "✅" : (p.requested_signage ? "⏳" : "⬜")}
                     </span>
                   </td>
                   <td style={S.td}>

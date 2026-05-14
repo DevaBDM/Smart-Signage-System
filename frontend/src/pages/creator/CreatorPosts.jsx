@@ -72,13 +72,13 @@ export default function CreatorPosts() {
     setForm({
       title: post.title,
       description_markdown: post.description_markdown || "",
-      publish_to_feed: post.publish_to_feed,
-      publish_to_signage: post.publish_to_signage,
+      publish_to_feed: !!(post.requested_feed || post.allowed_on_feed),
+      publish_to_signage: !!(post.requested_signage || post.allowed_on_signage),
       status: post.status,
-      device_ids: post.signage_deployments?.map(d => d.device_id) || [],
+      device_ids: post.signage_deployments?.map((d) => d.device_id) || [],
       duration_seconds: post.signage_metadata?.duration_seconds || 10,
-      start_date: post.signage_metadata?.start_date?.split('.')[0] || "",
-      end_date: post.signage_metadata?.end_date?.split('.')[0] || "",
+      start_date: post.signage_metadata?.start_date?.split(".")[0] || "",
+      end_date: post.signage_metadata?.end_date?.split(".")[0] || "",
       priority: post.signage_metadata?.priority || 1,
       display_group: post.signage_metadata?.display_group || "",
     });
@@ -280,9 +280,14 @@ export default function CreatorPosts() {
                   <input
                     type="checkbox"
                     checked={form.publish_to_signage}
-                    onChange={(e) =>
-                      setForm({ ...form, publish_to_signage: e.target.checked })
-                    }
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setForm({
+                        ...form,
+                        publish_to_signage: checked,
+                        ...(checked ? {} : { device_ids: [] }),
+                      });
+                    }}
                   />
                   Mark as Signage Ready
                 </label>
@@ -503,8 +508,14 @@ export default function CreatorPosts() {
                     <div
                       style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}
                     >
-                      {p.publish_to_feed ? "📰 Feed " : ""}
-                      {p.publish_to_signage ? `🖥 Signage (${p.signage_deployments?.length || 0})` : ""} · {p.status}
+                      {p.allowed_on_feed ? "📰 Feed " : ""}
+                      {p.allowed_on_signage ? `🖥 Signage (${p.signage_deployments?.length || 0})` : ""} · {p.status}
+                      {p.status === 'published' && (
+                        <>
+                          {(!p.allowed_on_feed && p.requested_feed) && " · ⏳ Feed Pending"}
+                          {(!p.allowed_on_signage && p.requested_signage) && " · ⏳ Signage Pending"}
+                        </>
+                      )}
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>

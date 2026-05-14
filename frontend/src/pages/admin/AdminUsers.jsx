@@ -11,6 +11,7 @@ export default function AdminUsers() {
     password: "",
     role: "creator",
     department_id: "",
+    auto_approve: true,
   });
   const [error, setError] = useState("");
 
@@ -41,6 +42,7 @@ export default function AdminUsers() {
         password: "",
         role: "creator",
         department_id: "",
+        auto_approve: true,
       });
       load();
     } catch (e) {
@@ -133,6 +135,14 @@ export default function AdminUsers() {
                   </option>
                 ))}
               </select>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', marginTop: 4 }}>
+                <input 
+                  type="checkbox" 
+                  checked={form.auto_approve} 
+                  onChange={(e) => setForm({ ...form, auto_approve: e.target.checked })}
+                />
+                Auto-approve Posts
+              </label>
               <button
                 type="submit"
                 style={{
@@ -154,7 +164,7 @@ export default function AdminUsers() {
             <table style={S.table}>
               <thead>
                 <tr>
-                  {["Username", "Role", "Department", "Created", ""].map(
+                  {["Username", "Role", "Department", "Auto-Approve", "Created", ""].map(
                     (h) => (
                       <th key={h} style={S.th}>
                         {h}
@@ -203,6 +213,13 @@ export default function AdminUsers() {
                           </option>
                         ))}
                       </select>
+                    </td>
+                    <td style={S.td}>
+                      <input 
+                        type="checkbox" 
+                        checked={u.auto_approve} 
+                        onChange={(e) => updateUser(u.id, { auto_approve: e.target.checked })}
+                      />
                     </td>
                     <td style={S.td}>
                       {new Date(u.created_at).toLocaleDateString()}

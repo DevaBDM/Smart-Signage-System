@@ -11,7 +11,7 @@ const requireAdminAfterFirstUser = async (req, res, next) => {
 };
 
 router.post("/register", requireAdminAfterFirstUser, async (req, res) => {
-  const { username, password, role, department_id } = req.body;
+  const { username, password, role, department_id, auto_approve } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: "Username and password are required" });
   }
@@ -28,9 +28,10 @@ router.post("/register", requireAdminAfterFirstUser, async (req, res) => {
         password_hash: hash,
         role,
         department_id: department_id ? Number(department_id) : null,
+        auto_approve: auto_approve !== undefined ? Boolean(auto_approve) : true,
       },
     });
-    res.json({ id: user.id, username: user.username, role: user.role });
+    res.json({ id: user.id, username: user.username, role: user.role, auto_approve: user.auto_approve });
   } catch (e) {
     if (e.code === "P2002") {
       return res.status(400).json({ error: "Username already exists." });
