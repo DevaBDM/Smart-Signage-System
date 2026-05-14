@@ -241,7 +241,7 @@ def push_to_anthias(post):
         "mimetype": image_mimetype(image_path),
         "duration": post.get("duration_seconds") or metadata.get("duration_seconds") or 10,
         "is_enabled": True,
-        "nocache": True,
+        "nocache": False, # Enable caching for offline playback
         "skip_asset_check": True,
     }
     for endpoint in ASSET_ENDPOINTS:
