@@ -24,6 +24,10 @@ const getAllowedDevice = async (req, res) => {
     res.status(404).json({ error: "Device not found" });
     return null;
   }
+  if (!device.is_approved) {
+    res.status(403).json({ error: "This device is pending approval and cannot be controlled yet." });
+    return null;
+  }
   if (!canUseDevice(req.user, device)) {
     res.status(403).json({ error: "Cannot control this device" });
     return null;

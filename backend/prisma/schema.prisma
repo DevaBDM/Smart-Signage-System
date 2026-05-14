@@ -79,6 +79,10 @@ model Device {
   status           String              @default("offline")
   last_seen        DateTime?
   current_playlist Int?
+  is_approved      Boolean             @default(false)
+  pending_name     String?
+  pending_ip       String?
+  pending_location String?
   created_at       DateTime            @default(now())
   department       Department?         @relation(fields: [department_id], references: [id])
   error_logs       ErrorLog[]

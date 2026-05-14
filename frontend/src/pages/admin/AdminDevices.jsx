@@ -23,6 +23,7 @@ export default function AdminDevices() {
     department_id: "",
   });
   const [msg, setMsg] = useState("");
+  const [regMsg, setRegMsg] = useState("");
   const [sort, setSort] = useState({ by: "id", order: "asc" });
 
   const load = () => {
@@ -61,16 +62,23 @@ export default function AdminDevices() {
       department_id: d.department_id ? String(d.department_id) : "",
     });
     loadSensors(d);
+    setMsg("");
   };
 
   const register = async (e) => {
     e.preventDefault();
-    await api.post("/devices/register", {
-      ...form,
-      department_id: form.department_id || null,
-    });
-    setForm({ id: "", device_name: "", ip_address: "", location: "", department_id: "" });
-    load();
+    setRegMsg("");
+    try {
+      await api.post("/devices/register", {
+        ...form,
+        department_id: form.department_id || null,
+      });
+      setRegMsg("✅ Device registered successfully.");
+      setForm({ id: "", device_name: "", ip_address: "", location: "", department_id: "" });
+      load();
+    } catch (e) {
+      setRegMsg(e.response?.data?.error || "❌ Registration failed.");
+    }
   };
 
   const updateDevice = async (e) => {
@@ -87,6 +95,45 @@ export default function AdminDevices() {
       load();
     } catch (e) {
       setMsg(e.response?.data?.error || "❌ Device update failed.");
+    }
+  };
+
+  const resetToDefaults = async () => {
+    if (!sel || !window.confirm("Are you sure you want to reset this device to its agent defaults?")) return;
+    setMsg("");
+    try {
+      await api.put(`/devices/${sel.id}/reset`);
+      setMsg("✅ Reset successful. Waiting for next heartbeat.");
+      load();
+      setSel(null);
+    } catch (e) {
+      setMsg(e.response?.data?.error || "❌ Reset failed.");
+    }
+  };
+
+  const approve = async () => {
+    if (!sel) return;
+    setMsg("");
+    try {
+      await api.post(`/devices/${sel.id}/approve`);
+      setMsg("✅ Device / changes approved.");
+      load();
+      setSel(null);
+    } catch (e) {
+      setMsg(e.response?.data?.error || "❌ Approval failed.");
+    }
+  };
+
+  const reject = async () => {
+    if (!sel || !window.confirm("Reject this registration / these changes?")) return;
+    setMsg("");
+    try {
+      await api.post(`/devices/${sel.id}/reject`);
+      setMsg("✅ Rejected.");
+      load();
+      setSel(null);
+    } catch (e) {
+      setMsg(e.response?.data?.error || "❌ Rejection failed.");
     }
   };
 
@@ -113,6 +160,19 @@ export default function AdminDevices() {
               onSubmit={register}
               style={{ display: "flex", flexDirection: "column", gap: 10 }}
             >
+              {regMsg && (
+                <div
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: 8,
+                    fontSize: 13,
+                    background: regMsg.startsWith("✅") ? "#dcfce7" : "#fee2e2",
+                    color: regMsg.startsWith("✅") ? "#166534" : "#b91c1c",
+                  }}
+                >
+                  {regMsg}
+                </div>
+              )}
               <label style={S.label}>Device ID (from config.py)</label>
               <input
                 style={S.input}
@@ -242,6 +302,38 @@ export default function AdminDevices() {
                   >
                     {d.status}
                   </span>
+                  {!d.is_approved && (
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        padding: "2px 6px",
+                        borderRadius: 99,
+                        marginLeft: 6,
+                        background: "#fef3c7",
+                        color: "#92400e",
+                        border: "1px solid #fcd34d",
+                      }}
+                    >
+                      NEW
+                    </span>
+                  )}
+                  {(d.pending_name || d.pending_ip || d.pending_location) && (
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        padding: "2px 6px",
+                        borderRadius: 99,
+                        marginLeft: 6,
+                        background: "#dbeafe",
+                        color: "#1e40af",
+                        border: "1px solid #93c5fd",
+                      }}
+                    >
+                      CHANGED
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
@@ -258,15 +350,68 @@ export default function AdminDevices() {
               </p>
             )}
             {sel && (
-              <form
-                onSubmit={updateDevice}
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 10,
-                  marginBottom: 18,
-                }}
-              >
+              <div style={{ marginBottom: 20 }}>
+                {/* Approval Banner */}
+                {(!sel.is_approved || sel.pending_name || sel.pending_ip || sel.pending_location) && (
+                  <div
+                    style={{
+                      padding: 14,
+                      borderRadius: 10,
+                      background: !sel.is_approved ? "#fffbeb" : "#eff6ff",
+                      border: `1.5px solid ${!sel.is_approved ? "#fcd34d" : "#93c5fd"}`,
+                      marginBottom: 16,
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, fontSize: 14, color: !sel.is_approved ? "#92400e" : "#1e40af" }}>
+                      {!sel.is_approved ? "🛡 Registration Pending" : "📡 Remote Identity Changed"}
+                    </div>
+                    <p style={{ fontSize: 13, margin: "4px 0 10px", color: "#4b5563" }}>
+                      {!sel.is_approved 
+                        ? "This device has connected but is not yet approved."
+                        : "The device is reporting new configuration values."}
+                    </p>
+                    
+                    {sel.pending_name && (
+                      <div style={{ fontSize: 12, marginBottom: 2 }}>
+                        New Name: <strong>{sel.pending_name}</strong>
+                      </div>
+                    )}
+                    {sel.pending_ip && (
+                      <div style={{ fontSize: 12, marginBottom: 2 }}>
+                        New IP: <strong>{sel.pending_ip}</strong>
+                      </div>
+                    )}
+                    {sel.pending_location && (
+                      <div style={{ fontSize: 12, marginBottom: 8 }}>
+                        New Location: <strong>{sel.pending_location}</strong>
+                      </div>
+                    )}
+
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        onClick={approve}
+                        style={{ ...S.btn, background: "#16a34a", color: "#fff", padding: "6px 12px", border: "none" }}
+                      >
+                        Approve
+                      </button>
+                      <button
+                        onClick={reject}
+                        style={{ ...S.btn, background: "#dc2626", color: "#fff", padding: "6px 12px", border: "none" }}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <form
+                  onSubmit={updateDevice}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10,
+                  }}
+                >
                 {msg && (
                   <div
                     style={{
@@ -327,8 +472,16 @@ export default function AdminDevices() {
                 >
                   Save Device
                 </button>
+                <button
+                  type="button"
+                  onClick={resetToDefaults}
+                  style={{ ...S.btn, marginTop: 4, background: "#fff", border: "1.5px solid #d1d5db" }}
+                >
+                  🔄 Reset to Agent Defaults
+                </button>
               </form>
-            )}
+            </div>
+          )}
             <div
               style={{
                 display: "flex",

@@ -93,7 +93,7 @@ def get_posts():
         return r.json()
     except Exception as e:
         print(f"[content_sync] Could not fetch device signage deployments: {e}")
-        return []
+        return None
 
 
 def get_anthias_assets():
@@ -284,6 +284,10 @@ def push_to_anthias(post):
 
 def sync():
     posts = get_posts()
+    if posts is None:
+        print("[content_sync] Server unreachable. Skipping sync to preserve local content.")
+        return []
+
     post_ids_in_deployments = {str(post_key(p)) for p in posts}
 
     # 1. Cleanup: Remove assets from Anthias that are NO LONGER in the deployments list

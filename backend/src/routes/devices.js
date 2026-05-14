@@ -38,51 +38,68 @@ router.get("/:id", auth(["admin"]), async (req, res) => {
 router.post("/register", auth(["admin"]), async (req, res) => {
   const { id, device_name, ip_address, department_id, location } = req.body;
   try {
-    let device;
-    if (id) {
-      // If ID is provided, try to find and update, else create
-      device = await prisma.device.upsert({
-        where: { id: Number(id) },
-        update: {
-          device_name,
-          ip_address,
-          location: location || null,
-          department_id: department_id ? Number(department_id) : null,
-        },
-        create: {
-          id: Number(id),
-          device_name,
-          ip_address,
-          location: location || null,
-          department_id: department_id ? Number(department_id) : null,
-        },
-      });
-    } else {
-      // If no ID, find by IP (now non-unique, so we take the first) or just create
-      const existing = await prisma.device.findFirst({
-        where: { ip_address },
-      });
-      if (existing) {
-        device = await prisma.device.update({
-          where: { id: existing.id },
-          data: {
-            device_name,
-            location: location || null,
-            department_id: department_id ? Number(department_id) : null,
-          },
-        });
-      } else {
-        device = await prisma.device.create({
-          data: {
-            device_name,
-            ip_address,
-            location: location || null,
-            department_id: department_id ? Number(department_id) : null,
-          },
-        });
-      }
-    }
+    const device = await prisma.device.create({
+      data: {
+        ...(id && { id: Number(id) }),
+        device_name,
+        ip_address,
+        location: location || null,
+        department_id: department_id ? Number(department_id) : null,
+        is_approved: true, // Manual registration is auto-approved
+      },
+    });
     res.json(device);
+  } catch (e) {
+    if (e.code === "P2002") {
+      return res.status(400).json({ 
+        error: `Device ID ${id} is already registered.` 
+      });
+    }
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Approve a device or its pending changes.
+router.post("/:id/approve", auth(["admin"]), async (req, res) => {
+  try {
+    const device = await prisma.device.findUnique({ where: { id: Number(req.params.id) } });
+    if (!device) return res.status(404).json({ error: "Not found" });
+
+    const updateData = {
+      is_approved: true,
+      ...(device.pending_name && { device_name: device.pending_name, pending_name: null }),
+      ...(device.pending_ip && { ip_address: device.pending_ip, pending_ip: null }),
+      ...(device.pending_location && { location: device.pending_location, pending_location: null }),
+    };
+
+    const updated = await prisma.device.update({
+      where: { id: Number(req.params.id) },
+      data: updateData,
+    });
+    res.json(updated);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Reject/Clear pending changes or unapproved device.
+router.post("/:id/reject", auth(["admin"]), async (req, res) => {
+  try {
+    const device = await prisma.device.findUnique({ where: { id: Number(req.params.id) } });
+    if (!device) return res.status(404).json({ error: "Not found" });
+
+    if (!device.is_approved) {
+      // If it was never approved, rejection means deletion
+      await prisma.device.delete({ where: { id: Number(req.params.id) } });
+      return res.json({ message: "Unapproved device registration rejected and deleted." });
+    }
+
+    // Otherwise, just clear the pending changes
+    const updated = await prisma.device.update({
+      where: { id: Number(req.params.id) },
+      data: { pending_name: null, pending_ip: null, pending_location: null },
+    });
+    res.json(updated);
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
@@ -105,6 +122,23 @@ router.put("/:id", auth(["admin"]), async (req, res) => {
       include: { department: true },
     });
     res.json(device);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Reset device to agent defaults.
+router.put("/:id/reset", auth(["admin"]), async (req, res) => {
+  try {
+    const device = await prisma.device.update({
+      where: { id: Number(req.params.id) },
+      data: {
+        device_name: `Pi Display ${req.params.id}`, // Placeholder until next heartbeat
+        location: null,
+        ip_address: "", // Clear IP so heartbeat can re-verify it
+      },
+    });
+    res.json({ message: "Device settings cleared. Waiting for next heartbeat to sync agent defaults.", device });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }

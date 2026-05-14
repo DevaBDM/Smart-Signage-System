@@ -17,41 +17,61 @@ module.exports = (httpServer) => {
     socket.on("heartbeat", async (data) => {
       // data: { device_id, device_name, ip_address, location, status }
       const id = Number(data.device_id);
+      if (!id) return;
+
       deviceSockets.set(id, socket.id);
       socket.deviceId = id;
 
-      // Validate IP: if it doesn't look like an IP, use the socket handshake address
       const reportedIp = data.ip_address;
       const isIp = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(reportedIp);
       const ip_address = isIp ? reportedIp : (socket.handshake.address || "unknown");
 
-      await prisma.device
-        .upsert({
+      const existing = await prisma.device.findUnique({ where: { id } });
+
+      if (existing) {
+        // APPROVAL WORKFLOW & CHANGE DETECTION
+        const nameChanged = data.device_name && existing.device_name !== data.device_name;
+        const ipChanged = ip_address !== "unknown" && existing.ip_address !== ip_address;
+        const locationChanged = data.location && existing.location !== data.location;
+
+        let updateData = {
+          status: "online",
+          last_seen: new Date(),
+        };
+
+        // If the device is already approved, but sends a DIFFERENT name, IP, or Location,
+        // we store these as "pending" for Admin review.
+        if (existing.is_approved) {
+          if (nameChanged) updateData.pending_name = data.device_name;
+          if (ipChanged) updateData.pending_ip = ip_address;
+          if (locationChanged) updateData.pending_location = data.location;
+        } else {
+          // If NOT yet approved, we keep updating its basic info so the admin sees current state
+          if (data.device_name) updateData.device_name = data.device_name;
+          if (ipChanged) updateData.ip_address = ip_address;
+          if (data.location) updateData.location = data.location;
+        }
+
+        await prisma.device.update({
           where: { id },
-          update: {
-            status: "online",
-            last_seen: new Date(),
-            // Only update IP if we didn't have one or if it's a valid new one
-            ...(isIp && { ip_address }),
-          },
-          create: {
+          data: updateData,
+        });
+      } else {
+        // New device auto-registration - starts as NOT APPROVED
+        await prisma.device.create({
+          data: {
             id,
             device_name: data.device_name || `Pi Display ${id}`,
             ip_address,
             location: data.location || null,
             status: "online",
+            is_approved: false, // Explicitly false
             last_seen: new Date(),
           },
-        })
-        .catch(async (err) => {
-          console.error(`[socket] heartbeat upsert failed for device ${id}:`, err.message);
-          await prisma.device
-            .updateMany({
-              where: { id },
-              data: { status: "online", last_seen: new Date() },
-            })
-            .catch(() => {});
+        }).catch(err => {
+          console.error(`[socket] heartbeat create failed for device ${id}:`, err.message);
         });
+      }
 
       console.log(`[socket] heartbeat from device ${id}`);
     });
