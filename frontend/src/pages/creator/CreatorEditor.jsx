@@ -93,8 +93,11 @@ export default function CreatorEditor() {
     <div style={S.layout}>
       <CreatorSidebar />
       <main style={S.main}>
-        <h1 style={S.heading}>Poster Designer</h1>
-        <p style={S.sub}>Design a poster and save it directly to My Posts.</p>
+        <h1 style={S.heading}>Signage slide designer</h1>
+        <p style={S.sub}>
+          Lay out slides in HD or full HD for wall TVs, then export and save them to My Posts for feed or
+          signage playback.
+        </p>
 
         {msg && (
           <div
@@ -126,8 +129,7 @@ export default function CreatorEditor() {
             <h2 style={{ fontWeight: 700, marginBottom: 14 }}>Save Design</h2>
             {!exported && (
               <p style={{ color: "#9ca3af", fontSize: 13, lineHeight: 1.5 }}>
-                Click Use This Design after editing the canvas, then save it as
-                a post.
+                Click &quot;Use this slide&quot; after editing, then fill in title and save as a post.
               </p>
             )}
             {exported && (

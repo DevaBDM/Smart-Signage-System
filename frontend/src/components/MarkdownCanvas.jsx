@@ -5,17 +5,27 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import remarkWikiLink from "remark-wiki-link";
 
-const CANVAS_W = 1280;
-const CANVAS_H = 720;
-
-export default function MarkdownCanvas({ markdown, markdownRef, fontSize = 32, fontFamily = "Inter" }) {
+export default function MarkdownCanvas({
+  markdown,
+  markdownRef,
+  fontSize = 32,
+  fontFamily = "Inter",
+  width = 1280,
+  height = 720,
+}) {
   const content = markdown || "# New Document\nWrite your announcement here...";
 
-  // Standard Obsidian-style colors/icons
+  const padX = Math.round(width * 0.06);
+  const padY = Math.round(height * 0.08);
+  const h1em = Math.max(2.2, height / 360);
+  const h2em = Math.max(1.5, height / 480);
+
   const CustomBlockquote = ({ children }) => {
     const textContent = children[1]?.props?.children?.[0] || "";
-    const match = String(textContent).match(/^\[!(INFO|NOTE|WARNING|ERROR|SUCCESS|TIP|IMPORTANT|TODO)\]/i);
-    
+    const match = String(textContent).match(
+      /^\[!(INFO|NOTE|WARNING|ERROR|SUCCESS|TIP|IMPORTANT|TODO)\]/i,
+    );
+
     if (match) {
       const type = match[1].toUpperCase();
       const cleanChildren = [...children];
@@ -24,11 +34,11 @@ export default function MarkdownCanvas({ markdown, markdownRef, fontSize = 32, f
           ...cleanChildren[1],
           props: {
             ...cleanChildren[1].props,
-            children: cleanChildren[1].props.children.slice(1)
-          }
+            children: cleanChildren[1].props.children.slice(1),
+          },
         };
       }
-      
+
       const colors = {
         INFO: { bg: "#e0f2fe", border: "#0ea5e9", color: "#0369a1", icon: "ℹ️" },
         NOTE: { bg: "#f3f4f6", border: "#6b7280", color: "#374151", icon: "📝" },
@@ -41,14 +51,26 @@ export default function MarkdownCanvas({ markdown, markdownRef, fontSize = 32, f
       const style = colors[type] || colors.INFO;
 
       return (
-        <div style={{
-          background: style.bg,
-          borderLeft: `12px solid ${style.border}`,
-          padding: "20px 30px",
-          borderRadius: "0 15px 15px 0",
-          margin: "24px 0",
-        }}>
-          <div style={{ fontWeight: 800, color: style.color, marginBottom: 8, display: "flex", alignItems: "center", gap: 12, fontSize: "1.2em" }}>
+        <div
+          style={{
+            background: style.bg,
+            borderLeft: `12px solid ${style.border}`,
+            padding: "20px 30px",
+            borderRadius: "0 15px 15px 0",
+            margin: "24px 0",
+          }}
+        >
+          <div
+            style={{
+              fontWeight: 800,
+              color: style.color,
+              marginBottom: 8,
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              fontSize: "1.2em",
+            }}
+          >
             <span>{style.icon}</span> {type}
           </div>
           <div style={{ color: "#374151" }}>{cleanChildren}</div>
@@ -59,28 +81,28 @@ export default function MarkdownCanvas({ markdown, markdownRef, fontSize = 32, f
   };
 
   return (
-    <div 
+    <div
       ref={markdownRef}
       className="markdown-canvas-container"
       style={{
-        width: CANVAS_W,
-        height: CANVAS_H,
+        width,
+        height,
         backgroundColor: "#ffffff",
-        padding: "60px 80px",
+        padding: `${padY}px ${padX}px`,
         overflow: "hidden",
         color: "#000000",
         boxSizing: "border-box",
-        textAlign: "left"
+        textAlign: "left",
       }}
     >
       <style>{`
         .markdown-body { 
           font-family: '${fontFamily}', -apple-system, system-ui, sans-serif; 
           font-size: ${fontSize}px; 
-          line-height: 1.6; 
+          line-height: 1.55; 
         }
-        .markdown-body h1 { font-size: 3.5em; border-bottom: 3px solid #eaecef; padding-bottom: 0.3em; margin-bottom: 1rem; font-weight: 800; }
-        .markdown-body h2 { font-size: 2.5em; margin-top: 1.5rem; border-bottom: 2px solid #eaecef; font-weight: 700; }
+        .markdown-body h1 { font-size: ${h1em}em; border-bottom: 3px solid #eaecef; padding-bottom: 0.3em; margin-bottom: 1rem; font-weight: 800; }
+        .markdown-body h2 { font-size: ${h2em}em; margin-top: 1.5rem; border-bottom: 2px solid #eaecef; font-weight: 700; }
         .markdown-body p { margin-bottom: 1rem; }
         .markdown-body ul, .markdown-body ol { padding-left: 2em; margin-bottom: 1rem; }
         .markdown-body table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; font-size: 0.85em; }
@@ -91,11 +113,11 @@ export default function MarkdownCanvas({ markdown, markdownRef, fontSize = 32, f
         .katex-display { margin: 1em 0; overflow: hidden; }
       `}</style>
       <div className="markdown-body">
-        <ReactMarkdown 
-          remarkPlugins={[remarkGfm, remarkMath, remarkWikiLink]} 
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm, remarkMath, remarkWikiLink]}
           rehypePlugins={[rehypeKatex, rehypeRaw]}
           components={{
-            blockquote: CustomBlockquote
+            blockquote: CustomBlockquote,
           }}
         >
           {content}
