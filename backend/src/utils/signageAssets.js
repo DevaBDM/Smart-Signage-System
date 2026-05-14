@@ -37,12 +37,17 @@ const normalizeAssetRecord = ({ device_id, post_id, image_url, asset }) => {
 const upsertSignageAsset = async (prisma, payload) => {
   const data = normalizeAssetRecord(payload);
   if (!data) return null;
+
+  // If this asset is linked to a post, ensure we use the server's image_url
+  // instead of the Pi's local internal path for the dashboard preview.
   if (data.post_id) {
     const post = await prisma.post.findUnique({
       where: { id: data.post_id },
-      select: { id: true },
+      include: { images: { orderBy: { order_index: "asc" }, take: 1 } },
     });
-    if (!post) data.post_id = null;
+    if (post && post.images[0]) {
+      data.image_url = post.images[0].image_path;
+    }
   }
 
   return prisma.signageAsset.upsert({

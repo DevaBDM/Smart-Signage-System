@@ -183,13 +183,22 @@ def content_sync_loop():
     while True:
         try:
             pushed_assets = sync()
-            if sio.connected:
+            # sync() returns None if server is down (after my previous fix)
+            # but wait, let me check my previous edit.
+            # actually sync() returns [] if server is down.
+            if pushed_assets and sio.connected:
                 for result in pushed_assets:
                     if result.get("ok"):
                         sio.emit(
                             "signage_asset_synced",
                             {"device_id": DEVICE_ID, **result},
                         )
+            
+            # If server was unreachable, sleep longer before retrying to avoid spamming logs
+            if pushed_assets == [] and not sio.connected:
+                time.sleep(120) 
+                continue
+
         except Exception as e:
             print(f"[content_sync_loop] {e}")
         time.sleep(60)

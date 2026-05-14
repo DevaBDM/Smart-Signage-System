@@ -54,7 +54,16 @@ export default function CreatorSignage() {
     setAssetLoading(true);
     try {
       const r = await api.get(`/signage/devices/${deviceId}/assets`);
-      setAssets(r.data.assets || []);
+      // Merge the Pi's real-time asset list with our database's server-side image URLs
+      const merged = (r.data.assets || []).map(piAsset => {
+        const tracked = (r.data.tracked_assets || []).find(ta => ta.asset_id === piAsset.asset_id);
+        return {
+          ...piAsset,
+          // If we have a tracked record with a server image, use it for the preview
+          preview_url: tracked?.image_url ? `${BASE}${tracked.image_url}` : piAsset.uri
+        };
+      });
+      setAssets(merged);
     } catch (e) {
       setMsg(e.response?.data?.error || "❌ Could not load display images.");
     } finally {
@@ -290,9 +299,9 @@ export default function CreatorSignage() {
                     borderRadius: 8,
                   }}
                 >
-                  {asset.uri ? (
+                  {asset.preview_url ? (
                     <img
-                      src={asset.uri}
+                      src={asset.preview_url}
                       style={{
                         width: 72,
                         height: 72,

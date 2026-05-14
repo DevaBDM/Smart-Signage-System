@@ -1,5 +1,7 @@
 # ~/signage/content_sync.py
 import mimetypes
+import os
+import tempfile
 import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
@@ -202,8 +204,24 @@ def playback_control(command, asset_id=None):
     )
 
 
+def download_image(url):
+    """Download image to a temporary file."""
+    try:
+        r = requests.get(url, timeout=REQUEST_TIMEOUT, stream=True)
+        r.raise_for_status()
+        ext = os.path.splitext(url)[1] or ".jpg"
+        fd, path = tempfile.mkstemp(suffix=ext)
+        with os.fdopen(fd, "wb") as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                f.write(chunk)
+        return path
+    except Exception as e:
+        print(f"[content_sync] Failed to download {url}: {e}")
+        return None
+
+
 def push_to_anthias(post):
-    """Add post image as an asset in Anthias."""
+    """Add post image as a local asset in Anthias (Two-step process)."""
     image_path = post.get("image_url")
     if not image_path and post.get("images"):
         image_path = post["images"][0].get("image_path")
@@ -216,20 +234,66 @@ def push_to_anthias(post):
     metadata = post_signage_metadata(post)
     now = datetime.now(timezone.utc)
     asset_name = f"{title} ({post_key(post)})"
-    existing_asset = find_asset_by_name_or_uri(asset_name, image_url)
+    
+    # 1. Check if we already have this asset
+    existing_asset = find_asset_by_name_or_uri(asset_name, None)
     if existing_asset:
-        print(f"[content_sync] already in Anthias: {asset_name}")
-        return {
-            "ok": True,
-            "post_id": post.get("post_id") or post.get("id"),
-            "image_url": image_path,
-            "asset": existing_asset,
-            "already_exists": True,
-        }
+        uri = existing_asset.get("uri") or ""
+        if uri.startswith("http"):
+            print(f"[content_sync] Replacing old remote asset '{asset_name}' with local file...")
+            delete_from_anthias(existing_asset.get("asset_id"))
+        else:
+            print(f"[content_sync] already in Anthias as local asset: {asset_name}")
+            return {
+                "ok": True,
+                "post_id": post.get("post_id") or post.get("id"),
+                "image_url": image_path,
+                "asset": existing_asset,
+                "already_exists": True,
+            }
 
+    # 2. Download image locally
+    local_file = download_image(image_url)
+    if not local_file:
+        return {"ok": False, "error": f"Failed to download image from {image_url}"}
+
+    # 3. Step 1: Upload the file to Anthias to get a local path
+    # Endpoint: /api/v1/file_asset (uses 'file_upload' field)
+    local_uri = None
+    try:
+        print(f"[content_sync] Uploading file to /api/v1/file_asset: {asset_name}")
+        with open(local_file, 'rb') as f:
+            r = requests.post(f"{API_BASE}/api/v1/file_asset", files={'file_upload': f}, timeout=REQUEST_TIMEOUT * 2)
+        
+        if r.status_code == 200:
+            # Newer Anthias versions return JSON: {"uri":"/path/to/file.tmp", "ext":".png"}
+            # Older versions might return a raw quoted string.
+            try:
+                resp_json = r.json()
+                if isinstance(resp_json, dict) and "uri" in resp_json:
+                    local_uri = resp_json["uri"]
+                else:
+                    local_uri = r.text.strip('"').strip()
+            except Exception:
+                local_uri = r.text.strip('"').strip()
+            print(f"[content_sync] File uploaded to local path: {local_uri}")
+        else:
+            print(f"[content_sync] File upload failed: {r.status_code} - {r.text}")
+    except Exception as e:
+        print(f"[content_sync] Error during file upload step: {e}")
+
+    # Clean up temp file immediately after upload
+    if os.path.exists(local_file):
+        os.remove(local_file)
+
+    if not local_uri:
+        return {"ok": False, "error": "Could not get local path from Anthias file upload"}
+
+    # 4. Step 2: Register the asset metadata in the database
     payload = {
         "name": asset_name,
-        "uri": image_url,
+        "uri": local_uri,
+        "mimetype": "image",
         "start_date": format_anthias_date(
             post.get("start_date") or metadata.get("start_date"),
             now - timedelta(minutes=1),
@@ -238,48 +302,32 @@ def push_to_anthias(post):
             post.get("end_date") or metadata.get("end_date"),
             now + timedelta(days=3650),
         ),
-        "mimetype": image_mimetype(image_path),
-        "duration": post.get("duration_seconds") or metadata.get("duration_seconds") or 10,
-        "is_enabled": True,
-        "nocache": False, # Enable caching for offline playback
-        "skip_asset_check": True,
+        "duration": str(post.get("duration_seconds") or metadata.get("duration_seconds") or 10),
+        "is_enabled": 1,
+        "skip_asset_check": 1
     }
+
+    print(f"[content_sync] Registering asset metadata: {asset_name}")
     for endpoint in ASSET_ENDPOINTS:
         try:
             r = requests.post(f"{API_BASE}{endpoint}", json=payload, timeout=REQUEST_TIMEOUT)
             if r.status_code == 404:
                 continue
             if r.status_code in (200, 201):
-                print(
-                    f"[content_sync] pushed '{title}' to Anthias via {endpoint} "
-                    f"-> {r.status_code}"
-                )
+                print(f"[content_sync] Asset registered successfully via {endpoint}")
                 response_data = _ok_response(r)
                 asset = normalize_asset(response_data) if isinstance(response_data, dict) else None
-                if not asset or not asset.get("asset_id"):
-                    asset = find_asset_by_name_or_uri(asset_name, image_url)
                 return {
                     "ok": True,
                     "post_id": post.get("post_id") or post.get("id"),
                     "image_url": image_path,
-                    "asset": asset
-                    or {
-                        "name": asset_name,
-                        "uri": image_url,
-                        "mimetype": payload["mimetype"],
-                        "duration": payload["duration"],
-                        "is_enabled": True,
-                    },
+                    "asset": asset or {"name": asset_name, "uri": local_uri, "is_enabled": True},
                 }
-
-            print(
-                f"[content_sync] Anthias rejected '{title}' via {endpoint} -> "
-                f"{r.status_code}: {_response_text(r)}"
-            )
-            return {"ok": False, "status": r.status_code, "error": _response_text(r)}
+            print(f"[content_sync] Registration failed via {endpoint}: {r.status_code} - {r.text}")
         except Exception as e:
-            print(f"[content_sync] Failed to push to Anthias via {endpoint}: {e}")
-    return {"ok": False, "error": "No Anthias asset endpoint accepted the request"}
+            print(f"[content_sync] Error during registration step via {endpoint}: {e}")
+
+    return {"ok": False, "error": "No Anthias asset endpoint accepted the metadata registration"}
 
 
 def sync():
