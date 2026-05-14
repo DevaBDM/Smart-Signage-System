@@ -76,14 +76,16 @@ const ensureDevicesOnline = async (deviceIds) => {
   return { ok: true };
 };
 
+// Main helper for Signage Deployment
 const deployToSignage = async (req, post, targetDevices, signageData) => {
   const emitToDeviceAck = req.app.get("emitToDeviceAck");
   const image = post.images?.[0];
-  if (!image || post.status !== "published") return [];
+  if (!image) return [];
 
   const results = [];
   for (const device of targetDevices) {
     try {
+      // 1. ALWAYS Save the deployment mapping (even for DRAFTS)
       await prisma.signageDeployment.upsert({
         where: { device_id_post_id: { device_id: device.id, post_id: post.id } },
         update: {
@@ -107,47 +109,48 @@ const deployToSignage = async (req, post, targetDevices, signageData) => {
         },
       });
 
-      const existingAsset = await prisma.signageAsset.findFirst({
-        where: { device_id: device.id, post_id: post.id },
-      });
-
-      const result = existingAsset
-        ? { ok: true, already_exists: true, asset: existingAsset }
-        : emitToDeviceAck
-        ? await emitToDeviceAck(
-            device.id,
-            "signage_command",
-            {
-              action: "publish_asset",
-              post_id: post.id,
-              title: post.title,
-              image_url: image.image_path,
-              duration_seconds: Number(signageData.duration_seconds) || 10,
-              start_date: signageData.start_date || null,
-              end_date: signageData.end_date || null,
-            },
-            12000,
-          )
-        : { ok: false, error: "Socket bridge is not ready" };
-
-      if (result.ok) {
-        await upsertSignageAsset(prisma, {
-          device_id: device.id,
-          post_id: post.id,
-          image_url: image.image_path,
-          asset: result.asset,
+      // 2. ONLY notify the device if the post is actually PUBLISHED
+      if (post.status === "published") {
+        const existingAsset = await prisma.signageAsset.findFirst({
+          where: { device_id: device.id, post_id: post.id },
         });
-        await prisma.signageDeployment.update({
-          where: { device_id_post_id: { device_id: device.id, post_id: post.id } },
-          data: { status: "synced", last_error: null },
-        });
+
+        const result = existingAsset
+          ? { ok: true, already_exists: true, asset: existingAsset }
+          : emitToDeviceAck
+          ? await emitToDeviceAck(
+              device.id,
+              "signage_command",
+              {
+                action: "publish_asset",
+                post_id: post.id,
+                title: post.title,
+                image_url: image.image_path,
+                duration_seconds: Number(signageData.duration_seconds) || 10,
+                start_date: signageData.start_date || null,
+                end_date: signageData.end_date || null,
+              },
+              12000,
+            )
+          : { ok: false, error: "Socket bridge is not ready" };
+
+        if (result.ok) {
+          await upsertSignageAsset(prisma, { device_id: device.id, post_id: post.id, image_url: image.image_path, asset: result.asset });
+          await prisma.signageDeployment.update({
+            where: { device_id_post_id: { device_id: device.id, post_id: post.id } },
+            data: { status: "synced", last_error: null },
+          });
+        } else {
+          await prisma.signageDeployment.update({
+            where: { device_id_post_id: { device_id: device.id, post_id: post.id } },
+            data: { status: "pending", last_error: result.error || null },
+          });
+        }
+        results.push({ device_id: device.id, device_name: device.device_name, result });
       } else {
-        await prisma.signageDeployment.update({
-          where: { device_id_post_id: { device_id: device.id, post_id: post.id } },
-          data: { status: "pending", last_error: result.error || null },
-        });
+        // Post is a draft, just return success for saving the checkbox
+        results.push({ device_id: device.id, device_name: device.device_name, result: { ok: true, note: "Draft selection saved." } });
       }
-      results.push({ device_id: device.id, device_name: device.device_name, result });
     } catch (e) {
       console.error(`Signage deploy failed for device ${device.id}:`, e);
     }
@@ -196,7 +199,6 @@ router.post("/", auth(["admin", "creator"]), uploadImages, async (req, res) => {
   const targetDepartmentId = req.user.role === "admin" ? Number(department_id) : req.user.department_id;
   if (!targetDepartmentId || !canManage(req.user, targetDepartmentId)) return res.status(403).json({ error: "Invalid department access" });
 
-  // Status Check: Offline devices block creation if signage requested
   const selectedDeviceIds = parseDeviceIds(device_ids);
   if (toBool(publish_to_signage)) {
     const onlineCheck = await ensureDevicesOnline(selectedDeviceIds);
@@ -236,7 +238,7 @@ router.post("/", auth(["admin", "creator"]), uploadImages, async (req, res) => {
     });
 
     let signage_deployments = [];
-    if (toBool(publish_to_signage) && post.status === "published") {
+    if (toBool(publish_to_signage)) {
       const targetDevices = await prisma.device.findMany({ where: { id: { in: selectedDeviceIds } } });
       signage_deployments = await deployToSignage(req, post, targetDevices, req.body);
     }
@@ -256,7 +258,6 @@ router.put("/:id", auth(["admin", "creator"]), uploadImages, async (req, res) =>
   const { title, description_markdown, publish_to_feed, publish_to_signage, status, device_ids } = req.body;
   const selectedIds = parseDeviceIds(device_ids);
 
-  // Status Check: Offline devices block signage updates
   if (toBool(publish_to_signage)) {
     const onlineCheck = await ensureDevicesOnline(selectedIds);
     if (!onlineCheck.ok) return res.status(400).json({ error: onlineCheck.error });
@@ -313,31 +314,38 @@ router.put("/:id", auth(["admin", "creator"]), uploadImages, async (req, res) =>
     });
 
     let signage_deployments = [];
-    if (updated.status === "published") {
-      const emitToDeviceAck = req.app.get("emitToDeviceAck");
+    const emitToDeviceAck = req.app.get("emitToDeviceAck");
       
-      if (toBool(publish_to_signage)) {
-        const deploymentsToRemove = await prisma.signageDeployment.findMany({
-          where: { post_id: postId, device_id: { notIn: selectedIds } }
-        });
-        for (const dep of deploymentsToRemove) {
-          if (emitToDeviceAck) await emitToDeviceAck(dep.device_id, "signage_command", { action: "delete_post_assets", post_id: postId }, 5000).catch(() => {});
-          await prisma.signageDeployment.delete({ where: { id: dep.id } });
-          await prisma.signageAsset.deleteMany({ where: { post_id: postId, device_id: dep.device_id } });
+    if (toBool(publish_to_signage)) {
+      // 1. Remove deployments for devices that are NO LONGER selected
+      const deploymentsToRemove = await prisma.signageDeployment.findMany({
+        where: { post_id: postId, device_id: { notIn: selectedIds } }
+      });
+      for (const dep of deploymentsToRemove) {
+        // Only tell device to delete if the post WAS published
+        if (emitToDeviceAck && post.status === 'published') {
+          await emitToDeviceAck(dep.device_id, "signage_command", { action: "delete_post_assets", post_id: postId }, 5000).catch(() => {});
         }
-        if (selectedIds.length > 0) {
-          const targetDevices = await prisma.device.findMany({ where: { id: { in: selectedIds } } });
-          signage_deployments = await deployToSignage(req, updated, targetDevices, req.body);
-        }
-      } else {
-        const allDeps = await prisma.signageDeployment.findMany({ where: { post_id: postId } });
-        for (const dep of allDeps) {
-          if (emitToDeviceAck) await emitToDeviceAck(dep.device_id, "signage_command", { action: "delete_post_assets", post_id: postId }, 5000).catch(() => {});
-        }
-        await prisma.signageDeployment.deleteMany({ where: { post_id: postId } });
-        await prisma.signageAsset.deleteMany({ where: { post_id: postId } });
+        await prisma.signageDeployment.delete({ where: { id: dep.id } });
+        await prisma.signageAsset.deleteMany({ where: { post_id: postId, device_id: dep.device_id } });
       }
+      // 2. Sync selected devices
+      if (selectedIds.length > 0) {
+        const targetDevices = await prisma.device.findMany({ where: { id: { in: selectedIds } } });
+        signage_deployments = await deployToSignage(req, updated, targetDevices, req.body);
+      }
+    } else {
+      // signage toggled off entirely
+      const allDeps = await prisma.signageDeployment.findMany({ where: { post_id: postId } });
+      for (const dep of allDeps) {
+        if (emitToDeviceAck && post.status === 'published') {
+          await emitToDeviceAck(dep.device_id, "signage_command", { action: "delete_post_assets", post_id: postId }, 5000).catch(() => {});
+        }
+      }
+      await prisma.signageDeployment.deleteMany({ where: { post_id: postId } });
+      await prisma.signageAsset.deleteMany({ where: { post_id: postId } });
     }
+
     res.json({ ...updated, signage_deployments });
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -350,17 +358,15 @@ router.delete("/:id", auth(["admin", "creator"]), async (req, res) => {
   if (!post || !canManage(req.user, post.department_id)) return res.status(403).json({ error: "Forbidden" });
 
   const emitToDeviceAck = req.app.get("emitToDeviceAck");
-  const devices = await prisma.device.findMany({ where: { department_id: post.department_id } });
-
-  // Status check: if we want to delete from signage, ALL targeted devices must be online
   const signageDeps = await prisma.signageDeployment.findMany({ where: { post_id: post.id } });
   const depDeviceIds = signageDeps.map(d => d.device_id);
+  
   const onlineCheck = await ensureDevicesOnline(depDeviceIds);
   if (!onlineCheck.ok) return res.status(400).json({ error: onlineCheck.error });
 
   if (emitToDeviceAck) {
-    for (const device of devices) {
-      await emitToDeviceAck(device.id, "signage_command", { action: "delete_post_assets", post_id: post.id }, 12000).catch(() => {});
+    for (const did of depDeviceIds) {
+      await emitToDeviceAck(did, "signage_command", { action: "delete_post_assets", post_id: post.id }, 12000).catch(() => {});
     }
   }
 
@@ -377,12 +383,9 @@ router.delete("/:id", auth(["admin", "creator"]), async (req, res) => {
 router.post("/bulk-action", auth(["admin", "creator"]), async (req, res) => {
   const { ids, action, device_ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "No IDs provided" });
-
   const selectedDeviceIds = parseDeviceIds(device_ids);
   
-  // Status check for bulk signage operations
   if (["add-signage", "add-both", "remove-signage", "delete"].includes(action)) {
-    // For delete, we check ALL devices currently showing ANY of the selected posts
     let checkIds = selectedDeviceIds;
     if (action === "delete" || (action === "remove-signage" && selectedDeviceIds.length === 0)) {
       const deps = await prisma.signageDeployment.findMany({ where: { post_id: { in: ids.map(Number) } } });
@@ -393,10 +396,7 @@ router.post("/bulk-action", auth(["admin", "creator"]), async (req, res) => {
   }
 
   const posts = await prisma.post.findMany({
-    where: {
-      id: { in: ids.map(Number) },
-      ...(req.user.role !== "admin" && { department_id: req.user.department_id })
-    },
+    where: { id: { in: ids.map(Number) }, ...(req.user.role !== "admin" && { department_id: req.user.department_id }) },
     include: { images: true, signage_metadata: true, signage_deployments: true }
   });
 
@@ -405,13 +405,12 @@ router.post("/bulk-action", auth(["admin", "creator"]), async (req, res) => {
 
   try {
     if (action === "delete") {
-      const deps = await prisma.signageDeployment.findMany({ where: { post_id: { in: validIds } } });
-      if (emitToDeviceAck) {
-        for (const dep of deps) {
-          await emitToDeviceAck(dep.device_id, "signage_command", { action: "delete_post_assets", post_id: dep.post_id }, 2000).catch(() => {});
-        }
-      }
       for (const p of posts) {
+        if (emitToDeviceAck) {
+          for (const d of p.signage_deployments) {
+            await emitToDeviceAck(d.device_id, "signage_command", { action: "delete_post_assets", post_id: p.id }, 2000).catch(() => {});
+          }
+        }
         for (const img of p.images) {
           const fullPath = path.join(__dirname, "../..", img.image_path);
           if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
@@ -429,12 +428,8 @@ router.post("/bulk-action", auth(["admin", "creator"]), async (req, res) => {
           await emitToDeviceAck(dep.device_id, "signage_command", { action: "delete_post_assets", post_id: dep.post_id }, 2000).catch(() => {});
         }
       }
-      await prisma.signageDeployment.deleteMany({ 
-        where: { post_id: { in: validIds }, ...(targetIds && { device_id: { in: targetIds } }) } 
-      });
-      await prisma.signageAsset.deleteMany({ 
-        where: { post_id: { in: validIds }, ...(targetIds && { device_id: { in: targetIds } }) } 
-      });
+      await prisma.signageDeployment.deleteMany({ where: { post_id: { in: validIds }, ...(targetIds && { device_id: { in: targetIds } }) } });
+      await prisma.signageAsset.deleteMany({ where: { post_id: { in: validIds }, ...(targetIds && { device_id: { in: targetIds } }) } });
       if (!targetIds) {
         await prisma.post.updateMany({ where: { id: { in: validIds } }, data: { publish_to_signage: false } });
       } else {

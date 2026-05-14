@@ -45,6 +45,7 @@ router.get("/device/:device_id/deployments", async (req, res) => {
     where: {
       device_id: Number(req.params.device_id),
       status: { not: "removed" },
+      post: { status: "published" }, // NEW: Only show published content on screens
     },
     include: {
       post: {
