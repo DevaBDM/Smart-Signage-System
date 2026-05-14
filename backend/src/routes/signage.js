@@ -122,6 +122,16 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
   ) {
     return res.status(403).json({ error: "Cannot publish to this device" });
   }
+  if (!device.is_approved) {
+    return res.status(403).json({
+      error: "This device is pending approval and cannot be controlled yet.",
+    });
+  }
+  if (device.status !== "online") {
+    return res.status(400).json({
+      error: `Update cancelled. These displays are offline: ${device.device_name}`,
+    });
+  }
 
   // Upsert signage metadata
   await prisma.signageMetadata.upsert({
@@ -198,25 +208,10 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
     },
   });
 
-  // ONLY notify if actually allowed (offline: DB deployment saved; Pi pulls when online)
+  // When auto-approved, Pi is online (checked above); otherwise only DB rows change until an admin allows signage.
   let result = { ok: true, note: "Deployment saved. Awaiting admin approval." };
   if (isAutoApprove) {
-    if (device.status !== "online") {
-      await prisma.signageDeployment.update({
-        where: {
-          device_id_post_id: {
-            device_id: Number(device_id),
-            post_id: post.id,
-          },
-        },
-        data: {
-          status: "pending",
-          last_error:
-            "Display offline — deployment saved; will sync when the display is online.",
-        },
-      });
-      result = { ok: true, offline_queued: true };
-    } else if (existingAsset) {
+    if (existingAsset) {
       result = { ok: true, already_exists: true, asset: existingAsset };
       await upsertSignageAsset(prisma, {
         device_id,
@@ -273,7 +268,7 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
 
   res.json({
     ok: true,
-    pi_notified: !!(isAutoApprove && result.ok && !result.offline_queued),
+    pi_notified: !!(isAutoApprove && result.ok),
     pi_result: result,
   });
 });
@@ -428,7 +423,7 @@ router.delete(
           })
           .catch(() => {});
 
-        // NEW: If no more deployments exist for this post, unmark it as a signage post
+        // If no more deployments for this post, clear signage flag on the post.
         const remainingDeployments = await prisma.signageDeployment.count({
           where: { post_id: trackedAsset.post_id },
         });
