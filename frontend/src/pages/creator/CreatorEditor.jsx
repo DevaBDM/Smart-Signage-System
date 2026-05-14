@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import CreatorSidebar from "../../components/CreatorSidebar";
-import FabricDesigner from "../../components/FabricDesigner";
+import Designer from "../../components/Designer";
 import api from "../../api/axios";
 import useAuthStore from "../../store/useAuthStore";
 import * as S from "../../styles";
@@ -119,7 +119,7 @@ export default function CreatorEditor() {
           }}
         >
           <div style={S.card}>
-            <FabricDesigner onExport={handleExport} />
+            <Designer onExport={handleExport} />
           </div>
 
           <div style={S.card}>
