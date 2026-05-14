@@ -364,6 +364,26 @@ def sync():
     return pushed
 
 
+def clear_all_assets():
+    """Remove ALL assets from Anthias."""
+    assets = get_anthias_assets()
+    deleted = []
+    errors = []
+    for asset in assets:
+        aid = _asset_id(asset)
+        if aid:
+            result = delete_from_anthias(aid)
+            if result.get("ok"):
+                deleted.append(normalize_asset(asset))
+            else:
+                errors.append({"asset": normalize_asset(asset), "error": result})
+    return {
+        "ok": len(errors) == 0,
+        "deleted_count": len(deleted),
+        "errors": errors
+    }
+
+
 def delete_from_anthias(asset_id):
     """Remove asset from Anthias."""
     for endpoint in ASSET_ENDPOINTS:

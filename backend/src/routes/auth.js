@@ -32,6 +32,9 @@ router.post("/register", requireAdminAfterFirstUser, async (req, res) => {
     });
     res.json({ id: user.id, username: user.username, role: user.role });
   } catch (e) {
+    if (e.code === "P2002") {
+      return res.status(400).json({ error: "Username already exists." });
+    }
     res.status(400).json({ error: e.message });
   }
 });

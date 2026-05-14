@@ -144,7 +144,7 @@ model SensorLog {
   brightness Int      @default(0)
   rain       Boolean  @default(false)
   created_at DateTime @default(now())
-  device     Device   @relation(fields: [device_id], references: [id])
+  device     Device   @relation(fields: [device_id], references: [id], onDelete: Cascade)
 }
 
 model ErrorLog {
@@ -153,7 +153,7 @@ model ErrorLog {
   error_type String
   message    String
   created_at DateTime @default(now())
-  device     Device   @relation(fields: [device_id], references: [id])
+  device     Device   @relation(fields: [device_id], references: [id], onDelete: Cascade)
 }
 
 model Playlist {

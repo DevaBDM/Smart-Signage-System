@@ -25,6 +25,9 @@ router.post("/", auth(["admin"]), async (req, res) => {
   try {
     res.json(await prisma.department.create({ data: { name } }));
   } catch (e) {
+    if (e.code === "P2002") {
+      return res.status(400).json({ error: "Department name already exists." });
+    }
     res.status(400).json({ error: e.message });
   }
 });

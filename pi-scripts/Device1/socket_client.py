@@ -71,6 +71,7 @@ def on_signage_command(data):
     print(f"[socket] Signage command: {data}")
     try:
         from content_sync import (
+            clear_all_assets,
             delete_asset,
             delete_post_assets,
             list_anthias_assets,
@@ -82,6 +83,12 @@ def on_signage_command(data):
         action = data.get("action")
         if action == "list":
             return {"ok": True, "assets": list_anthias_assets()}
+        if action == "clear_all":
+            res = clear_all_assets()
+            # Force Anthias to refresh so the screen goes blank/default immediately
+            import subprocess
+            subprocess.run(["pkill", "-HUP", "anthias"], capture_output=True)
+            return res
         if action == "publish_asset":
             return push_to_anthias(data)
         if action == "delete_asset":

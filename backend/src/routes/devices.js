@@ -144,4 +144,27 @@ router.put("/:id/reset", auth(["admin"]), async (req, res) => {
   }
 });
 
+// Remove device and clear ALL signage data from it.
+router.delete("/:id", auth(["admin"]), async (req, res) => {
+  try {
+    const device_id = Number(req.params.id);
+    const device = await prisma.device.findUnique({ where: { id: device_id } });
+    if (!device) return res.status(404).json({ error: "Device not found" });
+
+    // 1. Notify Pi to clear ALL Anthias assets (best effort if online)
+    const emitToDeviceAck = req.app.get("emitToDeviceAck");
+    if (emitToDeviceAck) {
+      await emitToDeviceAck(device_id, "signage_command", { action: "clear_all" }, 5000).catch(() => {});
+    }
+
+    // 2. Cascade delete will handle related records in deployments, assets, logs, etc.
+    // Ensure migrations/schema.prisma has onDelete: Cascade for these relations.
+    await prisma.device.delete({ where: { id: device_id } });
+
+    res.json({ ok: true, message: "Device and all its signage data removed." });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 module.exports = router;

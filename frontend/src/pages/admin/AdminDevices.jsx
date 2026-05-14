@@ -111,6 +111,19 @@ export default function AdminDevices() {
     }
   };
 
+  const removeDevice = async () => {
+    if (!sel || !window.confirm("CRITICAL: This will wipe all images from the TV and remove the device from the system. Continue?")) return;
+    setMsg("");
+    try {
+      await api.delete(`/devices/${sel.id}`);
+      setMsg("✅ Device and signage data erased.");
+      load();
+      setSel(null);
+    } catch (e) {
+      setMsg(e.response?.data?.error || "❌ Removal failed.");
+    }
+  };
+
   const approve = async () => {
     if (!sel) return;
     setMsg("");
@@ -478,6 +491,13 @@ export default function AdminDevices() {
                   style={{ ...S.btn, marginTop: 4, background: "#fff", border: "1.5px solid #d1d5db" }}
                 >
                   🔄 Reset to Agent Defaults
+                </button>
+                <button
+                  type="button"
+                  onClick={removeDevice}
+                  style={{ ...S.btn, marginTop: 12, background: "#fee2e2", color: "#b91c1c", border: "none" }}
+                >
+                  🗑️ Erase & Remove Device
                 </button>
               </form>
             </div>
