@@ -325,21 +325,64 @@ router.delete(
     const device = await getAllowedDevice(req, res);
     if (!device) return;
 
+    const assetId = String(req.params.asset_id);
+
+    // 1. Try to find if this asset is linked to a post
+    const trackedAsset = await prisma.signageAsset.findUnique({
+      where: {
+        device_id_asset_id: {
+          device_id: device.id,
+          asset_id: assetId,
+        },
+      },
+    });
+
+    // 2. Notify the Pi to delete from local Anthias
     const result = await sendSignageCommand(device.id, {
       action: "delete_asset",
-      asset_id: req.params.asset_id,
+      asset_id: assetId,
     });
-    if (result.ok) {
+
+    // 3. If socket command worked (or even if it failed but we want to clean DB),
+    // we MUST remove the deployment/asset records so the Pi doesn't re-sync them.
+    if (result.ok || req.query.force === "true") {
+      // Remove from SignageAsset (tracking)
       await prisma.signageAsset
         .delete({
           where: {
             device_id_asset_id: {
               device_id: device.id,
-              asset_id: String(req.params.asset_id),
+              asset_id: assetId,
             },
           },
         })
         .catch(() => {});
+
+      // If we know which post this was, remove the SignageDeployment
+      // so the /deployments endpoint no longer lists it for this device.
+      if (trackedAsset && trackedAsset.post_id) {
+        await prisma.signageDeployment
+          .delete({
+            where: {
+              device_id_post_id: {
+                device_id: device.id,
+                post_id: trackedAsset.post_id,
+              },
+            },
+          })
+          .catch(() => {});
+
+        // NEW: If no more deployments exist for this post, unmark it as a signage post
+        const remainingDeployments = await prisma.signageDeployment.count({
+          where: { post_id: trackedAsset.post_id },
+        });
+        if (remainingDeployments === 0) {
+          await prisma.post.update({
+            where: { id: trackedAsset.post_id },
+            data: { publish_to_signage: false },
+          });
+        }
+      }
     }
     res.status(result.ok ? 200 : 503).json(result);
   },

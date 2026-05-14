@@ -284,7 +284,21 @@ def push_to_anthias(post):
 
 def sync():
     posts = get_posts()
+    post_ids_in_deployments = {str(post_key(p)) for p in posts}
 
+    # 1. Cleanup: Remove assets from Anthias that are NO LONGER in the deployments list
+    local_assets = get_anthias_assets()
+    for asset in local_assets:
+        asset_name = asset.get("name") or ""
+        # We identify our assets by the "(post_id)" suffix in the name
+        if "(" in asset_name and ")" in asset_name:
+            pid_candidate = asset_name.rsplit("(", 1)[-1].split(")", 1)[0]
+            if pid_candidate and pid_candidate not in post_ids_in_deployments:
+                aid = _asset_id(asset)
+                print(f"[content_sync] Post {pid_candidate} is no longer deployed. Removing asset {aid}...")
+                delete_from_anthias(aid)
+
+    # 2. Push: Ensure all current deployments are in Anthias
     new_count = 0
     pushed = []
     for post in posts:
@@ -296,6 +310,20 @@ def sync():
 
     print(f"[content_sync] Sync done. {new_count} new post(s) pushed.")
     return pushed
+
+
+def delete_from_anthias(asset_id):
+    """Remove asset from Anthias."""
+    for endpoint in ASSET_ENDPOINTS:
+        try:
+            r = requests.delete(f"{API_BASE}{endpoint}/{asset_id}", timeout=REQUEST_TIMEOUT)
+            if r.status_code == 404:
+                continue
+            if r.status_code in (200, 204):
+                return {"ok": True}
+        except Exception as e:
+            print(f"[content_sync] Failed to delete from Anthias: {e}")
+    return {"ok": False}
 
 
 if __name__ == "__main__":
