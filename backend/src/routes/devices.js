@@ -29,23 +29,52 @@ router.get("/:id", auth(["admin"]), async (req, res) => {
 
 // Register device from the admin dashboard.
 router.post("/register", auth(["admin"]), async (req, res) => {
-  const { device_name, ip_address, department_id, location } = req.body;
+  const { id, device_name, ip_address, department_id, location } = req.body;
   try {
-    const device = await prisma.device.upsert({
-      where: { ip_address },
-      update: {
-        device_name,
-        ip_address,
-        location: location || null,
-        department_id: department_id ? Number(department_id) : null,
-      },
-      create: {
-        device_name,
-        ip_address,
-        location: location || null,
-        department_id: department_id ? Number(department_id) : null,
-      },
-    });
+    let device;
+    if (id) {
+      // If ID is provided, try to find and update, else create
+      device = await prisma.device.upsert({
+        where: { id: Number(id) },
+        update: {
+          device_name,
+          ip_address,
+          location: location || null,
+          department_id: department_id ? Number(department_id) : null,
+        },
+        create: {
+          id: Number(id),
+          device_name,
+          ip_address,
+          location: location || null,
+          department_id: department_id ? Number(department_id) : null,
+        },
+      });
+    } else {
+      // If no ID, find by IP (now non-unique, so we take the first) or just create
+      const existing = await prisma.device.findFirst({
+        where: { ip_address },
+      });
+      if (existing) {
+        device = await prisma.device.update({
+          where: { id: existing.id },
+          data: {
+            device_name,
+            location: location || null,
+            department_id: department_id ? Number(department_id) : null,
+          },
+        });
+      } else {
+        device = await prisma.device.create({
+          data: {
+            device_name,
+            ip_address,
+            location: location || null,
+            department_id: department_id ? Number(department_id) : null,
+          },
+        });
+      }
+    }
     res.json(device);
   } catch (e) {
     res.status(400).json({ error: e.message });

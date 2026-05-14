@@ -42,7 +42,8 @@ module.exports = (httpServer) => {
             last_seen: new Date(),
           },
         })
-        .catch(async () => {
+        .catch(async (err) => {
+          console.error(`[socket] heartbeat upsert failed for device ${id}:`, err.message);
           await prisma.device
             .updateMany({
               where: { id },

@@ -10,6 +10,7 @@ export default function AdminDevices() {
   const [sensors, setSensors] = useState([]);
   const [sensorLoading, setSensorLoading] = useState(false);
   const [form, setForm] = useState({
+    id: "",
     device_name: "",
     ip_address: "",
     location: "",
@@ -67,7 +68,7 @@ export default function AdminDevices() {
       ...form,
       department_id: form.department_id || null,
     });
-    setForm({ device_name: "", ip_address: "", location: "", department_id: "" });
+    setForm({ id: "", device_name: "", ip_address: "", location: "", department_id: "" });
     load();
   };
 
@@ -111,6 +112,14 @@ export default function AdminDevices() {
               onSubmit={register}
               style={{ display: "flex", flexDirection: "column", gap: 10 }}
             >
+              <label style={S.label}>Device ID (from config.py)</label>
+              <input
+                style={S.input}
+                type="number"
+                value={form.id}
+                onChange={(e) => setForm({ ...form, id: e.target.value })}
+                placeholder="e.g. 1, 2, 3"
+              />
               <label style={S.label}>Device Name</label>
               <input
                 style={S.input}
