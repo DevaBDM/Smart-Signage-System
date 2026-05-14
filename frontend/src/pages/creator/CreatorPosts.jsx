@@ -13,6 +13,8 @@ export default function CreatorPosts() {
   const [posts, setPosts] = useState([]);
   const [devices, setDevices] = useState([]);
   const [editingId, setEditingId] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkDeviceIds, setBulkDeviceIds] = useState([]);
   const [form, setForm] = useState({
     title: "",
     description_markdown: "",
@@ -36,6 +38,7 @@ export default function CreatorPosts() {
       .get(`/posts?department_id=${department_id}`)
       .then((r) => setPosts(r.data))
       .catch(() => {});
+
   useEffect(() => {
     load();
     api
@@ -46,7 +49,7 @@ export default function CreatorPosts() {
 
   const resetForm = () => {
     setEditingId(null);
-    setMsg(""); // Fix: clear message on cancel/reset
+    setMsg("");
     setForm({
       title: "",
       description_markdown: "",
@@ -72,7 +75,6 @@ export default function CreatorPosts() {
       publish_to_feed: post.publish_to_feed,
       publish_to_signage: post.publish_to_signage,
       status: post.status,
-      // For existing posts, we need to map deployments correctly
       device_ids: post.signage_deployments?.map(d => d.device_id) || [],
       duration_seconds: post.signage_metadata?.duration_seconds || 10,
       start_date: post.signage_metadata?.start_date?.split('.')[0] || "",
@@ -96,7 +98,6 @@ export default function CreatorPosts() {
       files.forEach((f) => fd.append("images", f));
 
       if (editingId) {
-        // Use FormData even for PUT to support image replacement
         await api.put(`/posts/${editingId}`, fd);
         setMsg("✅ Post updated!");
       } else {
@@ -121,6 +122,51 @@ export default function CreatorPosts() {
     load();
   };
 
+  const bulkAction = async (action) => {
+    if (selectedIds.length === 0) return;
+    
+    if ((action === 'add-signage' || action === 'add-both') && bulkDeviceIds.length === 0) {
+      alert("Please select at least one display for bulk signage distribution.");
+      return;
+    }
+
+    const msgMap = {
+      'delete': 'Delete selected posts?',
+      'remove-signage': 'Remove from signage?',
+      'remove-feed': 'Remove from feed?',
+      'add-feed': 'Publish selected to Feed?',
+      'add-signage': 'Publish selected to Signage?',
+      'add-both': 'Publish selected to Both?',
+    };
+    if (!confirm(msgMap[action] || `Confirm bulk ${action}?`)) return;
+    
+    setLoading(true);
+    try {
+      await api.post("/posts/bulk-action", { 
+        ids: selectedIds, 
+        action,
+        device_ids: bulkDeviceIds 
+      });
+      setSelectedIds([]);
+      setBulkDeviceIds([]);
+      load();
+      setMsg(`✅ Bulk action ${action} successful.`);
+    } catch (e) {
+      setMsg("❌ Bulk action failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const toggleAll = () => {
+    if (selectedIds.length === posts.length) setSelectedIds([]);
+    else setSelectedIds(posts.map(p => p.id));
+  };
+
   const toggleDevice = (id) => {
     const deviceId = Number(id);
     setForm((current) => ({
@@ -129,6 +175,11 @@ export default function CreatorPosts() {
         ? current.device_ids.filter((x) => x !== deviceId)
         : [...current.device_ids, deviceId],
     }));
+  };
+
+  const toggleBulkDevice = (id) => {
+    const deviceId = Number(id);
+    setBulkDeviceIds(prev => prev.includes(deviceId) ? prev.filter(x => x !== deviceId) : [...prev, deviceId]);
   };
 
   return (
@@ -251,11 +302,6 @@ export default function CreatorPosts() {
                 >
                   <label style={S.label}>Target Displays</label>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    {devices.length === 0 && (
-                      <span style={{ fontSize: 12, color: "#9ca3af" }}>
-                        No displays are assigned to your department yet.
-                      </span>
-                    )}
                     {devices.map((d) => (
                       <label
                         key={d.id}
@@ -341,8 +387,8 @@ export default function CreatorPosts() {
                 value={form.status}
                 onChange={(e) => setForm({ ...form, status: e.target.value })}
               >
-                <option value="draft">Draft (Private)</option>
-                <option value="published">Published (Visible)</option>
+                <option value="draft">Draft</option>
+                <option value="published">Published</option>
               </select>
 
               <button
@@ -355,21 +401,53 @@ export default function CreatorPosts() {
                 }}
                 disabled={loading}
               >
-                {loading ? "Saving..." : editingId ? "💾 Update Post" : "🚀 Create Post"}
+                {loading ? "Saving..." : editingId ? "Update Post" : "Save Post"}
               </button>
             </form>
           </div>
 
           <div style={S.card}>
-            <h2 style={{ fontWeight: 700, marginBottom: 14 }}>
-              Posts ({posts.length})
-            </h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <h2 style={{ fontWeight: 700 }}>Posts ({posts.length})</h2>
+              <button onClick={toggleAll} style={{ ...S.btn, padding: '4px 8px', fontSize: 12 }}>
+                {selectedIds.length === posts.length ? "Deselect All" : "Select All"}
+              </button>
+            </div>
+
+            {selectedIds.length > 0 && (
+              <div style={{ padding: 12, background: '#f3f4f6', borderRadius: 8, marginBottom: 12 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>{selectedIds.length} items selected:</div>
+                
+                <div style={{ marginBottom: 10, borderBottom: '1px solid #d1d5db', paddingBottom: 10 }}>
+                  <div style={{ fontSize: 12, color: '#4b5563', marginBottom: 6 }}>Target Displays (for Add/Remove Signage):</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                    {devices.map(d => (
+                      <label key={d.id} style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={bulkDeviceIds.includes(d.id)} onChange={() => toggleBulkDevice(d.id)} />
+                        {d.device_name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  <button onClick={() => bulkAction('add-feed')} style={{ ...S.btn, background: '#fff', fontSize: 11, padding: '4px 8px' }}>+ Feed</button>
+                  <button onClick={() => bulkAction('add-signage')} style={{ ...S.btn, background: '#fff', fontSize: 11, padding: '4px 8px' }}>+ Signage</button>
+                  <button onClick={() => bulkAction('add-both')} style={{ ...S.btn, background: '#fff', fontSize: 11, padding: '4px 8px' }}>+ Both</button>
+                  <div style={{ width: 1, height: 20, background: '#d1d5db', margin: '0 4px' }} />
+                  <button onClick={() => bulkAction('remove-signage')} style={{ ...S.btn, background: '#fff', fontSize: 11, padding: '4px 8px' }}>- Signage</button>
+                  <button onClick={() => bulkAction('remove-feed')} style={{ ...S.btn, background: '#fff', fontSize: 11, padding: '4px 8px' }}>- Feed</button>
+                  <button onClick={() => bulkAction('delete')} style={{ ...S.btn, background: '#fee2e2', color: '#b91c1c', fontSize: 11, padding: '4px 8px' }}>🗑 Delete</button>
+                </div>
+              </div>
+            )}
+
             <div
               style={{
                 display: "flex",
                 flexDirection: "column",
                 gap: 10,
-                maxHeight: 800,
+                maxHeight: 600,
                 overflowY: "auto",
               }}
             >
@@ -383,10 +461,14 @@ export default function CreatorPosts() {
                     border: "1px solid #e5e7eb",
                     borderRadius: 10,
                     alignItems: "center",
-                    background: editingId === p.id ? "#f0f9ff" : "#fff",
-                    borderLeft: `5px solid ${p.status === 'published' ? '#16a34a' : '#d1d5db'}`
                   }}
                 >
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(p.id)}
+                    onChange={() => toggleSelect(p.id)}
+                    style={{ width: 16, height: 16 }}
+                  />
                   {p.images?.[0] ? (
                     <img
                       src={`${BASE}${p.images[0].image_path}`}
@@ -422,10 +504,7 @@ export default function CreatorPosts() {
                       style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}
                     >
                       {p.publish_to_feed ? "📰 Feed " : ""}
-                      {p.publish_to_signage ? "🖥 Signage" : ""} · 
-                      <strong style={{ color: p.status === 'published' ? '#166534' : '#6b7280' }}>
-                        {" "}{p.status.toUpperCase()}
-                      </strong>
+                      {p.publish_to_signage ? `🖥 Signage (${p.signage_deployments?.length || 0})` : ""} · {p.status}
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>
@@ -435,10 +514,9 @@ export default function CreatorPosts() {
                         ...S.btn,
                         padding: "5px 10px",
                         flexShrink: 0,
-                        fontSize: 12
                       }}
                     >
-                      ✏️ Edit
+                      ✏️
                     </button>
                     <button
                       onClick={() => del(p.id)}
@@ -448,7 +526,6 @@ export default function CreatorPosts() {
                         color: "#b91c1c",
                         padding: "5px 10px",
                         flexShrink: 0,
-                        fontSize: 12
                       }}
                     >
                       🗑

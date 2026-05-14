@@ -383,4 +383,137 @@ router.delete("/:id", auth(["admin", "creator"]), async (req, res) => {
   res.json({ ok: true });
 });
 
+// BULK ACTIONS
+router.post("/bulk-action", auth(["admin", "creator"]), async (req, res) => {
+  const { ids, action, device_ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "No IDs provided" });
+
+  const posts = await prisma.post.findMany({
+    where: {
+      id: { in: ids.map(Number) },
+      ...(req.user.role !== "admin" && { department_id: req.user.department_id })
+    },
+    include: { images: true, signage_metadata: true, signage_deployments: true }
+  });
+
+  const validIds = posts.map(p => p.id);
+  const emitToDeviceAck = req.app.get("emitToDeviceAck");
+  const selectedDeviceIds = parseDeviceIds(device_ids);
+
+  try {
+    if (action === "delete") {
+      // ... (delete logic same)
+      const deps = await prisma.signageDeployment.findMany({ where: { post_id: { in: validIds } } });
+      if (emitToDeviceAck) {
+        for (const dep of deps) {
+          await emitToDeviceAck(dep.device_id, "signage_command", { action: "delete_post_assets", post_id: dep.post_id }, 2000).catch(() => {});
+        }
+      }
+      for (const p of posts) {
+        for (const img of p.images) {
+          const fullPath = path.join(__dirname, "../..", img.image_path);
+          if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+        }
+      }
+      await prisma.post.deleteMany({ where: { id: { in: validIds } } });
+    } 
+    else if (action === "remove-signage") {
+      const targetIds = selectedDeviceIds.length > 0 ? selectedDeviceIds : null;
+      
+      const deps = await prisma.signageDeployment.findMany({ 
+        where: { 
+          post_id: { in: validIds },
+          ...(targetIds && { device_id: { in: targetIds } })
+        } 
+      });
+
+      if (emitToDeviceAck) {
+        for (const dep of deps) {
+          await emitToDeviceAck(dep.device_id, "signage_command", { action: "delete_post_assets", post_id: dep.post_id }, 2000).catch(() => {});
+        }
+      }
+
+      // 1. Delete specific deployments
+      await prisma.signageDeployment.deleteMany({ 
+        where: { 
+          post_id: { in: validIds },
+          ...(targetIds && { device_id: { in: targetIds } })
+        } 
+      });
+
+      // 2. Delete corresponding asset tracking
+      await prisma.signageAsset.deleteMany({ 
+        where: { 
+          post_id: { in: validIds },
+          ...(targetIds && { device_id: { in: targetIds } })
+        } 
+      });
+
+      // 3. Only if we removed from ALL devices (no targetIds provided) or if no devices are left, update the flag
+      if (!targetIds) {
+        await prisma.post.updateMany({
+          where: { id: { in: validIds } },
+          data: { publish_to_signage: false }
+        });
+      } else {
+        // For each post, check if any deployments remain
+        for (const pid of validIds) {
+          const count = await prisma.signageDeployment.count({ where: { post_id: pid } });
+          if (count === 0) {
+            await prisma.post.update({ where: { id: pid }, data: { publish_to_signage: false } });
+          }
+        }
+      }
+    }
+    else if (action === "remove-feed") {
+      await prisma.post.updateMany({
+        where: { id: { in: validIds } },
+        data: { publish_to_feed: false }
+      });
+    }
+    else if (action === "add-feed") {
+      await prisma.post.updateMany({
+        where: { id: { in: validIds } },
+        data: { publish_to_feed: true, status: "published" }
+      });
+    }
+    else if (action === "add-signage" || action === "add-both") {
+      const publishFeed = action === "add-both";
+      
+      for (const p of posts) {
+        // 1. Update post status
+        const updated = await prisma.post.update({
+          where: { id: p.id },
+          data: { 
+            publish_to_signage: true, 
+            status: "published",
+            ...(publishFeed && { publish_to_feed: true })
+          },
+          include: { images: true, signage_metadata: true }
+        });
+
+        // 2. Determine which devices to use (provided ones or existing ones)
+        const targetIds = selectedDeviceIds.length > 0 
+          ? selectedDeviceIds 
+          : p.signage_deployments.map(d => d.device_id);
+
+        if (targetIds.length > 0) {
+          const targetDevices = await prisma.device.findMany({ where: { id: { in: targetIds } } });
+          await deployToSignage(req, updated, targetDevices, {
+            duration_seconds: updated.signage_metadata?.duration_seconds,
+            start_date: updated.signage_metadata?.start_date,
+            end_date: updated.signage_metadata?.end_date,
+            priority: updated.signage_metadata?.priority,
+            display_group: updated.signage_metadata?.display_group
+          });
+        }
+      }
+    }
+
+    res.json({ ok: true, count: validIds.length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
