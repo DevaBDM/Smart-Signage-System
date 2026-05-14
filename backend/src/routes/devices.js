@@ -4,12 +4,19 @@ const auth = require("../middleware/auth");
 
 // List devices. Admins see all; creators see their department displays.
 router.get("/", auth(["admin", "creator"]), async (req, res) => {
+  const { sortBy = "id", sortOrder = "asc" } = req.query;
   const where =
     req.user.role === "admin" ? {} : { department_id: req.user.department_id };
+
+  // Validate sort parameters to prevent Prisma errors
+  const validFields = ["id", "device_name", "status", "last_seen", "created_at"];
+  const finalSortBy = validFields.includes(sortBy) ? sortBy : "id";
+  const finalSortOrder = sortOrder === "desc" ? "desc" : "asc";
+
   const devices = await prisma.device.findMany({
     where,
     include: { department: true },
-    orderBy: { last_seen: "desc" },
+    orderBy: { [finalSortBy]: finalSortOrder },
   });
   res.json(devices);
 });

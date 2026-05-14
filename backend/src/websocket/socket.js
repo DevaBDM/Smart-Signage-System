@@ -15,28 +15,29 @@ module.exports = (httpServer) => {
 
     // ── Pi → Server: register and heartbeat ──────────────────
     socket.on("heartbeat", async (data) => {
-      // data: { device_id, status, timestamp }
+      // data: { device_id, device_name, ip_address, location, status }
       const id = Number(data.device_id);
       deviceSockets.set(id, socket.id);
       socket.deviceId = id;
+
+      // Validate IP: if it doesn't look like an IP, use the socket handshake address
+      const reportedIp = data.ip_address;
+      const isIp = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(reportedIp);
+      const ip_address = isIp ? reportedIp : (socket.handshake.address || "unknown");
 
       await prisma.device
         .upsert({
           where: { id },
           update: {
-            device_name: data.device_name || undefined,
-            ip_address: data.ip_address || undefined,
-            location: data.location || undefined,
             status: "online",
             last_seen: new Date(),
+            // Only update IP if we didn't have one or if it's a valid new one
+            ...(isIp && { ip_address }),
           },
           create: {
             id,
             device_name: data.device_name || `Pi Display ${id}`,
-            ip_address:
-              data.ip_address ||
-              socket.handshake.address ||
-              `socket-${socket.id}`,
+            ip_address,
             location: data.location || null,
             status: "online",
             last_seen: new Date(),

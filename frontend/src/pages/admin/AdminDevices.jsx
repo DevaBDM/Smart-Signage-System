@@ -23,10 +23,11 @@ export default function AdminDevices() {
     department_id: "",
   });
   const [msg, setMsg] = useState("");
+  const [sort, setSort] = useState({ by: "id", order: "asc" });
 
   const load = () => {
     api
-      .get("/devices")
+      .get(`/devices?sortBy=${sort.by}&sortOrder=${sort.order}`)
       .then((r) => setDevices(r.data))
       .catch(() => {});
     api
@@ -38,7 +39,7 @@ export default function AdminDevices() {
     load();
     const t = setInterval(load, 15000);
     return () => clearInterval(t);
-  }, []);
+  }, [sort]);
 
   const loadSensors = async (device) => {
     if (!device) return;
@@ -172,7 +173,39 @@ export default function AdminDevices() {
 
           {/* Device list */}
           <div style={S.card}>
-            <h2 style={{ fontWeight: 700, marginBottom: 14 }}>All Devices</h2>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 14,
+              }}
+            >
+              <h2 style={{ fontWeight: 700 }}>All Devices</h2>
+              <div style={{ display: "flex", gap: 6 }}>
+                <select
+                  style={{ ...S.input, width: "auto", padding: "4px 8px" }}
+                  value={sort.by}
+                  onChange={(e) => setSort({ ...sort, by: e.target.value })}
+                >
+                  <option value="id">Sort by ID</option>
+                  <option value="last_seen">Sort by Active</option>
+                  <option value="device_name">Sort by Name</option>
+                  <option value="status">Sort by Status</option>
+                </select>
+                <button
+                  style={{ ...S.btn, padding: "4px 8px" }}
+                  onClick={() =>
+                    setSort({
+                      ...sort,
+                      order: sort.order === "asc" ? "desc" : "asc",
+                    })
+                  }
+                >
+                  {sort.order === "asc" ? "↑" : "↓"}
+                </button>
+              </div>
+            </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {devices.map((d) => (
                 <div
