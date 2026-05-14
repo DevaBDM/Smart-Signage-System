@@ -110,6 +110,10 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
     return res.status(403).json({ error: "Cannot publish to this device" });
   }
 
+  if (device.status !== "online") {
+    return res.status(400).json({ error: `Display "${device.device_name}" is offline. Asset was not published.` });
+  }
+
   // Upsert signage metadata
   await prisma.signageMetadata.upsert({
     where: { post_id: Number(post_id) },
