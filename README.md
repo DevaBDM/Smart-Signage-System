@@ -134,6 +134,12 @@ sudo systemctl start postgresql
 # Ubuntu/Debian
 sudo systemctl start postgresql
 sudo systemctl enable postgresql   # start on boot
+
+# Windows
+pg_ctl -D "D:\scoop\persist\postgresql\data" -l "D:\scoop\persist\postgresql\logfile" start
+# to stop
+pg_ctl -D "D:\scoop\persist\postgresql\data" stop
+
 ```
 
 ### Step 3 — Create Database and User
