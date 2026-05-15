@@ -3,10 +3,9 @@ import CreatorSidebar from "../../components/CreatorSidebar";
 import api from "../../api/axios";
 import useAuthStore from "../../store/useAuthStore";
 import * as S from "../../styles";
+import { assetOrigin } from "../../config/apiBase";
 
-const BASE = (
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api"
-).replace("/api", "");
+const BASE = assetOrigin();
 
 export default function CreatorPosts() {
   const { department_id } = useAuthStore();

@@ -34,7 +34,9 @@ app.use("/api/playlists", require("./routes/playlists"));
 app.use("/api/signage", require("./routes/signage"));
 app.use("/api/users", require("./routes/users"));
 
-app.get("/api/health", (_, res) => res.json({ status: "ok" }));
+app.get("/api/health", (_req, res) => {
+  res.json({ status: "ok" });
+});
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, "0.0.0.0", () => {

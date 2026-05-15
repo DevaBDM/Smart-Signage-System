@@ -43,8 +43,9 @@ router.post("/register", requireAdminAfterFirstUser, async (req, res) => {
 router.post("/login", async (req, res) => {
   const { username, password } = req.body;
   const user = await prisma.user.findUnique({ where: { username } });
-  if (!user || !(await bcrypt.compare(password, user.password_hash)))
+  if (!user || !(await bcrypt.compare(password, user.password_hash))) {
     return res.status(401).json({ error: "Invalid credentials" });
+  }
   const token = jwt.sign(
     { id: user.id, role: user.role, department_id: user.department_id },
     process.env.JWT_SECRET,

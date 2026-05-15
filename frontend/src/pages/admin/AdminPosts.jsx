@@ -2,10 +2,9 @@ import { useEffect, useState } from "react";
 import AdminSidebar from "../../components/AdminSidebar";
 import api from "../../api/axios";
 import * as S from "../../styles";
+import { assetOrigin } from "../../config/apiBase";
 
-const BASE = (
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api"
-).replace("/api", "");
+const BASE = assetOrigin();
 
 export default function AdminPosts() {
   const [posts, setPosts] = useState([]);

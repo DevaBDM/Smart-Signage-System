@@ -6,11 +6,9 @@ import rehypeRaw from "rehype-raw";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import remarkWikiLink from "remark-wiki-link";
-import axios from "axios";
+import api from "../../api/axios";
+import { assetOrigin } from "../../config/apiBase";
 import "katex/dist/katex.min.css"; // For LaTeX math
-
-const API = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-const BASE = API.replace("/api", "");
 
 // Custom renderer for Obsidian Callouts
 const CustomBlockquote = ({ children }) => {
@@ -67,15 +65,19 @@ export default function PostDetail() {
   const [imgIdx, setImgIdx] = useState(0);
   const [loading, setLoading] = useState(true);
 
+  const origin = assetOrigin();
+
   useEffect(() => {
-    axios
-      .get(`${API}/posts/${id}`)
+    setLoading(true);
+    api
+      .get(`/posts/${id}`)
       .then((r) => setPost(r.data))
+      .catch(() => setPost(null))
       .finally(() => setLoading(false));
   }, [id]);
 
   if (loading) return <div style={s.center}>Loading...</div>;
-  if (!post)
+  if (!post) {
     return (
       <div style={s.center}>
         Post not found.{" "}
@@ -93,6 +95,7 @@ export default function PostDetail() {
         </button>
       </div>
     );
+  }
 
   const images = post.images || [];
 
@@ -119,7 +122,11 @@ export default function PostDetail() {
         {images.length > 0 && (
           <div style={s.carousel}>
             <img
-              src={`${BASE}${images[imgIdx].image_path}`}
+              src={
+                images[imgIdx].image_path?.startsWith("http")
+                  ? images[imgIdx].image_path
+                  : `${origin}${images[imgIdx].image_path}`
+              }
               alt={post.title}
               style={s.carouselImg}
             />

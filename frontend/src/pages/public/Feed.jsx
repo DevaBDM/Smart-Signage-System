@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
-
-const API = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-const BASE = API.replace("/api", "");
+import api from "../../api/axios";
+import { assetOrigin } from "../../config/apiBase";
 
 export default function Feed() {
   const [posts, setPosts] = useState([]);
@@ -12,16 +10,20 @@ export default function Feed() {
   const [time, setTime] = useState(new Date());
   const navigate = useNavigate();
 
-  useEffect(() => {
-    axios
-      .get(`${API}/posts?feed=true`)
+  const origin = assetOrigin();
+
+  const fetchFeed = () =>
+    api
+      .get("/posts", { params: { feed: true } })
       .then((r) => setPosts(r.data))
-      .finally(() => setLoading(false));
+      .catch(() => setPosts([]));
+
+  useEffect(() => {
+    fetchFeed().finally(() => setLoading(false));
     const clock = setInterval(() => setTime(new Date()), 1000);
-    const refresh = setInterval(
-      () => axios.get(`${API}/posts?feed=true`).then((r) => setPosts(r.data)),
-      60000,
-    );
+    const refresh = setInterval(() => {
+      fetchFeed();
+    }, 60000);
     return () => {
       clearInterval(clock);
       clearInterval(refresh);
@@ -103,7 +105,11 @@ export default function Feed() {
             >
               {p.images?.[0] ? (
                 <img
-                  src={`${BASE}${p.images[0].image_path}`}
+                  src={
+                    p.images[0].image_path?.startsWith("http")
+                      ? p.images[0].image_path
+                      : `${origin}${p.images[0].image_path}`
+                  }
                   alt={p.title}
                   style={s.img}
                 />
