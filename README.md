@@ -260,13 +260,7 @@ npm run dev
 ### Step 1 — Create the First Admin Account
 
 ```bash
-curl -X POST http://localhost:5000/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "admin",
-    "password": "password123",
-    "role": "admin"
-  }'
+curl -X POST http://localhost:5000/api/auth/register -H "Content-Type: application/json" -d '{ "username": "admin", "password": "$eX.Yv-b82nM8!n", "role": "admin" }'
 ```
 
 ### Step 2 — Create Departments and Creators
