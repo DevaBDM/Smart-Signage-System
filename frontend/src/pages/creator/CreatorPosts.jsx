@@ -4,17 +4,18 @@ import api from "../../api/axios";
 import useAuthStore from "../../store/useAuthStore";
 import * as S from "../../styles";
 import { assetOrigin } from "../../config/apiBase";
+import usePersistentState from "../../hooks/usePersistentState";
 
 const BASE = assetOrigin();
 
 export default function CreatorPosts() {
-  const { department_id } = useAuthStore();
+  const { id: userId, department_id } = useAuthStore();
   const [posts, setPosts] = useState([]);
   const [devices, setDevices] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
-  const [bulkDeviceIds, setBulkDeviceIds] = useState([]);
-  const [form, setForm] = useState({
+  const [bulkDeviceIds, setBulkDeviceIds] = usePersistentState("creator.posts.bulkDeviceIds", []);
+  const emptyForm = {
     title: "",
     description_markdown: "",
     publish_to_feed: false,
@@ -26,17 +27,29 @@ export default function CreatorPosts() {
     end_date: "",
     priority: 1,
     display_group: "",
+  };
+  const [form, setForm, clearForm] = usePersistentState("creator.posts.form", emptyForm);
+  const [filters, setFilters] = usePersistentState("creator.posts.filters", {
+    channel: "all",
+    device_id: "",
+    creator_id: "",
   });
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
   const fileRef = useRef();
 
-  const load = () =>
-    api
-      .get(`/posts?department_id=${department_id}`)
+  const load = () => {
+    const params = new URLSearchParams();
+    if (department_id) params.set("department_id", department_id);
+    if (filters.channel !== "all") params.set("channel", filters.channel);
+    if (filters.device_id) params.set("device_id", filters.device_id);
+    if (filters.creator_id) params.set("creator_id", filters.creator_id);
+    return api
+      .get(`/posts?${params.toString()}`)
       .then((r) => setPosts(r.data))
       .catch(() => {});
+  };
 
   useEffect(() => {
     load();
@@ -44,29 +57,28 @@ export default function CreatorPosts() {
       .get("/devices")
       .then((r) => setDevices(r.data))
       .catch(() => {});
-  }, [department_id]);
+  }, [department_id, filters.channel, filters.creator_id, filters.device_id]);
+
+  const sameDepartmentCreators = Array.from(
+    new Map(
+      posts
+        .filter((p) => p.author)
+        .map((p) => [p.author.id, p.author]),
+    ).values(),
+  );
+
+  const manageablePosts = posts.filter((p) => p.author?.id === userId);
 
   const resetForm = () => {
     setEditingId(null);
     setMsg("");
-    setForm({
-      title: "",
-      description_markdown: "",
-      publish_to_feed: false,
-      publish_to_signage: false,
-      status: "draft",
-      device_ids: [],
-      duration_seconds: 10,
-      start_date: "",
-      end_date: "",
-      priority: 1,
-      display_group: "",
-    });
+    clearForm();
     setFiles([]);
     if (fileRef.current) fileRef.current.value = "";
   };
 
   const startEdit = (post) => {
+    if (post.author?.id !== userId) return;
     setEditingId(post.id);
     setForm({
       title: post.title,
@@ -150,7 +162,7 @@ export default function CreatorPosts() {
       setBulkDeviceIds([]);
       load();
       setMsg(`✅ Bulk action ${action} successful.`);
-    } catch (e) {
+    } catch {
       setMsg("❌ Bulk action failed.");
     } finally {
       setLoading(false);
@@ -158,12 +170,14 @@ export default function CreatorPosts() {
   };
 
   const toggleSelect = (id) => {
+    const post = posts.find((p) => p.id === id);
+    if (post?.author?.id !== userId) return;
     setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
   const toggleAll = () => {
-    if (selectedIds.length === posts.length) setSelectedIds([]);
-    else setSelectedIds(posts.map(p => p.id));
+    if (selectedIds.length === manageablePosts.length) setSelectedIds([]);
+    else setSelectedIds(manageablePosts.map(p => p.id));
   };
 
   const toggleDevice = (id) => {
@@ -413,9 +427,75 @@ export default function CreatorPosts() {
           <div style={S.card}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <h2 style={{ fontWeight: 700 }}>Posts ({posts.length})</h2>
-              <button onClick={toggleAll} style={{ ...S.btn, padding: '4px 8px', fontSize: 12 }}>
-                {selectedIds.length === posts.length ? "Deselect All" : "Select All"}
+              <button
+                onClick={toggleAll}
+                disabled={manageablePosts.length === 0}
+                style={{ ...S.btn, padding: '4px 8px', fontSize: 12 }}
+              >
+                {selectedIds.length === manageablePosts.length && manageablePosts.length > 0 ? "Deselect All" : "Select Mine"}
               </button>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                gap: 10,
+                marginBottom: 14,
+                padding: 12,
+                border: "1px solid #e5e7eb",
+                borderRadius: 8,
+                background: "#f9fafb",
+              }}
+            >
+              <label style={{ ...S.label, marginBottom: 0 }}>
+                Type
+                <select
+                  style={{ ...S.input, marginTop: 4 }}
+                  value={filters.channel}
+                  onChange={(e) =>
+                    setFilters({ ...filters, channel: e.target.value })
+                  }
+                >
+                  <option value="all">All posts</option>
+                  <option value="feed">Feed-only posts</option>
+                  <option value="signage">Signage-only posts</option>
+                </select>
+              </label>
+              <label style={{ ...S.label, marginBottom: 0 }}>
+                Signage system
+                <select
+                  style={{ ...S.input, marginTop: 4 }}
+                  value={filters.device_id}
+                  onChange={(e) =>
+                    setFilters({ ...filters, device_id: e.target.value })
+                  }
+                >
+                  <option value="">All displays</option>
+                  {devices.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.device_name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ ...S.label, marginBottom: 0 }}>
+                Creator
+                <select
+                  style={{ ...S.input, marginTop: 4 }}
+                  value={filters.creator_id}
+                  onChange={(e) =>
+                    setFilters({ ...filters, creator_id: e.target.value })
+                  }
+                >
+                  <option value="">All same-department creators</option>
+                  {sameDepartmentCreators.map((creator) => (
+                    <option key={creator.id} value={creator.id}>
+                      {creator.username}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
 
             {selectedIds.length > 0 && (
@@ -456,6 +536,9 @@ export default function CreatorPosts() {
               }}
             >
               {posts.map((p) => (
+                (() => {
+                  const isOwnPost = p.author?.id === userId;
+                  return (
                 <div
                   key={p.id}
                   style={{
@@ -471,7 +554,9 @@ export default function CreatorPosts() {
                     type="checkbox"
                     checked={selectedIds.includes(p.id)}
                     onChange={() => toggleSelect(p.id)}
+                    disabled={!isOwnPost}
                     style={{ width: 16, height: 16 }}
+                    title={isOwnPost ? "Select post" : "Only the creator can manage this post"}
                   />
                   {p.images?.[0] ? (
                     <img
@@ -504,6 +589,12 @@ export default function CreatorPosts() {
                     <div style={{ fontWeight: 600, fontSize: 14 }}>
                       {p.title}
                     </div>
+                    {p.author && (
+                      <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>
+                        By: {p.author.username}
+                        {!isOwnPost ? " · view only" : ""}
+                      </div>
+                    )}
                     <div
                       style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}
                     >
@@ -520,28 +611,36 @@ export default function CreatorPosts() {
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button
                       onClick={() => startEdit(p)}
+                      disabled={!isOwnPost}
                       style={{
                         ...S.btn,
+                        opacity: isOwnPost ? 1 : 0.45,
                         padding: "5px 10px",
                         flexShrink: 0,
                       }}
+                      title={isOwnPost ? "Edit post" : "Only the creator can edit this post"}
                     >
                       ✏️
                     </button>
                     <button
                       onClick={() => del(p.id)}
+                      disabled={!isOwnPost}
                       style={{
                         ...S.btn,
                         background: "#fee2e2",
                         color: "#b91c1c",
+                        opacity: isOwnPost ? 1 : 0.45,
                         padding: "5px 10px",
                         flexShrink: 0,
                       }}
+                      title={isOwnPost ? "Delete post" : "Only the creator can delete this post"}
                     >
                       🗑
                     </button>
                   </div>
                 </div>
+                  );
+                })()
               ))}
             </div>
           </div>

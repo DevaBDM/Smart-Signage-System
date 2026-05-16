@@ -4,6 +4,7 @@ import Designer from "../../components/Designer";
 import api from "../../api/axios";
 import useAuthStore from "../../store/useAuthStore";
 import * as S from "../../styles";
+import usePersistentState from "../../hooks/usePersistentState";
 
 export default function CreatorEditor() {
   const { department_id } = useAuthStore();
@@ -11,7 +12,7 @@ export default function CreatorEditor() {
   const [exported, setExported] = useState(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
-  const [form, setForm] = useState({
+  const emptyForm = {
     title: "",
     description_markdown: "",
     publish_to_feed: false,
@@ -23,7 +24,8 @@ export default function CreatorEditor() {
     end_date: "",
     priority: 1,
     display_group: "",
-  });
+  };
+  const [form, setForm, clearForm] = usePersistentState("creator.editor.form", emptyForm);
 
   useEffect(() => {
     api
@@ -69,19 +71,7 @@ export default function CreatorEditor() {
       await api.post("/posts", fd);
       setMsg("✅ Design saved to My Posts.");
       setExported(null);
-      setForm({
-        title: "",
-        description_markdown: "",
-        publish_to_feed: false,
-        publish_to_signage: false,
-        status: "draft",
-        device_ids: [],
-        duration_seconds: 10,
-        start_date: "",
-        end_date: "",
-        priority: 1,
-        display_group: "",
-      });
+      clearForm();
     } catch (e) {
       setMsg(e.response?.data?.error || "❌ Could not save design.");
     } finally {

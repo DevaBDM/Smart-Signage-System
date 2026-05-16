@@ -11,6 +11,8 @@ export default function FabricCanvas({
   bgColor,
   setSelected,
   onActiveStyleSync,
+  initialJson,
+  onCanvasChange,
 }) {
   const setSelectedRef = useRef(setSelected);
   const onSyncRef = useRef(onActiveStyleSync);
@@ -29,6 +31,12 @@ export default function FabricCanvas({
       selection: true,
     });
     fabricRef.current = canvas;
+    if (initialJson) {
+      canvas.loadFromJSON(initialJson, () => {
+        canvas.renderAll();
+        onCanvasChange?.(canvas.toJSON());
+      });
+    }
 
     const pushSelection = () => {
       const active = canvas.getActiveObject();
@@ -51,6 +59,9 @@ export default function FabricCanvas({
     canvas.on("editing:exited", (e) => {
       if (e.target && e.target === canvas.getActiveObject()) pushStyleSync();
     });
+    canvas.on("object:added", () => onCanvasChange?.(canvas.toJSON()));
+    canvas.on("object:modified", () => onCanvasChange?.(canvas.toJSON()));
+    canvas.on("object:removed", () => onCanvasChange?.(canvas.toJSON()));
 
     return () => {
       canvas.dispose();

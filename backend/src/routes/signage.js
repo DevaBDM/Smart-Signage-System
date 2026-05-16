@@ -109,6 +109,9 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
   ) {
     return res.status(403).json({ error: "Cannot publish this post" });
   }
+  if (req.user.role !== "admin" && post.created_by !== req.user.id) {
+    return res.status(403).json({ error: "Creators can only publish their own posts." });
+  }
   const image = post.images[0];
   if (!image) return res.status(400).json({ error: "Post has no image" });
 

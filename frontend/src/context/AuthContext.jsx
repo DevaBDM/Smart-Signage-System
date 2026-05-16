@@ -6,7 +6,7 @@ import useAuthStore from "../store/useAuthStore";
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
-  const { setAuth, clearAuth, role } = useAuthStore();
+  const { setAuth, clearAuth } = useAuthStore();
   const navigate = useNavigate();
 
   const login = async (username, password) => {

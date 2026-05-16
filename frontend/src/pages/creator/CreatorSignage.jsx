@@ -4,6 +4,7 @@ import api from "../../api/axios";
 import useAuthStore from "../../store/useAuthStore";
 import * as S from "../../styles";
 import { assetOrigin } from "../../config/apiBase";
+import usePersistentState from "../../hooks/usePersistentState";
 
 const BASE = assetOrigin();
 
@@ -22,7 +23,7 @@ export default function CreatorSignage() {
   const [devices, setDevices] = useState([]);
   const [assets, setAssets] = useState([]);
   const [assetLoading, setAssetLoading] = useState(false);
-  const [form, setForm] = useState({
+  const [form, setForm] = usePersistentState("creator.signage.form", {
     post_id: "",
     device_id: "",
     duration_seconds: 10,

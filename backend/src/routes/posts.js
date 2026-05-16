@@ -50,6 +50,9 @@ const slugify = (text) =>
 const canManage = (user, department_id) =>
   user.role === "admin" || user.department_id === Number(department_id);
 
+const canManagePost = (user, post) =>
+  user.role === "admin" || post.created_by === user.id;
+
 const parseDeviceIds = (value) => {
   if (!value) return [];
   if (Array.isArray(value)) return value.map(Number).filter(Boolean);
@@ -161,7 +164,7 @@ const deployToSignage = async (req, post, targetDevices, signageData) => {
 
 // GET all posts
 router.get("/", async (req, res) => {
-  const { feed, department_id, status } = req.query;
+  const { feed, department_id, status, channel, device_id, creator_id } = req.query;
   const where = {};
   if (toBool(feed)) {
     where.allowed_on_feed = true;
@@ -169,8 +172,23 @@ router.get("/", async (req, res) => {
   } else if (status) {
     where.status = status;
   }
+  if (channel === "feed") {
+    where.allowed_on_feed = true;
+    where.allowed_on_signage = false;
+  } else if (channel === "signage") {
+    where.allowed_on_signage = true;
+    where.allowed_on_feed = false;
+  }
   if (department_id && !isNaN(Number(department_id))) {
     where.department_id = Number(department_id);
+  }
+  if (creator_id && !isNaN(Number(creator_id))) {
+    where.created_by = Number(creator_id);
+  }
+  if (device_id && !isNaN(Number(device_id))) {
+    where.signage_deployments = {
+      some: { device_id: Number(device_id) },
+    };
   }
   const posts = await prisma.post.findMany({
     where,
@@ -282,6 +300,7 @@ router.put("/:id", auth(["admin", "creator"]), uploadImages, async (req, res) =>
   const post = await prisma.post.findUnique({ where: { id: postId }, include: { images: true, author: true } });
   if (!post) return res.status(404).json({ error: "Not found" });
   if (!canManage(req.user, post.department_id)) return res.status(403).json({ error: "Forbidden" });
+  if (!canManagePost(req.user, post)) return res.status(403).json({ error: "Creators can only edit their own posts." });
 
   const { title, description_markdown, publish_to_feed, publish_to_signage, allowed_on_feed, allowed_on_signage, status, device_ids } = req.body;
   const selectedIds = parseDeviceIds(device_ids);
@@ -458,6 +477,7 @@ router.put("/:id", auth(["admin", "creator"]), uploadImages, async (req, res) =>
 router.delete("/:id", auth(["admin", "creator"]), async (req, res) => {
   const post = await prisma.post.findUnique({ where: { id: Number(req.params.id) }, include: { images: true } });
   if (!post || !canManage(req.user, post.department_id)) return res.status(403).json({ error: "Forbidden" });
+  if (!canManagePost(req.user, post)) return res.status(403).json({ error: "Creators can only delete their own posts." });
 
   const emitToDeviceAck = req.app.get("emitToDeviceAck");
   const signageDeps = await prisma.signageDeployment.findMany({ where: { post_id: post.id } });
@@ -489,7 +509,13 @@ router.post("/bulk-action", auth(["admin", "creator"]), async (req, res) => {
   const selectedDeviceIds = parseDeviceIds(device_ids);
   
   const posts = await prisma.post.findMany({
-    where: { id: { in: ids.map(Number) }, ...(req.user.role !== "admin" && { department_id: req.user.department_id }) },
+    where: {
+      id: { in: ids.map(Number) },
+      ...(req.user.role !== "admin" && {
+        department_id: req.user.department_id,
+        created_by: req.user.id,
+      }),
+    },
     include: { images: true, signage_metadata: true, signage_deployments: true, author: true }
   });
 

@@ -4,6 +4,7 @@ import { toPng } from "html-to-image";
 import FabricCanvas from "./FabricCanvas";
 import MarkdownCanvas from "./MarkdownCanvas";
 import "katex/dist/katex.min.css";
+import usePersistentState from "../hooks/usePersistentState";
 
 const fabric = fabricModule.fabric;
 
@@ -224,8 +225,8 @@ function applyTemplate(canvas, preset, templateId, bgHex) {
 }
 
 export default function Designer({ onExport }) {
-  const [mode, setMode] = useState("visual");
-  const [presetId, setPresetId] = useState("fhd");
+  const [mode, setMode] = usePersistentState("designer.mode", "visual");
+  const [presetId, setPresetId] = usePersistentState("designer.presetId", "fhd");
   const preset = useMemo(
     () => TV_PRESETS.find((p) => p.id === presetId) || TV_PRESETS[0],
     [presetId],
@@ -238,23 +239,25 @@ export default function Designer({ onExport }) {
   const markdownRef = useRef();
   const [selected, setSelected] = useState(null);
 
-  const [showSafeZone, setShowSafeZone] = useState(true);
-  const [exportJpeg, setExportJpeg] = useState(false);
+  const [showSafeZone, setShowSafeZone] = usePersistentState("designer.showSafeZone", true);
+  const [exportJpeg, setExportJpeg] = usePersistentState("designer.exportJpeg", false);
 
-  const [text, setText] = useState("Your headline");
-  const [fontSize, setFontSize] = useState(64);
-  const [fontFamily, setFont] = useState("Impact");
-  const [textColor, setTextColor] = useState("#ffffff");
-  const [bold, setBold] = useState(false);
-  const [italic, setItalic] = useState(false);
-  const [bgColor, setBgColor] = useState("#0f172a");
-  const [strokeColor, setStrokeColor] = useState("#ffffff");
+  const [text, setText] = usePersistentState("designer.text", "Your headline");
+  const [fontSize, setFontSize] = usePersistentState("designer.fontSize", 64);
+  const [fontFamily, setFont] = usePersistentState("designer.fontFamily", "Impact");
+  const [textColor, setTextColor] = usePersistentState("designer.textColor", "#ffffff");
+  const [bold, setBold] = usePersistentState("designer.bold", false);
+  const [italic, setItalic] = usePersistentState("designer.italic", false);
+  const [bgColor, setBgColor] = usePersistentState("designer.bgColor", "#0f172a");
+  const [strokeColor, setStrokeColor] = usePersistentState("designer.strokeColor", "#ffffff");
+  const [canvasJson, setCanvasJson] = usePersistentState("designer.canvasJson", null);
 
-  const [markdown, setMarkdown] = useState(
+  const [markdown, setMarkdown] = usePersistentState(
+    "designer.markdown",
     "# On-screen announcement\n\nShort sentences read best from across the room.",
   );
-  const [mdFontSize, setMdFontSize] = useState(36);
-  const [mdFontFamily, setMdFontFamily] = useState("Segoe UI");
+  const [mdFontSize, setMdFontSize] = usePersistentState("designer.mdFontSize", 36);
+  const [mdFontFamily, setMdFontFamily] = usePersistentState("designer.mdFontFamily", "Segoe UI");
 
   const syncToolbarFromObject = useCallback((o) => {
     if (!o) return;
@@ -290,7 +293,7 @@ export default function Designer({ onExport }) {
     }
     if (typeof o.fill === "string") setTextColor(o.fill);
     if (typeof o.stroke === "string") setStrokeColor(o.stroke);
-  }, []);
+  }, [setBold, setFont, setFontSize, setItalic, setStrokeColor, setText, setTextColor]);
 
   const setCanvasSelection = useCallback(
     (o) => {
@@ -408,6 +411,7 @@ export default function Designer({ onExport }) {
     ) {
       return;
     }
+    setCanvasJson(null);
     setPresetId(id);
   };
 
@@ -508,6 +512,7 @@ export default function Designer({ onExport }) {
     if (!c) return;
     c.clear();
     c.setBackgroundColor(bgColor, () => c.renderAll());
+    setCanvasJson(c.toJSON());
   };
 
   const runTemplate = (templateId) => {
@@ -864,6 +869,8 @@ export default function Designer({ onExport }) {
                   bgColor={bgColor}
                   setSelected={setCanvasSelection}
                   onActiveStyleSync={handleCanvasStyleSync}
+                  initialJson={canvasJson}
+                  onCanvasChange={setCanvasJson}
                 />
                 {showSafeZone && <SafeZoneOverlay width={preset.w} height={preset.h} />}
               </div>
