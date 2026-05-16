@@ -16,6 +16,66 @@ router.use((req, _, next) => {
 const canUseDevice = (user, device) =>
   user.role === "admin" || device.department_id === user.department_id;
 
+const getActor = async (user) => {
+  if (user.role === "admin") return user;
+  const dbUser = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: {
+      id: true,
+      username: true,
+      role: true,
+      department_id: true,
+      can_manage_other_posts: true,
+      creator_priority: true,
+      control_lock_minutes: true,
+    },
+  });
+  return dbUser || user;
+};
+
+const canManagePost = (user, post) =>
+  user.role === "admin" ||
+  post.created_by === user.id ||
+  (user.can_manage_other_posts && user.department_id === post.department_id);
+
+const assertControlAllowed = (user, device) => {
+  if (user.role === "admin") return { ok: true };
+  const now = new Date();
+  const lockUntil = device.control_lock_until;
+  const lockActive = lockUntil && lockUntil > now;
+  const lockOwner = device.control_lock_user_id;
+  const lockPriority = device.control_lock_priority || 0;
+  const userPriority = user.creator_priority || 1;
+
+  if (
+    lockActive &&
+    lockOwner &&
+    lockOwner !== user.id &&
+    lockPriority > userPriority
+  ) {
+    return {
+      ok: false,
+      error:
+        `Display is locked by a higher-priority creator until ${lockUntil.toLocaleString()}.`,
+    };
+  }
+  return { ok: true };
+};
+
+const applyControlLock = async (user, deviceId, action) => {
+  if (user.role === "admin") return;
+  const minutes = Math.max(1, Number(user.control_lock_minutes) || 120);
+  await prisma.device.update({
+    where: { id: deviceId },
+    data: {
+      control_lock_user_id: user.id,
+      control_lock_priority: user.creator_priority || 1,
+      control_lock_until: new Date(Date.now() + minutes * 60_000),
+      control_lock_action: action,
+    },
+  });
+};
+
 const getAllowedDevice = async (req, res) => {
   const device = await prisma.device.findUnique({
     where: { id: Number(req.params.device_id || req.body.device_id) },
@@ -88,6 +148,7 @@ router.get("/device/:device_id/deployments", async (req, res) => {
 
 // Publish a post to signage → notifies Pi via Socket.IO
 router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
+  const actor = await getActor(req.user);
   const {
     post_id,
     device_id,
@@ -104,13 +165,13 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
   });
   if (!post) return res.status(404).json({ error: "Post not found" });
   if (
-    req.user.role !== "admin" &&
-    post.department_id !== req.user.department_id
+    actor.role !== "admin" &&
+    post.department_id !== actor.department_id
   ) {
     return res.status(403).json({ error: "Cannot publish this post" });
   }
-  if (req.user.role !== "admin" && post.created_by !== req.user.id) {
-    return res.status(403).json({ error: "Creators can only publish their own posts." });
+  if (!canManagePost(actor, post)) {
+    return res.status(403).json({ error: "You need admin approval to publish another creator's post." });
   }
   const image = post.images[0];
   if (!image) return res.status(400).json({ error: "Post has no image" });
@@ -120,11 +181,13 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
   });
   if (!device) return res.status(404).json({ error: "Device not found" });
   if (
-    req.user.role !== "admin" &&
-    device.department_id !== req.user.department_id
+    actor.role !== "admin" &&
+    device.department_id !== actor.department_id
   ) {
     return res.status(403).json({ error: "Cannot publish to this device" });
   }
+  const lock = assertControlAllowed(actor, device);
+  if (!lock.ok) return res.status(423).json({ error: lock.error });
   if (!device.is_approved) {
     return res.status(403).json({
       error: "This device is pending approval and cannot be controlled yet.",
@@ -156,7 +219,7 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
     },
   });
 
-  const isAutoApprove = post.author?.auto_approve || req.user.role === 'admin';
+  const isAutoApprove = post.author?.auto_approve || actor.role === 'admin';
 
   // Mark signage intent / permission (post status stays draft until creator publishes)
   await prisma.post.update({
@@ -269,6 +332,8 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
     }
   }
 
+  await applyControlLock(actor, device.id, "publish");
+
   res.json({
     ok: true,
     pi_notified: !!(isAutoApprove && result.ok),
@@ -283,6 +348,9 @@ router.get(
   async (req, res) => {
     const device = await getAllowedDevice(req, res);
     if (!device) return;
+    const actor = await getActor(req.user);
+    const lock = assertControlAllowed(actor, device);
+    if (!lock.ok) return res.status(423).json({ error: lock.error });
     const trackedAssets = await prisma.signageAsset.findMany({
       where: { device_id: device.id },
       include: { post: { select: { title: true, id: true } } },
@@ -337,6 +405,7 @@ router.post(
       action: command,
       asset_id,
     });
+    if (result.ok) await applyControlLock(actor, device.id, command);
     res.status(result.ok ? 200 : 503).json(result);
   },
 );
@@ -348,6 +417,9 @@ router.patch(
   async (req, res) => {
     const device = await getAllowedDevice(req, res);
     if (!device) return;
+    const actor = await getActor(req.user);
+    const lock = assertControlAllowed(actor, device);
+    if (!lock.ok) return res.status(423).json({ error: lock.error });
 
     const enabled = req.body.is_enabled !== false;
     const result = await sendSignageCommand(device.id, {
@@ -355,6 +427,7 @@ router.patch(
       asset_id: req.params.asset_id,
     });
     if (result.ok) {
+      await applyControlLock(actor, device.id, enabled ? "show_asset" : "hide_asset");
       await prisma.signageAsset
         .update({
           where: {
@@ -378,6 +451,9 @@ router.delete(
   async (req, res) => {
     const device = await getAllowedDevice(req, res);
     if (!device) return;
+    const actor = await getActor(req.user);
+    const lock = assertControlAllowed(actor, device);
+    if (!lock.ok) return res.status(423).json({ error: lock.error });
 
     const assetId = String(req.params.asset_id);
 
@@ -400,6 +476,7 @@ router.delete(
     // 3. If socket command worked (or even if it failed but we want to clean DB),
     // we MUST remove the deployment/asset records so the Pi doesn't re-sync them.
     if (result.ok || req.query.force === "true") {
+      if (result.ok) await applyControlLock(actor, device.id, "delete_asset");
       // Remove from SignageAsset (tracking)
       await prisma.signageAsset
         .delete({

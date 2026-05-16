@@ -24,7 +24,11 @@ model User {
   role          Role        @default(creator)
   department_id Int?
   auto_approve  Boolean     @default(true)
+  can_manage_other_posts Boolean @default(false)
+  creator_priority Int     @default(1)
+  control_lock_minutes Int @default(120)
   created_at    DateTime    @default(now())
+  device_locks  Device[]    @relation("DeviceControlLock")
   posts         Post[]
   department    Department? @relation(fields: [department_id], references: [id])
 }
@@ -86,7 +90,12 @@ model Device {
   pending_name     String?
   pending_ip       String?
   pending_location String?
+  control_lock_user_id Int?
+  control_lock_priority Int?
+  control_lock_until DateTime?
+  control_lock_action String?
   created_at       DateTime            @default(now())
+  control_lock_user User?              @relation("DeviceControlLock", fields: [control_lock_user_id], references: [id], onDelete: SetNull)
   department       Department?         @relation(fields: [department_id], references: [id])
   error_logs       ErrorLog[]
   sensor_logs      SensorLog[]

@@ -11,6 +11,9 @@ router.get("/", auth(["admin"]), async (req, res) => {
       role: true,
       department_id: true,
       auto_approve: true,
+      can_manage_other_posts: true,
+      creator_priority: true,
+      control_lock_minutes: true,
       department: true,
       created_at: true,
     },
@@ -20,7 +23,14 @@ router.get("/", auth(["admin"]), async (req, res) => {
 });
 
 router.put("/:id", auth(["admin"]), async (req, res) => {
-  const { role, department_id, auto_approve } = req.body;
+  const {
+    role,
+    department_id,
+    auto_approve,
+    can_manage_other_posts,
+    creator_priority,
+    control_lock_minutes,
+  } = req.body;
   try {
     const user = await prisma.user.update({
       where: { id: Number(req.params.id) },
@@ -28,6 +38,18 @@ router.put("/:id", auth(["admin"]), async (req, res) => {
         ...(role && { role }),
         department_id: department_id !== undefined ? (department_id ? Number(department_id) : null) : undefined,
         auto_approve: auto_approve !== undefined ? Boolean(auto_approve) : undefined,
+        can_manage_other_posts:
+          can_manage_other_posts !== undefined
+            ? Boolean(can_manage_other_posts)
+            : undefined,
+        creator_priority:
+          creator_priority !== undefined
+            ? Math.max(1, Number(creator_priority) || 1)
+            : undefined,
+        control_lock_minutes:
+          control_lock_minutes !== undefined
+            ? Math.max(1, Number(control_lock_minutes) || 120)
+            : undefined,
       },
       select: {
         id: true,
@@ -35,6 +57,9 @@ router.put("/:id", auth(["admin"]), async (req, res) => {
         role: true,
         department_id: true,
         auto_approve: true,
+        can_manage_other_posts: true,
+        creator_priority: true,
+        control_lock_minutes: true,
         department: true,
         created_at: true,
       },

@@ -12,6 +12,9 @@ export default function AdminUsers() {
     role: "creator",
     department_id: "",
     auto_approve: true,
+    can_manage_other_posts: false,
+    creator_priority: 1,
+    control_lock_minutes: 120,
   });
   const [error, setError] = useState("");
 
@@ -43,6 +46,9 @@ export default function AdminUsers() {
         role: "creator",
         department_id: "",
         auto_approve: true,
+        can_manage_other_posts: false,
+        creator_priority: 1,
+        control_lock_minutes: 120,
       });
       load();
     } catch (e) {
@@ -143,6 +149,45 @@ export default function AdminUsers() {
                 />
                 Auto-approve Posts
               </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={form.can_manage_other_posts}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      can_manage_other_posts: e.target.checked,
+                    })
+                  }
+                />
+                Can edit/delete other creators' posts
+              </label>
+              <label style={S.label}>Creator Priority</label>
+              <input
+                style={S.input}
+                type="number"
+                min={1}
+                value={form.creator_priority}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    creator_priority: Number(e.target.value),
+                  })
+                }
+              />
+              <label style={S.label}>Dead-block Minutes</label>
+              <input
+                style={S.input}
+                type="number"
+                min={1}
+                value={form.control_lock_minutes}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    control_lock_minutes: Number(e.target.value),
+                  })
+                }
+              />
               <button
                 type="submit"
                 style={{
@@ -164,7 +209,17 @@ export default function AdminUsers() {
             <table style={S.table}>
               <thead>
                 <tr>
-                  {["Username", "Role", "Department", "Auto-Approve", "Created", ""].map(
+                  {[
+                    "Username",
+                    "Role",
+                    "Department",
+                    "Auto-Approve",
+                    "Other Posts",
+                    "Priority",
+                    "Block",
+                    "Created",
+                    "",
+                  ].map(
                     (h) => (
                       <th key={h} style={S.th}>
                         {h}
@@ -219,6 +274,43 @@ export default function AdminUsers() {
                         type="checkbox" 
                         checked={u.auto_approve} 
                         onChange={(e) => updateUser(u.id, { auto_approve: e.target.checked })}
+                      />
+                    </td>
+                    <td style={S.td}>
+                      <input
+                        type="checkbox"
+                        checked={!!u.can_manage_other_posts}
+                        onChange={(e) =>
+                          updateUser(u.id, {
+                            can_manage_other_posts: e.target.checked,
+                          })
+                        }
+                      />
+                    </td>
+                    <td style={S.td}>
+                      <input
+                        style={{ ...S.input, width: 86 }}
+                        type="number"
+                        min={1}
+                        value={u.creator_priority ?? 1}
+                        onChange={(e) =>
+                          updateUser(u.id, {
+                            creator_priority: Number(e.target.value),
+                          })
+                        }
+                      />
+                    </td>
+                    <td style={S.td}>
+                      <input
+                        style={{ ...S.input, width: 96 }}
+                        type="number"
+                        min={1}
+                        value={u.control_lock_minutes ?? 120}
+                        onChange={(e) =>
+                          updateUser(u.id, {
+                            control_lock_minutes: Number(e.target.value),
+                          })
+                        }
                       />
                     </td>
                     <td style={S.td}>

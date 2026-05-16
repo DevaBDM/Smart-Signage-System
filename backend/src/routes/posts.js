@@ -51,7 +51,62 @@ const canManage = (user, department_id) =>
   user.role === "admin" || user.department_id === Number(department_id);
 
 const canManagePost = (user, post) =>
-  user.role === "admin" || post.created_by === user.id;
+  user.role === "admin" ||
+  post.created_by === user.id ||
+  (user.can_manage_other_posts && user.department_id === post.department_id);
+
+const getActor = async (user) => {
+  if (user.role === "admin") return user;
+  const dbUser = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: {
+      id: true,
+      role: true,
+      department_id: true,
+      can_manage_other_posts: true,
+      creator_priority: true,
+      control_lock_minutes: true,
+    },
+  });
+  return dbUser || user;
+};
+
+const assertControlAllowed = (user, device) => {
+  if (user.role === "admin") return { ok: true };
+  const lockUntil = device.control_lock_until;
+  const lockActive = lockUntil && lockUntil > new Date();
+  const lockOwner = device.control_lock_user_id;
+  const lockPriority = device.control_lock_priority || 0;
+  const userPriority = user.creator_priority || 1;
+
+  if (
+    lockActive &&
+    lockOwner &&
+    lockOwner !== user.id &&
+    lockPriority > userPriority
+  ) {
+    return {
+      ok: false,
+      error:
+        `Display is locked by a higher-priority creator until ${lockUntil.toLocaleString()}.`,
+    };
+  }
+  return { ok: true };
+};
+
+const applyControlLock = async (user, deviceId, action) => {
+  if (user.role === "admin") return;
+  const minutes = Math.max(1, Number(user.control_lock_minutes) || 120);
+  await prisma.device.update({
+    where: { id: deviceId },
+    data: {
+      control_lock_user_id: user.id,
+      control_lock_priority: user.creator_priority || 1,
+      control_lock_until: new Date(Date.now() + minutes * 60_000),
+      control_lock_action: action,
+    },
+  });
+};
 
 const parseDeviceIds = (value) => {
   if (!value) return [];
@@ -79,11 +134,21 @@ const deployToSignage = async (req, post, targetDevices, signageData) => {
   const emitToDeviceAck = req.app.get("emitToDeviceAck");
   const image = post.images?.[0];
   if (!image) return [];
+  const actor = await getActor(req.user);
 
   const sched = deploymentSchedule(signageData);
   const results = [];
   for (const device of targetDevices) {
     try {
+      const lock = assertControlAllowed(actor, device);
+      if (!lock.ok) {
+        results.push({
+          device_id: device.id,
+          device_name: device.device_name,
+          result: { ok: false, error: lock.error },
+        });
+        continue;
+      }
       await prisma.signageDeployment.upsert({
         where: { device_id_post_id: { device_id: device.id, post_id: post.id } },
         update: { ...sched, status: "pending", last_error: null },
@@ -145,6 +210,7 @@ const deployToSignage = async (req, post, targetDevices, signageData) => {
             where: { device_id_post_id: { device_id: device.id, post_id: post.id } },
             data: { status: "synced", last_error: null },
           });
+          await applyControlLock(actor, device.id, "publish_asset");
         } else {
           await prisma.signageDeployment.update({
             where: { device_id_post_id: { device_id: device.id, post_id: post.id } },
@@ -154,6 +220,7 @@ const deployToSignage = async (req, post, targetDevices, signageData) => {
         results.push({ device_id: device.id, device_name: device.device_name, result });
       } else {
         results.push({ device_id: device.id, device_name: device.device_name, result: { ok: true, note: "Deployment saved but not live." } });
+        await applyControlLock(actor, device.id, "save_deployment");
       }
     } catch (e) {
       console.error(`Signage deploy failed for device ${device.id}:`, e);
@@ -296,15 +363,16 @@ router.post("/", auth(["admin", "creator"]), uploadImages, async (req, res) => {
 
 // PUT update post
 router.put("/:id", auth(["admin", "creator"]), uploadImages, async (req, res) => {
+  const actor = await getActor(req.user);
   const postId = Number(req.params.id);
   const post = await prisma.post.findUnique({ where: { id: postId }, include: { images: true, author: true } });
   if (!post) return res.status(404).json({ error: "Not found" });
-  if (!canManage(req.user, post.department_id)) return res.status(403).json({ error: "Forbidden" });
-  if (!canManagePost(req.user, post)) return res.status(403).json({ error: "Creators can only edit their own posts." });
+  if (!canManage(actor, post.department_id)) return res.status(403).json({ error: "Forbidden" });
+  if (!canManagePost(actor, post)) return res.status(403).json({ error: "You need admin approval to edit another creator's post." });
 
   const { title, description_markdown, publish_to_feed, publish_to_signage, allowed_on_feed, allowed_on_signage, status, device_ids } = req.body;
   const selectedIds = parseDeviceIds(device_ids);
-  const isAutoApprove = post.author?.auto_approve || req.user.role === 'admin';
+  const isAutoApprove = post.author?.auto_approve || actor.role === 'admin';
 
   try {
     if (req.files && req.files.length > 0) {
@@ -348,7 +416,7 @@ router.put("/:id", auth(["admin", "creator"]), uploadImages, async (req, res) =>
     };
 
     // If Admin is editing, update PERMISSION directly
-    if (req.user.role === 'admin') {
+    if (actor.role === 'admin') {
       if (allowed_on_feed !== undefined) {
         data.allowed_on_feed = toBool(allowed_on_feed);
         if (!data.allowed_on_feed) data.requested_feed = false;
@@ -417,7 +485,7 @@ router.put("/:id", auth(["admin", "creator"]), uploadImages, async (req, res) =>
     // Creators: reconcile targets from form. If "signage ready" is off, always clear every target display / deployment.
     // Admins: only when signage is allowed; use explicit device_ids if sent, else keep existing deployments.
     let syncIds = null;
-    if (req.user.role !== "admin") {
+    if (actor.role !== "admin") {
       syncIds = !updated.requested_signage ? [] : selectedIds;
     } else if (updated.allowed_on_signage) {
       syncIds =
@@ -452,9 +520,9 @@ router.put("/:id", auth(["admin", "creator"]), uploadImages, async (req, res) =>
         await deployToSignage(req, updated, targetDevices, req.body);
         const removedIds = allDeps.map((d) => d.device_id).filter((id) => !syncIds.includes(id));
         await removeDeployments(removedIds);
-      } else if (req.user.role !== "admin" && allDeps.length > 0) {
+      } else if (actor.role !== "admin" && allDeps.length > 0) {
         await removeDeployments(allDeps.map((d) => d.device_id));
-      } else if (req.user.role === "admin" && updated.allowed_on_signage && allDeps.length > 0) {
+      } else if (actor.role === "admin" && updated.allowed_on_signage && allDeps.length > 0) {
         const targetDevices = await prisma.device.findMany({
           where: { id: { in: allDeps.map((d) => d.device_id) } },
         });
@@ -475,9 +543,10 @@ router.put("/:id", auth(["admin", "creator"]), uploadImages, async (req, res) =>
 
 // DELETE post
 router.delete("/:id", auth(["admin", "creator"]), async (req, res) => {
+  const actor = await getActor(req.user);
   const post = await prisma.post.findUnique({ where: { id: Number(req.params.id) }, include: { images: true } });
-  if (!post || !canManage(req.user, post.department_id)) return res.status(403).json({ error: "Forbidden" });
-  if (!canManagePost(req.user, post)) return res.status(403).json({ error: "Creators can only delete their own posts." });
+  if (!post || !canManage(actor, post.department_id)) return res.status(403).json({ error: "Forbidden" });
+  if (!canManagePost(actor, post)) return res.status(403).json({ error: "You need admin approval to delete another creator's post." });
 
   const emitToDeviceAck = req.app.get("emitToDeviceAck");
   const signageDeps = await prisma.signageDeployment.findMany({ where: { post_id: post.id } });
@@ -504,6 +573,7 @@ router.delete("/:id", auth(["admin", "creator"]), async (req, res) => {
 
 // BULK ACTIONS
 router.post("/bulk-action", auth(["admin", "creator"]), async (req, res) => {
+  const actor = await getActor(req.user);
   const { ids, action, device_ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "No IDs provided" });
   const selectedDeviceIds = parseDeviceIds(device_ids);
@@ -511,9 +581,9 @@ router.post("/bulk-action", auth(["admin", "creator"]), async (req, res) => {
   const posts = await prisma.post.findMany({
     where: {
       id: { in: ids.map(Number) },
-      ...(req.user.role !== "admin" && {
-        department_id: req.user.department_id,
-        created_by: req.user.id,
+      ...(actor.role !== "admin" && {
+        department_id: actor.department_id,
+        ...(actor.can_manage_other_posts ? {} : { created_by: actor.id }),
       }),
     },
     include: { images: true, signage_metadata: true, signage_deployments: true, author: true }
@@ -569,7 +639,7 @@ router.post("/bulk-action", auth(["admin", "creator"]), async (req, res) => {
     }
     else if (action === "add-feed") {
       for (const p of posts) {
-         const isAutoApprove = p.author?.auto_approve || req.user.role === 'admin';
+         const isAutoApprove = p.author?.auto_approve || actor.role === 'admin';
          await prisma.post.update({
            where: { id: p.id },
            data: { 
@@ -595,7 +665,7 @@ router.post("/bulk-action", auth(["admin", "creator"]), async (req, res) => {
         if (!chk.ok) return res.status(400).json({ error: chk.error });
       }
       for (const p of posts) {
-        const isAutoApprove = p.author?.auto_approve || req.user.role === 'admin';
+        const isAutoApprove = p.author?.auto_approve || actor.role === 'admin';
         const updated = await prisma.post.update({
           where: { id: p.id },
           data: { 

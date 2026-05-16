@@ -11,7 +11,16 @@ const requireAdminAfterFirstUser = async (req, res, next) => {
 };
 
 router.post("/register", requireAdminAfterFirstUser, async (req, res) => {
-  const { username, password, role, department_id, auto_approve } = req.body;
+  const {
+    username,
+    password,
+    role,
+    department_id,
+    auto_approve,
+    can_manage_other_posts,
+    creator_priority,
+    control_lock_minutes,
+  } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: "Username and password are required" });
   }
@@ -29,9 +38,20 @@ router.post("/register", requireAdminAfterFirstUser, async (req, res) => {
         role,
         department_id: department_id ? Number(department_id) : null,
         auto_approve: auto_approve !== undefined ? Boolean(auto_approve) : true,
+        can_manage_other_posts: Boolean(can_manage_other_posts),
+        creator_priority: Number(creator_priority) || 1,
+        control_lock_minutes: Number(control_lock_minutes) || 120,
       },
     });
-    res.json({ id: user.id, username: user.username, role: user.role, auto_approve: user.auto_approve });
+    res.json({
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      auto_approve: user.auto_approve,
+      can_manage_other_posts: user.can_manage_other_posts,
+      creator_priority: user.creator_priority,
+      control_lock_minutes: user.control_lock_minutes,
+    });
   } catch (e) {
     if (e.code === "P2002") {
       return res.status(400).json({ error: "Username already exists." });
@@ -47,11 +67,25 @@ router.post("/login", async (req, res) => {
     return res.status(401).json({ error: "Invalid credentials" });
   }
   const token = jwt.sign(
-    { id: user.id, role: user.role, department_id: user.department_id },
+    {
+      id: user.id,
+      role: user.role,
+      department_id: user.department_id,
+      can_manage_other_posts: user.can_manage_other_posts,
+      creator_priority: user.creator_priority,
+      control_lock_minutes: user.control_lock_minutes,
+    },
     process.env.JWT_SECRET,
     { expiresIn: "8h" },
   );
-  res.json({ token, role: user.role, department_id: user.department_id });
+  res.json({
+    token,
+    role: user.role,
+    department_id: user.department_id,
+    can_manage_other_posts: user.can_manage_other_posts,
+    creator_priority: user.creator_priority,
+    control_lock_minutes: user.control_lock_minutes,
+  });
 });
 
 module.exports = router;

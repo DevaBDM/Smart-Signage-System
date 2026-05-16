@@ -9,7 +9,11 @@ import usePersistentState from "../../hooks/usePersistentState";
 const BASE = assetOrigin();
 
 export default function CreatorPosts() {
-  const { id: userId, department_id } = useAuthStore();
+  const {
+    id: userId,
+    department_id,
+    can_manage_other_posts,
+  } = useAuthStore();
   const [posts, setPosts] = useState([]);
   const [devices, setDevices] = useState([]);
   const [editingId, setEditingId] = useState(null);
@@ -67,7 +71,10 @@ export default function CreatorPosts() {
     ).values(),
   );
 
-  const manageablePosts = posts.filter((p) => p.author?.id === userId);
+  const canManagePost = (post) =>
+    post.author?.id === userId || Boolean(can_manage_other_posts);
+
+  const manageablePosts = posts.filter(canManagePost);
 
   const resetForm = () => {
     setEditingId(null);
@@ -78,7 +85,7 @@ export default function CreatorPosts() {
   };
 
   const startEdit = (post) => {
-    if (post.author?.id !== userId) return;
+    if (!canManagePost(post)) return;
     setEditingId(post.id);
     setForm({
       title: post.title,
@@ -171,7 +178,7 @@ export default function CreatorPosts() {
 
   const toggleSelect = (id) => {
     const post = posts.find((p) => p.id === id);
-    if (post?.author?.id !== userId) return;
+    if (!canManagePost(post)) return;
     setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
@@ -538,6 +545,7 @@ export default function CreatorPosts() {
               {posts.map((p) => (
                 (() => {
                   const isOwnPost = p.author?.id === userId;
+                  const canManage = canManagePost(p);
                   return (
                 <div
                   key={p.id}
@@ -554,9 +562,9 @@ export default function CreatorPosts() {
                     type="checkbox"
                     checked={selectedIds.includes(p.id)}
                     onChange={() => toggleSelect(p.id)}
-                    disabled={!isOwnPost}
+                    disabled={!canManage}
                     style={{ width: 16, height: 16 }}
-                    title={isOwnPost ? "Select post" : "Only the creator can manage this post"}
+                    title={canManage ? "Select post" : "Admin approval is required to manage this post"}
                   />
                   {p.images?.[0] ? (
                     <img
@@ -592,7 +600,7 @@ export default function CreatorPosts() {
                     {p.author && (
                       <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>
                         By: {p.author.username}
-                        {!isOwnPost ? " · view only" : ""}
+                        {!canManage ? " · view only" : !isOwnPost ? " · approved to manage" : ""}
                       </div>
                     )}
                     <div
@@ -611,29 +619,29 @@ export default function CreatorPosts() {
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button
                       onClick={() => startEdit(p)}
-                      disabled={!isOwnPost}
+                      disabled={!canManage}
                       style={{
                         ...S.btn,
-                        opacity: isOwnPost ? 1 : 0.45,
+                        opacity: canManage ? 1 : 0.45,
                         padding: "5px 10px",
                         flexShrink: 0,
                       }}
-                      title={isOwnPost ? "Edit post" : "Only the creator can edit this post"}
+                      title={canManage ? "Edit post" : "Admin approval is required to edit this post"}
                     >
                       ✏️
                     </button>
                     <button
                       onClick={() => del(p.id)}
-                      disabled={!isOwnPost}
+                      disabled={!canManage}
                       style={{
                         ...S.btn,
                         background: "#fee2e2",
                         color: "#b91c1c",
-                        opacity: isOwnPost ? 1 : 0.45,
+                        opacity: canManage ? 1 : 0.45,
                         padding: "5px 10px",
                         flexShrink: 0,
                       }}
-                      title={isOwnPost ? "Delete post" : "Only the creator can delete this post"}
+                      title={canManage ? "Delete post" : "Admin approval is required to delete this post"}
                     >
                       🗑
                     </button>
