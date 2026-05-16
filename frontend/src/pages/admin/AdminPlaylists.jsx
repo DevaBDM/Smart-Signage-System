@@ -5,8 +5,8 @@ import * as S from "../../styles";
 
 export default function AdminPlaylists() {
   const [playlists, setPlaylists] = useState([]);
-  const [depts, setDepts] = useState([]);
-  const [form, setForm] = useState({ name: "", department_id: "" });
+  const [groups, setGroups] = useState([]);
+  const [form, setForm] = useState({ name: "", group_id: "" });
 
   const load = () => {
     api
@@ -14,8 +14,8 @@ export default function AdminPlaylists() {
       .then((r) => setPlaylists(r.data))
       .catch(() => {});
     api
-      .get("/departments")
-      .then((r) => setDepts(r.data))
+      .get("/groups")
+      .then((r) => setGroups(r.data))
       .catch(() => {});
   };
   useEffect(() => {
@@ -25,7 +25,7 @@ export default function AdminPlaylists() {
   const create = async (e) => {
     e.preventDefault();
     await api.post("/playlists", form);
-    setForm({ name: "", department_id: "" });
+    setForm({ name: "", group_id: "" });
     load();
   };
 
@@ -40,7 +40,7 @@ export default function AdminPlaylists() {
       <AdminSidebar />
       <main style={S.main}>
         <h1 style={S.heading}>Playlists</h1>
-        <p style={S.sub}>Manage signage playlists per department.</p>
+        <p style={S.sub}>Manage signage playlists per Group.</p>
         <div
           style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 24 }}
         >
@@ -57,17 +57,17 @@ export default function AdminPlaylists() {
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 required
               />
-              <label style={S.label}>Department</label>
+              <label style={S.label}>Group</label>
               <select
                 style={S.input}
-                value={form.department_id}
+                value={form.group_id}
                 onChange={(e) =>
-                  setForm({ ...form, department_id: e.target.value })
+                  setForm({ ...form, group_id: e.target.value })
                 }
                 required
               >
                 <option value="">— Select —</option>
-                {depts.map((d) => (
+                {groups.map((d) => (
                   <option key={d.id} value={d.id}>
                     {d.name}
                   </option>
@@ -105,7 +105,7 @@ export default function AdminPlaylists() {
                     <span
                       style={{ fontSize: 12, color: "#9ca3af", marginLeft: 8 }}
                     >
-                      {pl.department?.name}
+                      {pl.group?.name}
                     </span>
                     <span
                       style={{ fontSize: 12, color: "#6b7280", marginLeft: 8 }}

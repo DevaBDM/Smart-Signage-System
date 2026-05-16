@@ -11,7 +11,7 @@ const BASE = assetOrigin();
 export default function CreatorPosts() {
   const {
     id: userId,
-    department_id,
+    group_id,
     can_manage_other_posts,
   } = useAuthStore();
   const [posts, setPosts] = useState([]);
@@ -45,7 +45,7 @@ export default function CreatorPosts() {
 
   const load = () => {
     const params = new URLSearchParams();
-    if (department_id) params.set("department_id", department_id);
+    if (group_id) params.set("group_id", group_id);
     if (filters.channel !== "all") params.set("channel", filters.channel);
     if (filters.device_id) params.set("device_id", filters.device_id);
     if (filters.creator_id) params.set("creator_id", filters.creator_id);
@@ -61,9 +61,9 @@ export default function CreatorPosts() {
       .get("/devices")
       .then((r) => setDevices(r.data))
       .catch(() => {});
-  }, [department_id, filters.channel, filters.creator_id, filters.device_id]);
+  }, [group_id, filters.channel, filters.creator_id, filters.device_id]);
 
-  const sameDepartmentCreators = Array.from(
+  const sameGroupCreators = Array.from(
     new Map(
       posts
         .filter((p) => p.author)
@@ -110,7 +110,7 @@ export default function CreatorPosts() {
     setMsg("");
     try {
       const fd = new FormData();
-      Object.entries({ ...form, department_id }).forEach(([k, v]) =>
+      Object.entries({ ...form, group_id }).forEach(([k, v]) =>
         fd.append(k, Array.isArray(v) ? JSON.stringify(v) : v),
       );
       files.forEach((f) => fd.append("images", f));
@@ -207,7 +207,7 @@ export default function CreatorPosts() {
       <CreatorSidebar />
       <main style={S.main}>
         <h1 style={S.heading}>My Posts</h1>
-        <p style={S.sub}>Create and manage your department's content.</p>
+        <p style={S.sub}>Create and manage your group's content.</p>
 
         <div
           style={{ display: "grid", gridTemplateColumns: "420px 1fr", gap: 24 }}
@@ -495,8 +495,8 @@ export default function CreatorPosts() {
                     setFilters({ ...filters, creator_id: e.target.value })
                   }
                 >
-                  <option value="">All same-department creators</option>
-                  {sameDepartmentCreators.map((creator) => (
+                  <option value="">All same-group creators</option>
+                  {sameGroupCreators.map((creator) => (
                     <option key={creator.id} value={creator.id}>
                       {creator.username}
                     </option>

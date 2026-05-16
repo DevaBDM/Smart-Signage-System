@@ -5,11 +5,15 @@ import useAuthStore from "./store/useAuthStore";
 // Auth
 import Login from "./pages/Login";
 
+// Public
+import Feed from "./pages/public/Feed";
+import PostDetail from "./pages/public/PostDetail";
+
 // Admin
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminDevices from "./pages/admin/AdminDevices";
 import AdminUsers from "./pages/admin/AdminUsers";
-import AdminDepartments from "./pages/admin/AdminDepartments";
+import AdminGroups from "./pages/admin/AdminGroups";
 import AdminPosts from "./pages/admin/AdminPosts";
 import AdminPlaylists from "./pages/admin/AdminPlaylists";
 import AdminLogs from "./pages/admin/AdminLogs";
@@ -20,14 +24,10 @@ import CreatorPosts from "./pages/creator/CreatorPosts";
 import CreatorEditor from "./pages/creator/CreatorEditor";
 import CreatorSignage from "./pages/creator/CreatorSignage";
 
-// Public
-import Feed from "./pages/public/Feed";
-import PostDetail from "./pages/public/PostDetail";
-
 function RequireRole({ role, children }) {
   const { token, role: userRole } = useAuthStore();
   if (!token) return <Navigate to="/login" replace />;
-  if (userRole !== role) return <Navigate to="/login" replace />;
+  if (role && userRole !== role) return <Navigate to="/feed" replace />;
   return children;
 }
 
@@ -36,21 +36,18 @@ function AppRoutes() {
 
   return (
     <Routes>
-      {/* Public */}
-      <Route path="/feed" element={<Feed />} />
-      <Route path="/post/:id" element={<PostDetail />} />
-
-      {/* Auth */}
       <Route
         path="/login"
         element={
           token ? (
-            <Navigate to={role === "admin" ? "/admin" : "/creator"} />
+            <Navigate to={role === "admin" ? "/admin" : "/creator"} replace />
           ) : (
             <Login />
           )
         }
       />
+      <Route path="/feed" element={<Feed />} />
+      <Route path="/post/:id" element={<PostDetail />} />
 
       {/* Admin */}
       <Route
@@ -78,10 +75,10 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/admin/departments"
+        path="/admin/groups"
         element={
           <RequireRole role="admin">
-            <AdminDepartments />
+            <AdminGroups />
           </RequireRole>
         }
       />
@@ -144,8 +141,8 @@ function AppRoutes() {
         }
       />
 
-      {/* Fallback */}
-      <Route path="*" element={<Navigate to="/feed" />} />
+      <Route path="/" element={<Navigate to="/feed" replace />} />
+      <Route path="*" element={<Navigate to="/feed" replace />} />
     </Routes>
   );
 }

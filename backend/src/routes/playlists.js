@@ -4,22 +4,41 @@ const auth = require("../middleware/auth");
 
 router.get("/", auth(["admin", "creator"]), async (req, res) => {
   const where =
-    req.user.role === "admin" ? {} : { department_id: req.user.department_id };
-  res.json(
-    await prisma.playlist.findMany({
-      where,
-      include: { items: { include: { post: true } } },
-    }),
-  );
+    req.user.role === "admin" ? {} : { group_id: req.user.group_id };
+  const playlists = await prisma.playlist.findMany({
+    where,
+    include: {
+      items: { include: { post: { include: { images: true } } }, orderBy: { order_index: "asc" } },
+      group: true,
+    },
+    orderBy: { created_at: "desc" },
+  });
+  res.json(playlists);
 });
 
 router.post("/", auth(["admin", "creator"]), async (req, res) => {
-  const { name, department_id } = req.body;
-  const dept =
-    req.user.role === "admin" ? Number(department_id) : req.user.department_id;
-  res.json(
-    await prisma.playlist.create({ data: { name, department_id: dept } }),
-  );
+  const { name, group_id, postIds } = req.body;
+  const g_id =
+    req.user.role === "admin" ? Number(group_id) : req.user.group_id;
+
+  try {
+    const playlist = await prisma.playlist.create({
+      data: {
+        name,
+        group_id: g_id,
+        items: {
+          create: (postIds || []).map((id, index) => ({
+            post_id: Number(id),
+            order_index: index,
+          })),
+        },
+      },
+      include: { items: true },
+    });
+    res.json(playlist);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
 });
 
 router.put("/:id", auth(["admin", "creator"]), async (req, res) => {
@@ -30,15 +49,15 @@ router.put("/:id", auth(["admin", "creator"]), async (req, res) => {
   if (!existing) return res.status(404).json({ error: "Not found" });
   if (
     req.user.role !== "admin" &&
-    existing.department_id !== req.user.department_id
+    existing.group_id !== req.user.group_id
   ) {
-    return res.status(403).json({ error: "Cannot manage this playlist" });
+    return res.status(403).json({ error: "Forbidden" });
   }
 
   if (items?.length) {
     const postIds = items.map((i) => Number(i.post_id));
     const allowedPosts = await prisma.post.count({
-      where: { id: { in: postIds }, department_id: existing.department_id },
+      where: { id: { in: postIds }, group_id: existing.group_id },
     });
     if (allowedPosts !== new Set(postIds).size) {
       return res.status(403).json({ error: "Playlist contains invalid posts" });
@@ -65,7 +84,18 @@ router.put("/:id", auth(["admin", "creator"]), async (req, res) => {
   res.json(playlist);
 });
 
-router.delete("/:id", auth(["admin"]), async (req, res) => {
+router.delete("/:id", auth(["admin", "creator"]), async (req, res) => {
+  const existing = await prisma.playlist.findUnique({
+    where: { id: Number(req.params.id) },
+  });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  if (
+    req.user.role !== "admin" &&
+    existing.group_id !== req.user.group_id
+  ) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+
   await prisma.playlist.delete({ where: { id: Number(req.params.id) } });
   res.json({ ok: true });
 });

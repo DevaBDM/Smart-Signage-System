@@ -47,13 +47,13 @@ const slugify = (text) =>
   "-" +
   Date.now();
 
-const canManage = (user, department_id) =>
-  user.role === "admin" || user.department_id === Number(department_id);
+const canManage = (user, group_id) =>
+  user.role === "admin" || user.group_id === Number(group_id);
 
 const canManagePost = (user, post) =>
   user.role === "admin" ||
   post.created_by === user.id ||
-  (user.can_manage_other_posts && user.department_id === post.department_id);
+  (user.can_manage_other_posts && user.group_id === post.group_id);
 
 const getActor = async (user) => {
   if (user.role === "admin") return user;
@@ -62,7 +62,7 @@ const getActor = async (user) => {
     select: {
       id: true,
       role: true,
-      department_id: true,
+      group_id: true,
       can_manage_other_posts: true,
       creator_priority: true,
       control_lock_minutes: true,
@@ -149,6 +149,7 @@ const deployToSignage = async (req, post, targetDevices, signageData) => {
         });
         continue;
       }
+
       await prisma.signageDeployment.upsert({
         where: { device_id_post_id: { device_id: device.id, post_id: post.id } },
         update: { ...sched, status: "pending", last_error: null },
@@ -231,7 +232,7 @@ const deployToSignage = async (req, post, targetDevices, signageData) => {
 
 // GET all posts
 router.get("/", async (req, res) => {
-  const { feed, department_id, status, channel, device_id, creator_id } = req.query;
+  const { feed, group_id, status, channel, device_id, creator_id } = req.query;
   const where = {};
   if (toBool(feed)) {
     where.allowed_on_feed = true;
@@ -239,6 +240,7 @@ router.get("/", async (req, res) => {
   } else if (status) {
     where.status = status;
   }
+
   if (channel === "feed") {
     where.allowed_on_feed = true;
     where.allowed_on_signage = false;
@@ -246,8 +248,9 @@ router.get("/", async (req, res) => {
     where.allowed_on_signage = true;
     where.allowed_on_feed = false;
   }
-  if (department_id && !isNaN(Number(department_id))) {
-    where.department_id = Number(department_id);
+
+  if (group_id && !isNaN(Number(group_id))) {
+    where.group_id = Number(group_id);
   }
   if (creator_id && !isNaN(Number(creator_id))) {
     where.created_by = Number(creator_id);
@@ -264,7 +267,7 @@ router.get("/", async (req, res) => {
       images: { orderBy: { order_index: "asc" } },
       signage_metadata: true,
       signage_deployments: true,
-      department: true,
+      group: true,
     },
     orderBy: { created_at: "desc" },
   });
@@ -286,7 +289,7 @@ router.post("/", auth(["admin", "creator"]), uploadImages, async (req, res) => {
   const {
     title,
     description_markdown,
-    department_id,
+    group_id,
     allowed_on_feed,
     allowed_on_signage,
     publish_to_feed,
@@ -294,9 +297,9 @@ router.post("/", auth(["admin", "creator"]), uploadImages, async (req, res) => {
     status,
     device_ids,
   } = req.body;
-  const targetDepartmentId =
-    req.user.role === "admin" ? Number(department_id) : req.user.department_id;
-  if (!targetDepartmentId || !canManage(req.user, targetDepartmentId)) return res.status(403).json({ error: "Invalid department access" });
+  const targetGroupId =
+    req.user.role === "admin" ? Number(group_id) : req.user.group_id;
+  if (!targetGroupId || !canManage(req.user, targetGroupId)) return res.status(403).json({ error: "Invalid group access" });
 
   const selectedDeviceIds = parseDeviceIds(device_ids);
   
@@ -318,7 +321,7 @@ router.post("/", auth(["admin", "creator"]), uploadImages, async (req, res) => {
         title,
         slug: slugify(title),
         description_markdown: description_markdown || null,
-        department_id: Number(targetDepartmentId),
+        group_id: Number(targetGroupId),
         created_by: req.user.id,
         // Permissions
         allowed_on_feed: isAutoApprove ? requestedFeed : false,
@@ -367,7 +370,7 @@ router.put("/:id", auth(["admin", "creator"]), uploadImages, async (req, res) =>
   const postId = Number(req.params.id);
   const post = await prisma.post.findUnique({ where: { id: postId }, include: { images: true, author: true } });
   if (!post) return res.status(404).json({ error: "Not found" });
-  if (!canManage(actor, post.department_id)) return res.status(403).json({ error: "Forbidden" });
+  if (!canManage(actor, post.group_id)) return res.status(403).json({ error: "Forbidden" });
   if (!canManagePost(actor, post)) return res.status(403).json({ error: "You need admin approval to edit another creator's post." });
 
   const { title, description_markdown, publish_to_feed, publish_to_signage, allowed_on_feed, allowed_on_signage, status, device_ids } = req.body;
@@ -545,7 +548,7 @@ router.put("/:id", auth(["admin", "creator"]), uploadImages, async (req, res) =>
 router.delete("/:id", auth(["admin", "creator"]), async (req, res) => {
   const actor = await getActor(req.user);
   const post = await prisma.post.findUnique({ where: { id: Number(req.params.id) }, include: { images: true } });
-  if (!post || !canManage(actor, post.department_id)) return res.status(403).json({ error: "Forbidden" });
+  if (!post || !canManage(actor, post.group_id)) return res.status(403).json({ error: "Forbidden" });
   if (!canManagePost(actor, post)) return res.status(403).json({ error: "You need admin approval to delete another creator's post." });
 
   const emitToDeviceAck = req.app.get("emitToDeviceAck");
@@ -579,23 +582,22 @@ router.post("/bulk-action", auth(["admin", "creator"]), async (req, res) => {
   const selectedDeviceIds = parseDeviceIds(device_ids);
   
   const posts = await prisma.post.findMany({
-    where: {
-      id: { in: ids.map(Number) },
-      ...(actor.role !== "admin" && {
-        department_id: actor.department_id,
-        ...(actor.can_manage_other_posts ? {} : { created_by: actor.id }),
-      }),
-    },
+    where: { id: { in: ids.map(Number) }, ...(actor.role !== "admin" && { group_id: actor.group_id }) },
     include: { images: true, signage_metadata: true, signage_deployments: true, author: true }
   });
 
-  const validIds = posts.map(p => p.id);
+  const validIds = posts.filter(p => canManagePost(actor, p)).map(p => p.id);
+  if (validIds.length === 0 && posts.length > 0) {
+      return res.status(403).json({ error: "You do not have permission to perform this action on these posts." });
+  }
+
   const emitToDeviceAck = req.app.get("emitToDeviceAck");
 
   try {
     if (action === "delete") {
       await prisma.playlistItem.deleteMany({ where: { post_id: { in: validIds } } });
       for (const p of posts) {
+        if (!validIds.includes(p.id)) continue;
         if (emitToDeviceAck) {
           const bulkDelOnline = await getOnlineDeviceIdSet(
             prisma,
@@ -639,6 +641,7 @@ router.post("/bulk-action", auth(["admin", "creator"]), async (req, res) => {
     }
     else if (action === "add-feed") {
       for (const p of posts) {
+         if (!validIds.includes(p.id)) continue;
          const isAutoApprove = p.author?.auto_approve || actor.role === 'admin';
          await prisma.post.update({
            where: { id: p.id },
@@ -653,6 +656,7 @@ router.post("/bulk-action", auth(["admin", "creator"]), async (req, res) => {
       const publishFeed = action === "add-both";
       const unionTargets = new Set();
       for (const p of posts) {
+        if (!validIds.includes(p.id)) continue;
         const t =
           selectedDeviceIds.length > 0
             ? selectedDeviceIds
@@ -665,6 +669,7 @@ router.post("/bulk-action", auth(["admin", "creator"]), async (req, res) => {
         if (!chk.ok) return res.status(400).json({ error: chk.error });
       }
       for (const p of posts) {
+        if (!validIds.includes(p.id)) continue;
         const isAutoApprove = p.author?.auto_approve || actor.role === 'admin';
         const updated = await prisma.post.update({
           where: { id: p.id },

@@ -80,7 +80,7 @@ export default function AdminDashboard() {
           <table style={S.table}>
             <thead>
               <tr>
-                {["Device", "IP", "Department", "Status", "Last Seen"].map(
+                {["Device", "IP", "Group", "Status", "Last Seen"].map(
                   (h) => (
                     <th key={h} style={S.th}>
                       {h}
@@ -94,7 +94,7 @@ export default function AdminDashboard() {
                 <tr key={d.id}>
                   <td style={S.td}>{d.device_name}</td>
                   <td style={S.td}>{d.ip_address}</td>
-                  <td style={S.td}>{d.department?.name ?? "—"}</td>
+                  <td style={S.td}>{d.group?.name ?? "—"}</td>
                   <td style={S.td}>
                     <span
                       style={{

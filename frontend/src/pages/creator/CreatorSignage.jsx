@@ -18,7 +18,7 @@ const messageStyle = (msg) => ({
 });
 
 export default function CreatorSignage() {
-  const { department_id } = useAuthStore();
+  const { group_id } = useAuthStore();
   const [posts, setPosts] = useState([]);
   const [devices, setDevices] = useState([]);
   const [assets, setAssets] = useState([]);
@@ -37,14 +37,14 @@ export default function CreatorSignage() {
 
   useEffect(() => {
     api
-      .get(`/posts?department_id=${department_id}`)
+      .get(`/posts?group_id=${group_id}`)
       .then((r) => setPosts(r.data.filter((p) => p.images?.length > 0)))
       .catch(() => {});
     api
       .get("/devices")
       .then((r) => setDevices(r.data))
       .catch(() => {});
-  }, [department_id]);
+  }, [group_id]);
 
   const loadAssets = async (deviceId = selectedDeviceId) => {
     if (!deviceId) {

@@ -14,7 +14,10 @@ router.use((req, _, next) => {
 });
 
 const canUseDevice = (user, device) =>
-  user.role === "admin" || device.department_id === user.department_id;
+  user.role === "admin" || 
+  device.all_groups || 
+  device.group_id === user.group_id || 
+  device.groups?.some(m => m.group_id === user.group_id);
 
 const getActor = async (user) => {
   if (user.role === "admin") return user;
@@ -22,9 +25,8 @@ const getActor = async (user) => {
     where: { id: user.id },
     select: {
       id: true,
-      username: true,
       role: true,
-      department_id: true,
+      group_id: true,
       can_manage_other_posts: true,
       creator_priority: true,
       control_lock_minutes: true,
@@ -33,16 +35,10 @@ const getActor = async (user) => {
   return dbUser || user;
 };
 
-const canManagePost = (user, post) =>
-  user.role === "admin" ||
-  post.created_by === user.id ||
-  (user.can_manage_other_posts && user.department_id === post.department_id);
-
 const assertControlAllowed = (user, device) => {
   if (user.role === "admin") return { ok: true };
-  const now = new Date();
   const lockUntil = device.control_lock_until;
-  const lockActive = lockUntil && lockUntil > now;
+  const lockActive = lockUntil && lockUntil > new Date();
   const lockOwner = device.control_lock_user_id;
   const lockPriority = device.control_lock_priority || 0;
   const userPriority = user.creator_priority || 1;
@@ -77,8 +73,10 @@ const applyControlLock = async (user, deviceId, action) => {
 };
 
 const getAllowedDevice = async (req, res) => {
+  const actor = await getActor(req.user);
   const device = await prisma.device.findUnique({
     where: { id: Number(req.params.device_id || req.body.device_id) },
+    include: { groups: true }
   });
   if (!device) {
     res.status(404).json({ error: "Device not found" });
@@ -88,7 +86,7 @@ const getAllowedDevice = async (req, res) => {
     res.status(403).json({ error: "This device is pending approval and cannot be controlled yet." });
     return null;
   }
-  if (!canUseDevice(req.user, device)) {
+  if (!canUseDevice(actor, device)) {
     res.status(403).json({ error: "Cannot control this device" });
     return null;
   }
@@ -100,6 +98,11 @@ const getAllowedDevice = async (req, res) => {
   }
   return device;
 };
+
+const canManagePost = (user, post) =>
+  user.role === "admin" ||
+  post.created_by === user.id ||
+  (user.can_manage_other_posts && user.group_id === post.group_id);
 
 const sendSignageCommand = async (device_id, payload) => {
   if (!_emitToDeviceAck) {
@@ -164,30 +167,27 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
     include: { images: true, signage_metadata: true, author: true },
   });
   if (!post) return res.status(404).json({ error: "Post not found" });
-  if (
-    actor.role !== "admin" &&
-    post.department_id !== actor.department_id
-  ) {
+  
+  if (!canManagePost(actor, post)) {
     return res.status(403).json({ error: "Cannot publish this post" });
   }
-  if (!canManagePost(actor, post)) {
-    return res.status(403).json({ error: "You need admin approval to publish another creator's post." });
-  }
+
   const image = post.images[0];
   if (!image) return res.status(400).json({ error: "Post has no image" });
 
   const device = await prisma.device.findUnique({
     where: { id: Number(device_id) },
+    include: { groups: true }
   });
   if (!device) return res.status(404).json({ error: "Device not found" });
-  if (
-    actor.role !== "admin" &&
-    device.department_id !== actor.department_id
-  ) {
+  
+  if (!canUseDevice(actor, device)) {
     return res.status(403).json({ error: "Cannot publish to this device" });
   }
+
   const lock = assertControlAllowed(actor, device);
-  if (!lock.ok) return res.status(423).json({ error: lock.error });
+  if (!lock.ok) return res.status(403).json({ error: lock.error });
+
   if (!device.is_approved) {
     return res.status(403).json({
       error: "This device is pending approval and cannot be controlled yet.",
@@ -294,6 +294,7 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
         },
         data: { status: "synced", last_error: null },
       });
+      await applyControlLock(actor, Number(device_id), "publish_asset");
     } else {
       result = await sendSignageCommand(device_id, {
         action: "publish_asset",
@@ -303,7 +304,7 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
       if (result.ok) {
         if (result.asset) {
           await upsertSignageAsset(prisma, {
-            device_id,
+            device_id: device.id,
             post_id: post.id,
             image_url: image?.image_path,
             asset: result.asset,
@@ -318,6 +319,7 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
           },
           data: { status: "synced", last_error: null },
         });
+        await applyControlLock(actor, Number(device_id), "publish_asset");
       } else {
         await prisma.signageDeployment.update({
           where: {
@@ -331,8 +333,6 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
       }
     }
   }
-
-  await applyControlLock(actor, device.id, "publish");
 
   res.json({
     ok: true,
@@ -348,9 +348,6 @@ router.get(
   async (req, res) => {
     const device = await getAllowedDevice(req, res);
     if (!device) return;
-    const actor = await getActor(req.user);
-    const lock = assertControlAllowed(actor, device);
-    if (!lock.ok) return res.status(423).json({ error: lock.error });
     const trackedAssets = await prisma.signageAsset.findMany({
       where: { device_id: device.id },
       include: { post: { select: { title: true, id: true } } },
@@ -390,6 +387,7 @@ router.post(
   "/devices/:device_id/control",
   auth(["admin", "creator"]),
   async (req, res) => {
+    const actor = await getActor(req.user);
     const device = await getAllowedDevice(req, res);
     if (!device) return;
 
@@ -401,11 +399,16 @@ router.post(
       return res.status(400).json({ error: "asset_id is required" });
     }
 
+    const lock = assertControlAllowed(actor, device);
+    if (!lock.ok) return res.status(403).json({ error: lock.error });
+
     const result = await sendSignageCommand(device.id, {
       action: command,
       asset_id,
     });
-    if (result.ok) await applyControlLock(actor, device.id, command);
+    if (result.ok) {
+        await applyControlLock(actor, device.id, command);
+    }
     res.status(result.ok ? 200 : 503).json(result);
   },
 );
@@ -415,11 +418,12 @@ router.patch(
   "/devices/:device_id/assets/:asset_id",
   auth(["admin", "creator"]),
   async (req, res) => {
+    const actor = await getActor(req.user);
     const device = await getAllowedDevice(req, res);
     if (!device) return;
-    const actor = await getActor(req.user);
+
     const lock = assertControlAllowed(actor, device);
-    if (!lock.ok) return res.status(423).json({ error: lock.error });
+    if (!lock.ok) return res.status(403).json({ error: lock.error });
 
     const enabled = req.body.is_enabled !== false;
     const result = await sendSignageCommand(device.id, {
@@ -427,7 +431,6 @@ router.patch(
       asset_id: req.params.asset_id,
     });
     if (result.ok) {
-      await applyControlLock(actor, device.id, enabled ? "show_asset" : "hide_asset");
       await prisma.signageAsset
         .update({
           where: {
@@ -439,6 +442,7 @@ router.patch(
           data: { is_enabled: enabled, last_synced_at: new Date() },
         })
         .catch(() => {});
+      await applyControlLock(actor, device.id, enabled ? "show_asset" : "hide_asset");
     }
     res.status(result.ok ? 200 : 503).json(result);
   },
@@ -449,11 +453,12 @@ router.delete(
   "/devices/:device_id/assets/:asset_id",
   auth(["admin", "creator"]),
   async (req, res) => {
+    const actor = await getActor(req.user);
     const device = await getAllowedDevice(req, res);
     if (!device) return;
-    const actor = await getActor(req.user);
+
     const lock = assertControlAllowed(actor, device);
-    if (!lock.ok) return res.status(423).json({ error: lock.error });
+    if (!lock.ok) return res.status(403).json({ error: lock.error });
 
     const assetId = String(req.params.asset_id);
 
@@ -476,7 +481,6 @@ router.delete(
     // 3. If socket command worked (or even if it failed but we want to clean DB),
     // we MUST remove the deployment/asset records so the Pi doesn't re-sync them.
     if (result.ok || req.query.force === "true") {
-      if (result.ok) await applyControlLock(actor, device.id, "delete_asset");
       // Remove from SignageAsset (tracking)
       await prisma.signageAsset
         .delete({
@@ -514,6 +518,7 @@ router.delete(
           });
         }
       }
+      await applyControlLock(actor, device.id, "delete_asset");
     }
     res.status(result.ok ? 200 : 503).json(result);
   },

@@ -7,30 +7,44 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Department {
-  id         Int        @id @default(autoincrement())
-  name       String     @unique
-  created_at DateTime   @default(now())
-  devices    Device[]
-  playlists  Playlist[]
-  posts      Post[]
-  users      User[]
+model Group {
+  id                 Int           @id @default(autoincrement())
+  name               String        @unique
+  description        String?
+  created_at         DateTime      @default(now())
+  devices            Device[]      @relation("GroupDevices")
+  device_memberships DeviceGroup[]
+  playlists          Playlist[]
+  posts              Post[]
+  users              User[]
+}
+
+model DeviceGroup {
+  id         Int      @id @default(autoincrement())
+  device_id  Int
+  group_id   Int
+  created_at DateTime @default(now())
+  device     Device   @relation(fields: [device_id], references: [id], onDelete: Cascade)
+  group      Group    @relation(fields: [group_id], references: [id], onDelete: Cascade)
+
+  @@unique([device_id, group_id])
+  @@index([group_id])
 }
 
 model User {
-  id            Int         @id @default(autoincrement())
-  username      String      @unique
-  password_hash String
-  role          Role        @default(creator)
-  department_id Int?
-  auto_approve  Boolean     @default(true)
-  can_manage_other_posts Boolean @default(false)
-  creator_priority Int     @default(1)
-  control_lock_minutes Int @default(120)
-  created_at    DateTime    @default(now())
-  device_locks  Device[]    @relation("DeviceControlLock")
-  posts         Post[]
-  department    Department? @relation(fields: [department_id], references: [id])
+  id                     Int      @id @default(autoincrement())
+  username               String   @unique
+  password_hash          String
+  role                   Role     @default(creator)
+  group_id               Int?
+  auto_approve           Boolean  @default(true)
+  can_manage_other_posts Boolean  @default(false)
+  creator_priority       Int      @default(1)
+  control_lock_minutes   Int      @default(120)
+  created_at             DateTime @default(now())
+  device_locks           Device[] @relation("DeviceControlLock")
+  posts                  Post[]
+  group                  Group?   @relation(fields: [group_id], references: [id])
 }
 
 model Post {
@@ -38,7 +52,7 @@ model Post {
   title                String
   slug                 String              @unique
   description_markdown String?
-  department_id        Int
+  group_id             Int
   created_by           Int
   allowed_on_feed      Boolean             @default(false)
   allowed_on_signage   Boolean             @default(false)
@@ -49,7 +63,7 @@ model Post {
   updated_at           DateTime            @updatedAt
   playlist_items       PlaylistItem[]
   author               User                @relation(fields: [created_by], references: [id])
-  department           Department          @relation(fields: [department_id], references: [id])
+  group                Group               @relation(fields: [group_id], references: [id])
   images               PostImage[]
   signage_assets       SignageAsset[]
   signage_deployments  SignageDeployment[]
@@ -78,29 +92,31 @@ model SignageMetadata {
 }
 
 model Device {
-  id               Int                 @id @default(autoincrement())
-  device_name      String
-  department_id    Int?
-  ip_address       String
-  location         String?
-  status           String              @default("offline")
-  last_seen        DateTime?
-  current_playlist Int?
-  is_approved      Boolean             @default(false)
-  pending_name     String?
-  pending_ip       String?
-  pending_location String?
-  control_lock_user_id Int?
+  id                    Int                 @id @default(autoincrement())
+  device_name           String
+  group_id              Int?
+  ip_address            String
+  location              String?
+  all_groups            Boolean             @default(false)
+  status                String              @default("offline")
+  last_seen             DateTime?
+  current_playlist      Int?
+  is_approved           Boolean             @default(false)
+  pending_name          String?
+  pending_ip            String?
+  pending_location      String?
+  control_lock_user_id  Int?
   control_lock_priority Int?
-  control_lock_until DateTime?
-  control_lock_action String?
-  created_at       DateTime            @default(now())
-  control_lock_user User?              @relation("DeviceControlLock", fields: [control_lock_user_id], references: [id], onDelete: SetNull)
-  department       Department?         @relation(fields: [department_id], references: [id])
-  error_logs       ErrorLog[]
-  sensor_logs      SensorLog[]
-  signage_assets   SignageAsset[]
-  deployments      SignageDeployment[]
+  control_lock_until    DateTime?
+  control_lock_action   String?
+  created_at            DateTime            @default(now())
+  control_lock_user     User?               @relation("DeviceControlLock", fields: [control_lock_user_id], references: [id], onDelete: SetNull)
+  group                 Group?              @relation("GroupDevices", fields: [group_id], references: [id])
+  groups                DeviceGroup[]
+  error_logs            ErrorLog[]
+  sensor_logs           SensorLog[]
+  signage_assets        SignageAsset[]
+  deployments           SignageDeployment[]
 }
 
 model SignageDeployment {
@@ -169,12 +185,12 @@ model ErrorLog {
 }
 
 model Playlist {
-  id            Int            @id @default(autoincrement())
-  name          String
-  department_id Int
-  created_at    DateTime       @default(now())
-  department    Department     @relation(fields: [department_id], references: [id])
-  items         PlaylistItem[]
+  id         Int            @id @default(autoincrement())
+  name       String
+  group_id   Int
+  created_at DateTime       @default(now())
+  group      Group          @relation(fields: [group_id], references: [id])
+  items      PlaylistItem[]
 }
 
 model PlaylistItem {

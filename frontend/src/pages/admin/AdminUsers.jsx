@@ -5,12 +5,12 @@ import * as S from "../../styles";
 
 export default function AdminUsers() {
   const [users, setUsers] = useState([]);
-  const [depts, setDepts] = useState([]);
+  const [groups, setGroups] = useState([]);
   const [form, setForm] = useState({
     username: "",
     password: "",
     role: "creator",
-    department_id: "",
+    group_id: "",
     auto_approve: true,
     can_manage_other_posts: false,
     creator_priority: 1,
@@ -24,8 +24,8 @@ export default function AdminUsers() {
       .then((r) => setUsers(r.data))
       .catch(() => {});
     api
-      .get("/departments")
-      .then((r) => setDepts(r.data))
+      .get("/groups")
+      .then((r) => setGroups(r.data))
       .catch(() => {});
   };
   useEffect(() => {
@@ -38,13 +38,13 @@ export default function AdminUsers() {
     try {
       await api.post("/auth/register", {
         ...form,
-        department_id: form.department_id || null,
+        group_id: form.group_id || null,
       });
       setForm({
         username: "",
         password: "",
         role: "creator",
-        department_id: "",
+        group_id: "",
         auto_approve: true,
         can_manage_other_posts: false,
         creator_priority: 1,
@@ -126,16 +126,16 @@ export default function AdminUsers() {
                 <option value="creator">Creator</option>
                 <option value="admin">Admin</option>
               </select>
-              <label style={S.label}>Department</label>
+              <label style={S.label}>Group</label>
               <select
                 style={S.input}
-                value={form.department_id}
+                value={form.group_id}
                 onChange={(e) =>
-                  setForm({ ...form, department_id: e.target.value })
+                  setForm({ ...form, group_id: e.target.value })
                 }
               >
                 <option value="">— None —</option>
-                {depts.map((d) => (
+                {groups.map((d) => (
                   <option key={d.id} value={d.id}>
                     {d.name}
                   </option>
@@ -212,7 +212,7 @@ export default function AdminUsers() {
                   {[
                     "Username",
                     "Role",
-                    "Department",
+                    "Group",
                     "Auto-Approve",
                     "Other Posts",
                     "Priority",
@@ -241,7 +241,7 @@ export default function AdminUsers() {
                         onChange={(e) =>
                           updateUser(u.id, {
                             role: e.target.value,
-                            department_id: u.department_id,
+                            group_id: u.group_id,
                           })
                         }
                       >
@@ -253,16 +253,16 @@ export default function AdminUsers() {
                     <td style={S.td}>
                       <select
                         style={{ ...S.input, minWidth: 150 }}
-                        value={u.department_id ?? ""}
+                        value={u.group_id ?? ""}
                         onChange={(e) =>
                           updateUser(u.id, {
                             role: u.role,
-                            department_id: e.target.value || null,
+                            group_id: e.target.value || null,
                           })
                         }
                       >
                         <option value="">— None —</option>
-                        {depts.map((d) => (
+                        {groups.map((d) => (
                           <option key={d.id} value={d.id}>
                             {d.name}
                           </option>

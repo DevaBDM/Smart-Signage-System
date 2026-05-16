@@ -5,15 +5,15 @@ import useAuthStore from "../../store/useAuthStore";
 import * as S from "../../styles";
 
 export default function CreatorDashboard() {
-  const { department_id } = useAuthStore();
+  const { group_id } = useAuthStore();
   const [posts, setPosts] = useState([]);
 
   useEffect(() => {
     api
-      .get(`/posts?department_id=${department_id}`)
+      .get(`/posts?group_id=${group_id}`)
       .then((r) => setPosts(r.data))
       .catch(() => {});
-  }, []);
+  }, [group_id]);
 
   const feed = posts.filter((p) => p.publish_to_feed);
   const signage = posts.filter((p) => p.publish_to_signage);
@@ -23,7 +23,7 @@ export default function CreatorDashboard() {
       <CreatorSidebar />
       <main style={S.main}>
         <h1 style={S.heading}>Creator Dashboard</h1>
-        <p style={S.sub}>Your department content overview.</p>
+        <p style={S.sub}>Your group content overview.</p>
         <div
           style={{
             display: "grid",

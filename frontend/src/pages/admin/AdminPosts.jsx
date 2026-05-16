@@ -37,7 +37,7 @@ export default function AdminPosts() {
       <AdminSidebar />
       <main style={S.main}>
         <h1 style={S.heading}>All Posts</h1>
-        <p style={S.sub}>View and manage posts across all departments.</p>
+        <p style={S.sub}>View and manage posts across all Groups.</p>
         <div style={S.card}>
           <table style={S.table}>
             <thead>
@@ -45,7 +45,7 @@ export default function AdminPosts() {
                 {[
                   "Image",
                   "Title",
-                  "Department",
+                  "Group",
                   "Feed",
                   "Signage",
                   "Status",
@@ -106,7 +106,7 @@ export default function AdminPosts() {
                       </div>
                     )}
                   </td>
-                  <td style={S.td}>{p.department?.name ?? "—"}</td>
+                  <td style={S.td}>{p.group?.name ?? "—"}</td>
                   <td 
                     style={{ 
                       ...S.td, 

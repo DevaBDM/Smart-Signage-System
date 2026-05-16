@@ -5,7 +5,7 @@ const links = [
   { to: "/admin", label: "🏠 Dashboard" },
   { to: "/admin/devices", label: "📟 Devices" },
   { to: "/admin/users", label: "👥 Users" },
-  { to: "/admin/departments", label: "🏫 Departments" },
+  { to: "/admin/groups", label: "🏫 Groups" },
   { to: "/admin/posts", label: "🖼 Posts" },
   { to: "/admin/playlists", label: "📋 Playlists" },
   { to: "/admin/logs", label: "📊 Logs" },

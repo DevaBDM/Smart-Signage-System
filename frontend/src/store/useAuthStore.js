@@ -21,13 +21,13 @@ const useAuthStore = create((set) => ({
   creator_priority: storedUser.creator_priority || 1,
   control_lock_minutes: storedUser.control_lock_minutes || 120,
   role: localStorage.getItem("role") || null,
-  department_id: localStorage.getItem("department_id") || null,
+  group_id: localStorage.getItem("group_id") || null,
 
-  setAuth: (token, role, department_id) => {
+  setAuth: (token, role, group_id) => {
     const user = decodeToken(token);
     localStorage.setItem("token", token);
     localStorage.setItem("role", role);
-    localStorage.setItem("department_id", department_id ?? "");
+    localStorage.setItem("group_id", group_id ?? "");
     set({
       token,
       id: user.id || null,
@@ -35,14 +35,14 @@ const useAuthStore = create((set) => ({
       creator_priority: user.creator_priority || 1,
       control_lock_minutes: user.control_lock_minutes || 120,
       role,
-      department_id,
+      group_id,
     });
   },
 
   clearAuth: () => {
     localStorage.removeItem("token");
     localStorage.removeItem("role");
-    localStorage.removeItem("department_id");
+    localStorage.removeItem("group_id");
     set({
       token: null,
       id: null,
@@ -50,7 +50,7 @@ const useAuthStore = create((set) => ({
       creator_priority: 1,
       control_lock_minutes: 120,
       role: null,
-      department_id: null,
+      group_id: null,
     });
   },
 }));

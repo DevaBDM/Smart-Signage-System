@@ -26,7 +26,7 @@ app.set("emitToDeviceAck", emitToDeviceAck);
 
 // Routes
 app.use("/api/auth", require("./routes/auth"));
-app.use("/api/departments", require("./routes/departments"));
+app.use("/api/groups", require("./routes/groups"));
 app.use("/api/posts", require("./routes/posts"));
 app.use("/api/devices", require("./routes/devices"));
 app.use("/api/sensors", require("./routes/sensors"));

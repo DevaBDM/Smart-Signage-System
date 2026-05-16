@@ -7,7 +7,7 @@ import * as S from "../../styles";
 import usePersistentState from "../../hooks/usePersistentState";
 
 export default function CreatorEditor() {
-  const { department_id } = useAuthStore();
+  const { group_id } = useAuthStore();
   const [devices, setDevices] = useState([]);
   const [exported, setExported] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -64,8 +64,8 @@ export default function CreatorEditor() {
     setMsg("");
     try {
       const fd = new FormData();
-      Object.entries({ ...form, department_id }).forEach(([key, value]) => {
-        fd.append(key, Array.isArray(value) ? JSON.stringify(value) : value);
+      Object.entries({ ...form, group_id }).forEach(([key, value]) => {
+        fd.append(key, Array.isArray(value) ? JSON.stringify(value) : v);
       });
       fd.append("images", exported.file);
       await api.post("/posts", fd);

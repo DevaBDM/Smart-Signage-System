@@ -5,7 +5,7 @@ import * as S from "../../styles";
 
 export default function AdminDevices() {
   const [devices, setDevices] = useState([]);
-  const [depts, setDepts] = useState([]);
+  const [groups, setGroups] = useState([]);
   const [sel, setSel] = useState(null);
   const [sensors, setSensors] = useState([]);
   const [sensorLoading, setSensorLoading] = useState(false);
@@ -14,13 +14,17 @@ export default function AdminDevices() {
     device_name: "",
     ip_address: "",
     location: "",
-    department_id: "",
+    group_id: "",
+    group_ids: [],
+    all_groups: false,
   });
   const [editForm, setEditForm] = useState({
     device_name: "",
     ip_address: "",
     location: "",
-    department_id: "",
+    group_id: "",
+    group_ids: [],
+    all_groups: false,
   });
   const [msg, setMsg] = useState("");
   const [regMsg, setRegMsg] = useState("");
@@ -32,8 +36,8 @@ export default function AdminDevices() {
       .then((r) => setDevices(r.data))
       .catch(() => {});
     api
-      .get("/departments")
-      .then((r) => setDepts(r.data))
+      .get("/groups")
+      .then((r) => setGroups(r.data))
       .catch(() => {});
   };
   useEffect(() => {
@@ -59,7 +63,9 @@ export default function AdminDevices() {
       device_name: d.device_name || "",
       ip_address: d.ip_address || "",
       location: d.location || "",
-      department_id: d.department_id ? String(d.department_id) : "",
+      group_id: d.group_id ? String(d.group_id) : "",
+      group_ids: d.groups?.map((g) => g.group_id) || [],
+      all_groups: !!d.all_groups,
     });
     loadSensors(d);
     setMsg("");
@@ -71,10 +77,20 @@ export default function AdminDevices() {
     try {
       await api.post("/devices/register", {
         ...form,
-        department_id: form.department_id || null,
+        group_id: form.group_id || null,
+        group_ids: form.group_ids,
+        all_groups: form.all_groups,
       });
       setRegMsg("✅ Device registered successfully.");
-      setForm({ id: "", device_name: "", ip_address: "", location: "", department_id: "" });
+      setForm({
+        id: "",
+        device_name: "",
+        ip_address: "",
+        location: "",
+        group_id: "",
+        group_ids: [],
+        all_groups: false,
+      });
       load();
     } catch (e) {
       setRegMsg(e.response?.data?.error || "❌ Registration failed.");
@@ -88,7 +104,9 @@ export default function AdminDevices() {
     try {
       const r = await api.put(`/devices/${sel.id}`, {
         ...editForm,
-        department_id: editForm.department_id || null,
+        group_id: editForm.group_id || null,
+        group_ids: editForm.group_ids,
+        all_groups: editForm.all_groups,
       });
       setSel(r.data);
       setMsg("✅ Device updated.");
@@ -96,6 +114,16 @@ export default function AdminDevices() {
     } catch (e) {
       setMsg(e.response?.data?.error || "❌ Device update failed.");
     }
+  };
+
+  const toggleGroup = (target, setTarget, id) => {
+    const groupId = Number(id);
+    setTarget({
+      ...target,
+      group_ids: target.group_ids.includes(groupId)
+        ? target.group_ids.filter((x) => x !== groupId)
+        : [...target.group_ids, groupId],
+    });
   };
 
   const resetToDefaults = async () => {
@@ -220,21 +248,48 @@ export default function AdminDevices() {
                   setForm({ ...form, location: e.target.value })
                 }
               />
-              <label style={S.label}>Department</label>
+              <label style={S.label}>Primary Group</label>
               <select
                 style={S.input}
-                value={form.department_id}
+                value={form.group_id}
                 onChange={(e) =>
-                  setForm({ ...form, department_id: e.target.value })
+                  setForm({ ...form, group_id: e.target.value })
                 }
               >
                 <option value="">— None —</option>
-                {depts.map((d) => (
+                {groups.map((d) => (
                   <option key={d.id} value={d.id}>
                     {d.name}
                   </option>
                 ))}
               </select>
+              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
+                <input
+                  type="checkbox"
+                  checked={form.all_groups}
+                  onChange={(e) =>
+                    setForm({ ...form, all_groups: e.target.checked })
+                  }
+                />
+                Belongs to all groups
+              </label>
+              {!form.all_groups && (
+                <div>
+                  <label style={S.label}>Additional Groups</label>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {groups.map((d) => (
+                      <label key={d.id} style={{ display: "flex", gap: 8, fontSize: 13 }}>
+                        <input
+                          type="checkbox"
+                          checked={form.group_ids.includes(d.id)}
+                          onChange={() => toggleGroup(form, setForm, d.id)}
+                        />
+                        {d.name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
               <button
                 type="submit"
                 style={{ ...S.btn, background: "#2563eb", color: "#fff" }}
@@ -294,7 +349,12 @@ export default function AdminDevices() {
                 >
                   <div style={{ fontWeight: 600 }}>{d.device_name}</div>
                   <div style={{ fontSize: 12, color: "#9ca3af" }}>
-                    {d.ip_address} · {d.department?.name ?? "—"}
+                    {d.ip_address} ·{" "}
+                    {d.all_groups
+                      ? "All groups"
+                      : d.groups?.length
+                        ? d.groups.map((g) => g.group?.name).join(", ")
+                        : d.group?.name ?? "—"}
                   </div>
                   {d.location && (
                     <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
@@ -464,21 +524,53 @@ export default function AdminDevices() {
                     setEditForm({ ...editForm, location: e.target.value })
                   }
                 />
-                <label style={S.label}>Department</label>
+                <label style={S.label}>Primary Group</label>
                 <select
                   style={S.input}
-                  value={editForm.department_id}
+                  value={editForm.group_id}
                   onChange={(e) =>
-                    setEditForm({ ...editForm, department_id: e.target.value })
+                    setEditForm({ ...editForm, group_id: e.target.value })
                   }
                 >
                   <option value="">— None —</option>
-                  {depts.map((d) => (
+                  {groups.map((d) => (
                     <option key={d.id} value={d.id}>
                       {d.name}
                     </option>
-                  ))}
-                </select>
+                    ))}
+                  </select>
+                <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
+                  <input
+                    type="checkbox"
+                    checked={editForm.all_groups}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        all_groups: e.target.checked,
+                      })
+                    }
+                  />
+                  Belongs to all groups
+                </label>
+                {!editForm.all_groups && (
+                  <div>
+                    <label style={S.label}>Additional Groups</label>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {groups.map((d) => (
+                        <label key={d.id} style={{ display: "flex", gap: 8, fontSize: 13 }}>
+                          <input
+                            type="checkbox"
+                            checked={editForm.group_ids.includes(d.id)}
+                            onChange={() =>
+                              toggleGroup(editForm, setEditForm, d.id)
+                            }
+                          />
+                          {d.name}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <button
                   type="submit"
                   style={{ ...S.btn, background: "#2563eb", color: "#fff" }}
