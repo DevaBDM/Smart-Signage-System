@@ -112,6 +112,41 @@ const canManagePost = (user, post) =>
   post.created_by === user.id ||
   (user.can_manage_other_posts && user.group_id === post.group_id);
 
+const assertCanManageAsset = async (actor, deviceId, assetId) => {
+  const tracked = await prisma.signageAsset.findUnique({
+    where: {
+      device_id_asset_id: {
+        device_id: Number(deviceId),
+        asset_id: String(assetId),
+      },
+    },
+  });
+
+  if (actor.role === "admin") {
+    return { ok: true, tracked, post: null };
+  }
+
+  if (!tracked?.post_id) {
+    return {
+      ok: false,
+      error: "You can only control signage assets linked to your own posts.",
+    };
+  }
+
+  const post = await prisma.post.findUnique({
+    where: { id: tracked.post_id },
+    select: { id: true, created_by: true, group_id: true },
+  });
+  if (!post || !canManagePost(actor, post)) {
+    return {
+      ok: false,
+      error: "You cannot modify another creator's post on this display.",
+    };
+  }
+
+  return { ok: true, tracked, post };
+};
+
 const sendSignageCommand = async (device_id, payload) => {
   if (!_emitToDeviceAck) {
     return { ok: false, error: "Socket bridge is not ready" };
@@ -437,6 +472,7 @@ router.get(
           mimetype: asset.mimetype,
           media_type: media?.media_type || null,
           clip_duration_seconds: media?.duration_seconds ?? null,
+          created_by: asset.post?.created_by ?? null,
         };
       });
     const result = await sendSignageCommand(device.id, { action: "list" });
@@ -449,6 +485,7 @@ router.get(
             select: {
               title: true,
               id: true,
+              created_by: true,
               images: { orderBy: { order_index: "asc" }, take: 1 },
             },
           },
@@ -501,6 +538,11 @@ router.post(
     const lock = assertControlAllowed(actor, device);
     if (!lock.ok) return res.status(403).json({ error: lock.error });
 
+    if (command === "start" && asset_id) {
+      const perm = await assertCanManageAsset(actor, device.id, asset_id);
+      if (!perm.ok) return res.status(403).json({ error: perm.error });
+    }
+
     const result = await sendSignageCommand(device.id, {
       action: command,
       asset_id,
@@ -523,6 +565,9 @@ router.patch(
 
     const lock = assertControlAllowed(actor, device);
     if (!lock.ok) return res.status(403).json({ error: lock.error });
+
+    const perm = await assertCanManageAsset(actor, device.id, req.params.asset_id);
+    if (!perm.ok) return res.status(403).json({ error: perm.error });
 
     const enabled = req.body.is_enabled !== false;
     const result = await sendSignageCommand(device.id, {
@@ -561,17 +606,12 @@ router.delete(
 
     const assetId = String(req.params.asset_id);
 
-    // 1. Try to find if this asset is linked to a post
-    const trackedAsset = await prisma.signageAsset.findUnique({
-      where: {
-        device_id_asset_id: {
-          device_id: device.id,
-          asset_id: assetId,
-        },
-      },
-    });
+    const perm = await assertCanManageAsset(actor, device.id, assetId);
+    if (!perm.ok) return res.status(403).json({ error: perm.error });
 
-    // 2. Notify the Pi to delete from local Anthias
+    const trackedAsset = perm.tracked;
+
+    // Notify the Pi to delete from local Anthias
     const result = await sendSignageCommand(device.id, {
       action: "delete_asset",
       asset_id: assetId,

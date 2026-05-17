@@ -5,7 +5,9 @@ import PostMedia, { mediaSrc } from "../../components/PostMedia";
 import api from "../../api/axios";
 import useAuthStore from "../../store/useAuthStore";
 import * as S from "../../styles";
-import usePersistentState from "../../hooks/usePersistentState";
+import usePersistentState, {
+  userScopedKey,
+} from "../../hooks/usePersistentState";
 import SignageStateSelect from "../../components/SignageStateSelect";
 import {
   SIGNAGE_STATE_LABELS,
@@ -24,7 +26,11 @@ export default function CreatorPosts() {
   const [devices, setDevices] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
-  const [bulkDeviceIds, setBulkDeviceIds] = usePersistentState("creator.posts.bulkDeviceIds", []);
+  const [bulkDeviceIds, setBulkDeviceIds] = usePersistentState(
+    userScopedKey("creator.posts.bulkDeviceIds", userId),
+    [],
+  );
+  const [groupCreators, setGroupCreators] = useState([]);
   const emptyForm = {
     title: "",
     description_markdown: "",
@@ -39,12 +45,18 @@ export default function CreatorPosts() {
     display_group: "",
     signage_state: "NORMAL",
   };
-  const [form, setForm, clearForm] = usePersistentState("creator.posts.form", emptyForm);
-  const [filters, setFilters] = usePersistentState("creator.posts.filters", {
-    channel: "all",
-    device_id: "",
-    creator_id: "",
-  });
+  const [form, setForm, clearForm] = usePersistentState(
+    userScopedKey("creator.posts.form", userId),
+    emptyForm,
+  );
+  const [filters, setFilters] = usePersistentState(
+    userScopedKey("creator.posts.filters", userId),
+    {
+      channel: "all",
+      device_id: "",
+      creator_id: "",
+    },
+  );
   const [mediaItems, setMediaItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
@@ -69,13 +81,24 @@ export default function CreatorPosts() {
       .catch(() => {});
   }, [group_id, filters.channel, filters.creator_id, filters.device_id]);
 
-  const sameGroupCreators = Array.from(
-    new Map(
-      posts
-        .filter((p) => p.author)
-        .map((p) => [p.author.id, p.author]),
-    ).values(),
-  );
+  useEffect(() => {
+    if (!group_id) {
+      setGroupCreators([]);
+      return;
+    }
+    api
+      .get(`/posts/meta/group-creators?group_id=${group_id}`)
+      .then((r) => setGroupCreators(r.data))
+      .catch(() => setGroupCreators([]));
+  }, [group_id]);
+
+  const onChannelFilterChange = (channel) => {
+    setFilters((f) => ({
+      ...f,
+      channel,
+      ...(channel === "feed" ? { device_id: "" } : {}),
+    }));
+  };
 
   const canManagePost = (post) =>
     post.author?.id === userId || Boolean(can_manage_other_posts);
@@ -513,32 +536,34 @@ export default function CreatorPosts() {
                 <select
                   style={{ ...S.input, marginTop: 4 }}
                   value={filters.channel}
-                  onChange={(e) =>
-                    setFilters({ ...filters, channel: e.target.value })
-                  }
+                  onChange={(e) => onChannelFilterChange(e.target.value)}
                 >
                   <option value="all">All posts</option>
                   <option value="feed">Feed-only posts</option>
                   <option value="signage">Signage-only posts</option>
                 </select>
               </label>
-              <label style={{ ...S.label, marginBottom: 0 }}>
-                Signage system
-                <select
-                  style={{ ...S.input, marginTop: 4 }}
-                  value={filters.device_id}
-                  onChange={(e) =>
-                    setFilters({ ...filters, device_id: e.target.value })
-                  }
-                >
-                  <option value="">All displays</option>
-                  {devices.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.device_name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {filters.channel !== "feed" ? (
+                <label style={{ ...S.label, marginBottom: 0 }}>
+                  Signage system
+                  <select
+                    style={{ ...S.input, marginTop: 4 }}
+                    value={filters.device_id}
+                    onChange={(e) =>
+                      setFilters({ ...filters, device_id: e.target.value })
+                    }
+                  >
+                    <option value="">All displays</option>
+                    {devices.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.device_name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <div />
+              )}
               <label style={{ ...S.label, marginBottom: 0 }}>
                 Creator
                 <select
@@ -548,8 +573,8 @@ export default function CreatorPosts() {
                     setFilters({ ...filters, creator_id: e.target.value })
                   }
                 >
-                  <option value="">All same-group creators</option>
-                  {sameGroupCreators.map((creator) => (
+                  <option value="">All creators in group</option>
+                  {groupCreators.map((creator) => (
                     <option key={creator.id} value={creator.id}>
                       {creator.username}
                     </option>

@@ -102,7 +102,12 @@ export default function Feed() {
               style={s.card}
             >
               {p.images?.[0] ? (
-                <PostMedia item={p.images[0]} alt={p.title} style={s.img} />
+                <PostMedia
+                  item={p.images[0]}
+                  alt={p.title}
+                  style={s.img}
+                  preview
+                />
               ) : (
                 <div style={s.imgPlaceholder}>📋</div>
               )}

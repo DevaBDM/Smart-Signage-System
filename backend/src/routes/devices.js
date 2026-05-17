@@ -87,22 +87,45 @@ router.post("/register", auth(["admin"]), async (req, res) => {
   }
 });
 
-// Approve a device or its pending changes.
+// Approve a device or its pending changes (optionally apply group settings from body).
 router.post("/:id/approve", auth(["admin"]), async (req, res) => {
   try {
-    const device = await prisma.device.findUnique({ where: { id: Number(req.params.id) } });
+    const deviceId = Number(req.params.id);
+    const device = await prisma.device.findUnique({ where: { id: deviceId } });
     if (!device) return res.status(404).json({ error: "Not found" });
+
+    const groupIds =
+      req.body.group_ids !== undefined ? parseGroupIds(req.body.group_ids) : null;
+    const groupId =
+      req.body.group_id !== undefined
+        ? req.body.group_id
+          ? Number(req.body.group_id)
+          : null
+        : undefined;
 
     const updateData = {
       is_approved: true,
       ...(device.pending_name && { device_name: device.pending_name, pending_name: null }),
       ...(device.pending_ip && { ip_address: device.pending_ip, pending_ip: null }),
       ...(device.pending_location && { location: device.pending_location, pending_location: null }),
+      ...(req.body.all_groups !== undefined && { all_groups: toBool(req.body.all_groups) }),
+      ...(groupId !== undefined && { group_id: groupId }),
     };
 
-    const updated = await prisma.device.update({
-      where: { id: Number(req.params.id) },
-      data: updateData,
+    const updated = await prisma.$transaction(async (tx) => {
+      if (groupIds !== null) {
+        await tx.deviceGroup.deleteMany({ where: { device_id: deviceId } });
+      }
+      return tx.device.update({
+        where: { id: deviceId },
+        data: {
+          ...updateData,
+          ...(groupIds !== null && {
+            groups: { create: groupIds.map((g_id) => ({ group_id: g_id })) },
+          }),
+        },
+        include: { group: true, groups: { include: { group: true } } },
+      });
     });
     res.json(updated);
   } catch (e) {

@@ -156,10 +156,22 @@ export default function AdminDevices() {
     if (!sel) return;
     setMsg("");
     try {
-      await api.post(`/devices/${sel.id}/approve`);
+      const r = await api.post(`/devices/${sel.id}/approve`, {
+        group_id: editForm.group_id || null,
+        group_ids: editForm.group_ids,
+        all_groups: editForm.all_groups,
+      });
+      setSel(r.data);
+      setEditForm({
+        device_name: r.data.device_name || "",
+        ip_address: r.data.ip_address || "",
+        location: r.data.location || "",
+        group_id: r.data.group_id ? String(r.data.group_id) : "",
+        group_ids: r.data.groups?.map((g) => g.group_id) || [],
+        all_groups: !!r.data.all_groups,
+      });
       setMsg("✅ Device / changes approved.");
       load();
-      setSel(null);
     } catch (e) {
       setMsg(e.response?.data?.error || "❌ Approval failed.");
     }

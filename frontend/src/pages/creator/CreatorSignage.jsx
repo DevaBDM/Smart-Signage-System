@@ -4,7 +4,9 @@ import api from "../../api/axios";
 import useAuthStore from "../../store/useAuthStore";
 import * as S from "../../styles";
 import { assetOrigin } from "../../config/apiBase";
-import usePersistentState from "../../hooks/usePersistentState";
+import usePersistentState, {
+  userScopedKey,
+} from "../../hooks/usePersistentState";
 
 const BASE = assetOrigin();
 
@@ -37,13 +39,13 @@ function postMediaMeta(post) {
 }
 
 export default function CreatorSignage() {
-  const { group_id, id: userId } = useAuthStore();
+  const { group_id, id: userId, can_manage_other_posts, role } = useAuthStore();
   const [posts, setPosts] = useState([]);
   const [devices, setDevices] = useState([]);
   const [assets, setAssets] = useState([]);
   const [assetLoading, setAssetLoading] = useState(false);
   const [form, setForm] = usePersistentState(
-    `creator.signage.form.${userId || "guest"}`,
+    userScopedKey("creator.signage.form", userId),
     {
       post_id: "",
       device_id: "",
@@ -93,9 +95,15 @@ export default function CreatorSignage() {
           piAsset.mimetype === "video" ||
           String(piAsset.mimetype || "").startsWith("video") ||
           String(serverPath || "").includes("/videos/");
+        const canManage =
+          role === "admin" ||
+          !t?.created_by ||
+          t.created_by === userId ||
+          Boolean(can_manage_other_posts);
         return {
           ...piAsset,
           is_video: isVideo,
+          can_manage: canManage,
           clip_duration: t?.clip_duration_seconds ?? null,
           preview_url: serverPath
             ? `${BASE}${serverPath}`
@@ -430,44 +438,47 @@ export default function CreatorSignage() {
                       {asset.is_video ? "Video" : "Image"} ·{" "}
                       {asset.is_enabled ? "Visible" : "Hidden"} ·{" "}
                       {formatAssetDuration(asset)}
+                      {!asset.can_manage ? " · view only" : ""}
                     </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        gap: 8,
-                        marginTop: 10,
-                      }}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => runControl("start", asset.asset_id)}
-                        style={{ ...S.btn, padding: "5px 9px" }}
-                      >
-                        Start
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setAssetEnabled(asset, !asset.is_enabled)
-                        }
-                        style={{ ...S.btn, padding: "5px 9px" }}
-                      >
-                        {asset.is_enabled ? "Hide" : "Show"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => deleteAsset(asset)}
+                    {asset.can_manage ? (
+                      <div
                         style={{
-                          ...S.btn,
-                          background: "#fee2e2",
-                          color: "#b91c1c",
-                          padding: "5px 9px",
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: 8,
+                          marginTop: 10,
                         }}
                       >
-                        Delete
-                      </button>
-                    </div>
+                        <button
+                          type="button"
+                          onClick={() => runControl("start", asset.asset_id)}
+                          style={{ ...S.btn, padding: "5px 9px" }}
+                        >
+                          Start
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setAssetEnabled(asset, !asset.is_enabled)
+                          }
+                          style={{ ...S.btn, padding: "5px 9px" }}
+                        >
+                          {asset.is_enabled ? "Hide" : "Show"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteAsset(asset)}
+                          style={{
+                            ...S.btn,
+                            background: "#fee2e2",
+                            color: "#b91c1c",
+                            padding: "5px 9px",
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               ))}

@@ -4,7 +4,9 @@ import Designer from "../../components/Designer";
 import api from "../../api/axios";
 import useAuthStore from "../../store/useAuthStore";
 import * as S from "../../styles";
-import usePersistentState from "../../hooks/usePersistentState";
+import usePersistentState, {
+  userScopedKey,
+} from "../../hooks/usePersistentState";
 import SignageStateSelect from "../../components/SignageStateSelect";
 import {
   SIGNAGE_STATE_LABELS,
@@ -12,7 +14,7 @@ import {
 } from "../../constants/signageStates";
 
 export default function CreatorEditor() {
-  const { group_id, max_signage_state } = useAuthStore();
+  const { id: userId, group_id, max_signage_state } = useAuthStore();
   const signageStateOptions = creatorSignageStateOptions(max_signage_state);
   const [devices, setDevices] = useState([]);
   const [exported, setExported] = useState(null);
@@ -32,7 +34,10 @@ export default function CreatorEditor() {
     display_group: "",
     signage_state: "NORMAL",
   };
-  const [form, setForm, clearForm] = usePersistentState("creator.editor.form", emptyForm);
+  const [form, setForm, clearForm] = usePersistentState(
+    userScopedKey("creator.editor.form", userId),
+    emptyForm,
+  );
 
   useEffect(() => {
     api

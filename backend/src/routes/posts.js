@@ -334,6 +334,21 @@ router.get("/", async (req, res) => {
   res.json(posts);
 });
 
+// Creators in the current group (for filters; not affected by post list filters).
+router.get("/meta/group-creators", auth(["admin", "creator"]), async (req, res) => {
+  const groupId =
+    req.user.role === "admin" && req.query.group_id
+      ? Number(req.query.group_id)
+      : req.user.group_id;
+  if (!groupId) return res.json([]);
+  const users = await prisma.user.findMany({
+    where: { group_id: Number(groupId), role: "creator" },
+    select: { id: true, username: true },
+    orderBy: { username: "asc" },
+  });
+  res.json(users);
+});
+
 // GET single post
 router.get("/:id", async (req, res) => {
   const post = await prisma.post.findUnique({

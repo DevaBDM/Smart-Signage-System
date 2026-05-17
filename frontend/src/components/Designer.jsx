@@ -4,7 +4,8 @@ import { toPng } from "html-to-image";
 import FabricCanvas from "./FabricCanvas";
 import MarkdownCanvas from "./MarkdownCanvas";
 import "katex/dist/katex.min.css";
-import usePersistentState from "../hooks/usePersistentState";
+import usePersistentState, { userScopedKey } from "../hooks/usePersistentState";
+import useAuthStore from "../store/useAuthStore";
 
 const fabric = fabricModule.fabric;
 
@@ -225,8 +226,10 @@ function applyTemplate(canvas, preset, templateId, bgHex) {
 }
 
 export default function Designer({ onExport }) {
-  const [mode, setMode] = usePersistentState("designer.mode", "visual");
-  const [presetId, setPresetId] = usePersistentState("designer.presetId", "fhd");
+  const userId = useAuthStore((s) => s.id);
+
+  const [mode, setMode] = usePersistentState(userScopedKey("designer.mode", userId), "visual");
+  const [presetId, setPresetId] = usePersistentState(userScopedKey("designer.presetId", userId), "fhd");
   const preset = useMemo(
     () => TV_PRESETS.find((p) => p.id === presetId) || TV_PRESETS[0],
     [presetId],
@@ -239,25 +242,25 @@ export default function Designer({ onExport }) {
   const markdownRef = useRef();
   const [selected, setSelected] = useState(null);
 
-  const [showSafeZone, setShowSafeZone] = usePersistentState("designer.showSafeZone", true);
-  const [exportJpeg, setExportJpeg] = usePersistentState("designer.exportJpeg", false);
+  const [showSafeZone, setShowSafeZone] = usePersistentState(userScopedKey("designer.showSafeZone", userId), true);
+  const [exportJpeg, setExportJpeg] = usePersistentState(userScopedKey("designer.exportJpeg", userId), false);
 
-  const [text, setText] = usePersistentState("designer.text", "Your headline");
-  const [fontSize, setFontSize] = usePersistentState("designer.fontSize", 64);
-  const [fontFamily, setFont] = usePersistentState("designer.fontFamily", "Impact");
-  const [textColor, setTextColor] = usePersistentState("designer.textColor", "#ffffff");
-  const [bold, setBold] = usePersistentState("designer.bold", false);
-  const [italic, setItalic] = usePersistentState("designer.italic", false);
-  const [bgColor, setBgColor] = usePersistentState("designer.bgColor", "#0f172a");
-  const [strokeColor, setStrokeColor] = usePersistentState("designer.strokeColor", "#ffffff");
-  const [canvasJson, setCanvasJson] = usePersistentState("designer.canvasJson", null);
+  const [text, setText] = usePersistentState(userScopedKey("designer.text", userId), "Your headline");
+  const [fontSize, setFontSize] = usePersistentState(userScopedKey("designer.fontSize", userId), 64);
+  const [fontFamily, setFont] = usePersistentState(userScopedKey("designer.fontFamily", userId), "Impact");
+  const [textColor, setTextColor] = usePersistentState(userScopedKey("designer.textColor", userId), "#ffffff");
+  const [bold, setBold] = usePersistentState(userScopedKey("designer.bold", userId), false);
+  const [italic, setItalic] = usePersistentState(userScopedKey("designer.italic", userId), false);
+  const [bgColor, setBgColor] = usePersistentState(userScopedKey("designer.bgColor", userId), "#0f172a");
+  const [strokeColor, setStrokeColor] = usePersistentState(userScopedKey("designer.strokeColor", userId), "#ffffff");
+  const [canvasJson, setCanvasJson] = usePersistentState(userScopedKey("designer.canvasJson", userId), null);
 
   const [markdown, setMarkdown] = usePersistentState(
-    "designer.markdown",
+    userScopedKey("designer.markdown", userId),
     "# On-screen announcement\n\nShort sentences read best from across the room.",
   );
-  const [mdFontSize, setMdFontSize] = usePersistentState("designer.mdFontSize", 36);
-  const [mdFontFamily, setMdFontFamily] = usePersistentState("designer.mdFontFamily", "Segoe UI");
+  const [mdFontSize, setMdFontSize] = usePersistentState(userScopedKey("designer.mdFontSize", userId), 36);
+  const [mdFontFamily, setMdFontFamily] = usePersistentState(userScopedKey("designer.mdFontFamily", userId), "Segoe UI");
 
   const syncToolbarFromObject = useCallback((o) => {
     if (!o) return;
@@ -862,6 +865,7 @@ export default function Designer({ onExport }) {
             >
               <div style={{ display: mode === "visual" ? "block" : "none" }}>
                 <FabricCanvas
+                  key={`canvas-${userId}`}
                   fabricRef={fabricRef}
                   canvasEl={canvasEl}
                   width={preset.w}
