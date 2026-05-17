@@ -20,7 +20,6 @@ export default function AdminUsers() {
     group_id: "",
     auto_approve: true,
     can_manage_other_posts: false,
-    creator_priority: 1,
     control_lock_minutes: 120,
     max_signage_state: "NORMAL",
   });
@@ -55,7 +54,6 @@ export default function AdminUsers() {
         group_id: "",
         auto_approve: true,
         can_manage_other_posts: false,
-        creator_priority: 1,
         control_lock_minutes: 120,
         max_signage_state: "NORMAL",
       });
@@ -64,6 +62,16 @@ export default function AdminUsers() {
       setError(e.response?.data?.error || "Failed");
     }
   };
+
+  const creatorPriorities = users
+    .filter((u) => u.role === "creator")
+    .map((u) => u.creator_priority ?? 0);
+  const minCreatorPriority = creatorPriorities.length
+    ? Math.min(...creatorPriorities)
+    : 1;
+  const maxCreatorPriority = creatorPriorities.length
+    ? Math.max(...creatorPriorities)
+    : 1;
 
   const updateUser = async (id, changes) => {
     setError("");
@@ -179,19 +187,10 @@ export default function AdminUsers() {
                   setForm({ ...form, max_signage_state })
                 }
               />
-              <label style={S.label}>Creator Priority</label>
-              <input
-                style={S.input}
-                type="number"
-                min={1}
-                value={form.creator_priority}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    creator_priority: Number(e.target.value),
-                  })
-                }
-              />
+              <p style={{ fontSize: 12, color: "#6b7280", margin: "0" }}>
+                Creators get the next available priority automatically; you can
+                reorder them in the table on the right.
+              </p>
               <label style={S.label}>Dead-block Minutes</label>
               <input
                 style={S.input}
@@ -306,17 +305,49 @@ export default function AdminUsers() {
                       />
                     </td>
                     <td style={S.td}>
-                      <input
-                        style={{ ...S.input, width: 86 }}
-                        type="number"
-                        min={1}
-                        value={u.creator_priority ?? 1}
-                        onChange={(e) =>
-                          updateUser(u.id, {
-                            creator_priority: Number(e.target.value),
-                          })
-                        }
-                      />
+                      {u.role === "creator" ? (
+                        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                          <button
+                            type="button"
+                            title="Move up (swap with higher-priority creator)"
+                            disabled={(u.creator_priority ?? 1) <= minCreatorPriority}
+                            onClick={() =>
+                              updateUser(u.id, {
+                                creator_priority: (u.creator_priority ?? 1) - 1,
+                              })
+                            }
+                            style={prioBtn}
+                          >
+                            ↑
+                          </button>
+                          <input
+                            style={{ ...S.input, width: 64, textAlign: "center" }}
+                            type="number"
+                            min={1}
+                            value={u.creator_priority ?? 1}
+                            onChange={(e) =>
+                              updateUser(u.id, {
+                                creator_priority: Number(e.target.value),
+                              })
+                            }
+                          />
+                          <button
+                            type="button"
+                            title="Move down (swap with lower-priority creator)"
+                            disabled={(u.creator_priority ?? 1) >= maxCreatorPriority}
+                            onClick={() =>
+                              updateUser(u.id, {
+                                creator_priority: (u.creator_priority ?? 1) + 1,
+                              })
+                            }
+                            style={prioBtn}
+                          >
+                            ↓
+                          </button>
+                        </div>
+                      ) : (
+                        <span style={{ color: "#9ca3af" }}>—</span>
+                      )}
                     </td>
                     <td style={S.td}>
                       <select
@@ -372,3 +403,15 @@ export default function AdminUsers() {
     </div>
   );
 }
+
+const prioBtn = {
+  width: 26,
+  height: 26,
+  border: "1px solid #d1d5db",
+  borderRadius: 6,
+  background: "#f9fafb",
+  cursor: "pointer",
+  fontSize: 13,
+  lineHeight: 1,
+  padding: 0,
+};
