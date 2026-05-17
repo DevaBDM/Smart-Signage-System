@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import AdminSidebar from "../../components/AdminSidebar";
 import SignageStateSelect from "../../components/SignageStateSelect";
+import MultiSelect from "../../components/MultiSelect";
 import api from "../../api/axios";
 import { SIGNAGE_STATE_LABELS, SIGNAGE_STATES } from "../../constants/signageStates";
 import * as S from "../../styles";
@@ -22,6 +23,7 @@ export default function AdminUsers() {
     can_manage_other_posts: false,
     control_lock_minutes: 120,
     max_signage_state: "NORMAL",
+    managed_group_ids: [],
   });
   const [error, setError] = useState("");
 
@@ -56,6 +58,7 @@ export default function AdminUsers() {
         can_manage_other_posts: false,
         control_lock_minutes: 120,
         max_signage_state: "NORMAL",
+        managed_group_ids: [],
       });
       load();
     } catch (e) {
@@ -143,7 +146,7 @@ export default function AdminUsers() {
                 <option value="creator">Creator</option>
                 <option value="admin">Admin</option>
               </select>
-              <label style={S.label}>Group</label>
+              <label style={S.label}>Primary Group</label>
               <select
                 style={S.input}
                 value={form.group_id}
@@ -158,6 +161,13 @@ export default function AdminUsers() {
                   </option>
                 ))}
               </select>
+              <label style={S.label}>Additional Groups (can post to)</label>
+              <MultiSelect
+                options={groups.filter((g) => String(g.id) !== String(form.group_id))}
+                value={form.managed_group_ids.filter((id) => String(id) !== String(form.group_id))}
+                onChange={(ids) => setForm({ ...form, managed_group_ids: ids })}
+                placeholder="Search departments..."
+              />
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', marginTop: 4 }}>
                 <input 
                   type="checkbox" 
@@ -229,6 +239,7 @@ export default function AdminUsers() {
                     "Username",
                     "Role",
                     "Group",
+                    "Managed Groups",
                     "Auto-Approve",
                     "Other Posts",
                     "Priority",
@@ -285,6 +296,16 @@ export default function AdminUsers() {
                           </option>
                         ))}
                       </select>
+                    </td>
+                    <td style={S.td}>
+                      <MultiSelect
+                        options={groups.filter((g) => String(g.id) !== String(u.group_id))}
+                        value={(u.managed_groups || [])
+                          .map((mg) => mg.group_id)
+                          .filter((id) => String(id) !== String(u.group_id))}
+                        onChange={(ids) => updateUser(u.id, { managed_group_ids: ids })}
+                        placeholder="Search..."
+                      />
                     </td>
                     <td style={S.td}>
                       <input 

@@ -14,6 +14,15 @@ const decodeToken = (token) => {
 const storedToken = localStorage.getItem("token") || null;
 const storedUser = decodeToken(storedToken);
 
+const managedGroupIds = (user) => {
+  if (Array.isArray(user.managed_group_ids)) return user.managed_group_ids;
+  try {
+    return JSON.parse(user.managed_group_ids || "[]");
+  } catch {
+    return [];
+  }
+};
+
 const useAuthStore = create((set) => ({
   token: storedToken,
   id: storedUser.id || null,
@@ -26,11 +35,13 @@ const useAuthStore = create((set) => ({
     "NORMAL",
   role: localStorage.getItem("role") || null,
   group_id: localStorage.getItem("group_id") || null,
+  managed_group_ids: managedGroupIds(storedUser),
 
   setAuth: (token, role, group_id, profile = {}) => {
     const user = decodeToken(token);
     const max_signage_state =
       profile.max_signage_state || user.max_signage_state || "NORMAL";
+    const mgIds = managedGroupIds({ managed_group_ids: profile.managed_group_ids ?? user.managed_group_ids });
     localStorage.setItem("token", token);
     localStorage.setItem("role", role);
     localStorage.setItem("group_id", group_id ?? "");
@@ -44,6 +55,7 @@ const useAuthStore = create((set) => ({
       max_signage_state,
       role,
       group_id,
+      managed_group_ids: mgIds,
     });
   },
 
@@ -61,6 +73,7 @@ const useAuthStore = create((set) => ({
       max_signage_state: "NORMAL",
       role: null,
       group_id: null,
+      managed_group_ids: [],
     });
   },
 }));

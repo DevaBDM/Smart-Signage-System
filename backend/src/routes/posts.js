@@ -81,13 +81,25 @@ const slugify = (text) =>
   "-" +
   Date.now();
 
-const canManage = (user, group_id) =>
-  user.role === "admin" || user.group_id === Number(group_id);
+const canManage = (user, group_id) => {
+  if (user.role === "admin") return true;
+  const g = Number(group_id);
+  if (user.group_id === g) return true;
+  const managed = Array.isArray(user.managed_group_ids)
+    ? user.managed_group_ids
+    : [];
+  return managed.includes(g);
+};
 
-const canManagePost = (user, post) =>
-  user.role === "admin" ||
-  post.created_by === user.id ||
-  (user.can_manage_other_posts && user.group_id === post.group_id);
+const canManagePost = (user, post) => {
+  if (user.role === "admin") return true;
+  if (post.created_by === user.id) return true;
+  if (!user.can_manage_other_posts) return false;
+  const managed = Array.isArray(user.managed_group_ids)
+    ? user.managed_group_ids
+    : [];
+  return user.group_id === post.group_id || managed.includes(post.group_id);
+};
 
 const getActor = async (user) => {
   if (user.role === "admin") return user;
@@ -101,9 +113,14 @@ const getActor = async (user) => {
       creator_priority: true,
       control_lock_minutes: true,
       max_signage_state: true,
+      managed_groups: { select: { group_id: true } },
     },
   });
-  return dbUser || user;
+  if (!dbUser) return user;
+  return {
+    ...dbUser,
+    managed_group_ids: (dbUser.managed_groups || []).map((g) => g.group_id),
+  };
 };
 
 const resolvePostSignageState = (actor, rawState) => {
@@ -166,13 +183,17 @@ const parseDeviceIds = (value) => {
 
 const toBool = (val) => val === true || val === "true";
 
-/** Normalize schedule fields from req.body or Prisma signage_metadata. */
+/** Normalize schedule and Anthias fields from req.body or Prisma signage_metadata. */
 const deploymentSchedule = (raw) => ({
   duration_seconds: Number(raw?.duration_seconds) || 10,
   start_date: raw?.start_date ? new Date(raw.start_date) : null,
   end_date: raw?.end_date ? new Date(raw.end_date) : null,
   priority: Number(raw?.priority) || 1,
   display_group: raw?.display_group ?? null,
+  is_enabled: toBool(raw?.is_enabled),
+  play_order: Number(raw?.play_order) || 0,
+  nocache: toBool(raw?.nocache),
+  skip_asset_check: toBool(raw?.skip_asset_check),
 });
 
 /** Upsert SignageDeployment rows; push to Pi only when published + allowed + online. */
@@ -253,6 +274,10 @@ const deployToSignage = async (req, post, targetDevices, signageData) => {
                   duration_seconds: mediaDuration,
                   start_date: sched.start_date || null,
                   end_date: sched.end_date || null,
+                  is_enabled: sched.is_enabled,
+                  play_order: sched.play_order,
+                  nocache: sched.nocache,
+                  skip_asset_check: sched.skip_asset_check,
                 },
                 12000,
               )
@@ -434,6 +459,10 @@ router.post("/", auth(["admin", "creator"]), uploadMedia, async (req, res) => {
             end_date: req.body.end_date ? new Date(req.body.end_date) : null,
             priority: Number(req.body.priority) || 1,
             display_group: req.body.display_group || null,
+            is_enabled: toBool(req.body.is_enabled),
+            play_order: Number(req.body.play_order) || 0,
+            nocache: toBool(req.body.nocache),
+            skip_asset_check: toBool(req.body.skip_asset_check),
           },
         },
       },
@@ -510,6 +539,10 @@ router.put("/:id", auth(["admin", "creator"]), uploadMedia, async (req, res) => 
         end_date: req.body.end_date ? new Date(req.body.end_date) : null,
         priority: Number(req.body.priority) || 1,
         display_group: req.body.display_group || null,
+        is_enabled: toBool(req.body.is_enabled),
+        play_order: Number(req.body.play_order) || 0,
+        nocache: toBool(req.body.nocache),
+        skip_asset_check: toBool(req.body.skip_asset_check),
       },
       create: {
         post_id: postId,
@@ -518,6 +551,10 @@ router.put("/:id", auth(["admin", "creator"]), uploadMedia, async (req, res) => 
         end_date: req.body.end_date ? new Date(req.body.end_date) : null,
         priority: Number(req.body.priority) || 1,
         display_group: req.body.display_group || null,
+        is_enabled: toBool(req.body.is_enabled),
+        play_order: Number(req.body.play_order) || 0,
+        nocache: toBool(req.body.nocache),
+        skip_asset_check: toBool(req.body.skip_asset_check),
       },
     });
 

@@ -9,8 +9,8 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (username, password) => {
     const res = await api.post("/auth/login", { username, password });
-    const { token, role, group_id, max_signage_state } = res.data;
-    auth.setAuth(token, role, group_id, { max_signage_state });
+    const { token, role, group_id, max_signage_state, managed_group_ids } = res.data;
+    auth.setAuth(token, role, group_id, { max_signage_state, managed_group_ids });
     return res.data;
   };
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import CreatorSidebar from "../../components/CreatorSidebar";
+import MultiSelect from "../../components/MultiSelect";
 import MediaUploadField from "../../components/MediaUploadField";
 import PostMedia, { mediaSrc } from "../../components/PostMedia";
 import api from "../../api/axios";
@@ -18,11 +19,14 @@ export default function CreatorPosts() {
   const {
     id: userId,
     group_id,
+    managed_group_ids,
+    role: userRole,
     can_manage_other_posts,
     max_signage_state,
   } = useAuthStore();
   const signageStateOptions = creatorSignageStateOptions(max_signage_state);
   const [posts, setPosts] = useState([]);
+  const [groups, setGroups] = useState([]);
   const [devices, setDevices] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -34,6 +38,7 @@ export default function CreatorPosts() {
   const emptyForm = {
     title: "",
     description_markdown: "",
+    group_id: userRole === "admin" ? "" : (group_id || ""),
     publish_to_feed: false,
     publish_to_signage: false,
     status: "draft",
@@ -44,6 +49,10 @@ export default function CreatorPosts() {
     priority: 1,
     display_group: "",
     signage_state: "NORMAL",
+    is_enabled: true,
+    play_order: 0,
+    nocache: false,
+    skip_asset_check: false,
   };
   const [form, setForm, clearForm] = usePersistentState(
     userScopedKey("creator.posts.form", userId),
@@ -66,7 +75,8 @@ export default function CreatorPosts() {
 
   const load = () => {
     const params = new URLSearchParams();
-    if (group_id) params.set("group_id", group_id);
+    const selectedGroup = Number(form?.group_id || group_id);
+    if (selectedGroup) params.set("group_id", selectedGroup);
     if (filters.channel !== "all") params.set("channel", filters.channel);
     if (filters.device_id) params.set("device_id", filters.device_id);
     if (filters.creator_id) params.set("creator_id", filters.creator_id);
@@ -81,6 +91,10 @@ export default function CreatorPosts() {
     api
       .get("/devices")
       .then((r) => setDevices(r.data))
+      .catch(() => {});
+    api
+      .get("/groups")
+      .then((r) => setGroups(r.data))
       .catch(() => {});
   }, [group_id, filters.channel, filters.creator_id, filters.device_id]);
 
@@ -131,6 +145,10 @@ export default function CreatorPosts() {
       priority: post.signage_metadata?.priority || 1,
       display_group: post.signage_metadata?.display_group || "",
       signage_state: post.signage_state || "NORMAL",
+      is_enabled: post.signage_metadata?.is_enabled ?? true,
+      play_order: post.signage_metadata?.play_order || 0,
+      nocache: post.signage_metadata?.nocache ?? false,
+      skip_asset_check: post.signage_metadata?.skip_asset_check ?? false,
     });
     setMediaItems(
       (post.images || []).map((img) => ({
@@ -156,7 +174,11 @@ export default function CreatorPosts() {
       }
 
       const fd = new FormData();
-      const payload = { ...form, group_id };
+      const payload = { ...form };
+      // Creators default to their primary group if none selected
+      if (!payload.group_id && userRole !== "admin") {
+        payload.group_id = group_id;
+      }
       if (mediaItems.length > 0) {
         const videoDur = mediaItems.find((m) => m.media_type === "VIDEO")?.duration_seconds;
         if (videoDur && form.publish_to_signage) {
@@ -258,21 +280,6 @@ export default function CreatorPosts() {
     else setSelectedIds(manageablePosts.map(p => p.id));
   };
 
-  const toggleDevice = (id) => {
-    const deviceId = Number(id);
-    setForm((current) => ({
-      ...current,
-      device_ids: current.device_ids.includes(deviceId)
-        ? current.device_ids.filter((x) => x !== deviceId)
-        : [...current.device_ids, deviceId],
-    }));
-  };
-
-  const toggleBulkDevice = (id) => {
-    const deviceId = Number(id);
-    setBulkDeviceIds(prev => prev.includes(deviceId) ? prev.filter(x => x !== deviceId) : [...prev, deviceId]);
-  };
-
   return (
     <div style={S.layout}>
       <CreatorSidebar />
@@ -308,6 +315,35 @@ export default function CreatorPosts() {
               onSubmit={submit}
               style={{ display: "flex", flexDirection: "column", gap: 10 }}
             >
+              {userRole === "admin" || (managed_group_ids || []).length > 0 ? (
+                <>
+                  <label style={S.label}>Group</label>
+                  <select
+                    style={S.input}
+                    value={form.group_id}
+                    onChange={(e) => setForm({ ...form, group_id: e.target.value })}
+                  >
+                    {userRole === "admin"
+                      ? groups.map((g) => (
+                          <option key={g.id} value={g.id}>
+                            {g.name}
+                          </option>
+                        ))
+                      : [
+                          ...(group_id ? [{ id: group_id, name: groups.find((g) => String(g.id) === String(group_id))?.name || "Primary" }] : []),
+                          ...(managed_group_ids || []).map((gid) => {
+                            const g = groups.find((x) => String(x.id) === String(gid));
+                            return g ? { id: g.id, name: g.name } : null;
+                          }).filter(Boolean),
+                        ].map((g) => (
+                          <option key={g.id} value={g.id}>
+                            {g.name}
+                          </option>
+                        ))}
+                  </select>
+                </>
+              ) : null}
+
               <label style={S.label}>Title</label>
               <input
                 style={S.input}
@@ -395,27 +431,13 @@ export default function CreatorPosts() {
                   }}
                 >
                   <label style={S.label}>Target Displays</label>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    {devices.map((d) => (
-                      <label
-                        key={d.id}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          fontSize: 13,
-                          cursor: "pointer",
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={form.device_ids.includes(d.id)}
-                          onChange={() => toggleDevice(d.id)}
-                        />
-                        {d.device_name} ({d.status})
-                      </label>
-                    ))}
-                  </div>
+                  <MultiSelect
+                    options={devices}
+                    value={form.device_ids}
+                    onChange={(ids) => setForm((current) => ({ ...current, device_ids: ids }))}
+                    placeholder="Search displays..."
+                    labelKey="device_name"
+                  />
 
                   <SignageStateSelect
                     label="Signage priority level"
@@ -482,6 +504,50 @@ export default function CreatorPosts() {
                       setForm({ ...form, display_group: e.target.value })
                     }
                   />
+
+                  <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={form.is_enabled}
+                      onChange={(e) =>
+                        setForm({ ...form, is_enabled: e.target.checked })
+                      }
+                    />
+                    Enabled (is_enabled)
+                  </label>
+
+                  <label style={S.label}>Play Order</label>
+                  <input
+                    style={S.input}
+                    type="number"
+                    min={0}
+                    value={form.play_order}
+                    onChange={(e) =>
+                      setForm({ ...form, play_order: Number(e.target.value) })
+                    }
+                  />
+
+                  <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={form.nocache}
+                      onChange={(e) =>
+                        setForm({ ...form, nocache: e.target.checked })
+                      }
+                    />
+                    No Cache (nocache)
+                  </label>
+
+                  <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={form.skip_asset_check}
+                      onChange={(e) =>
+                        setForm({ ...form, skip_asset_check: e.target.checked })
+                      }
+                    />
+                    Skip Asset Check
+                  </label>
                 </div>
               )}
 
@@ -592,14 +658,13 @@ export default function CreatorPosts() {
                 
                 <div style={{ marginBottom: 10, borderBottom: '1px solid #d1d5db', paddingBottom: 10 }}>
                   <div style={{ fontSize: 12, color: '#4b5563', marginBottom: 6 }}>Target Displays (for Add/Remove Signage):</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                    {devices.map(d => (
-                      <label key={d.id} style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-                        <input type="checkbox" checked={bulkDeviceIds.includes(d.id)} onChange={() => toggleBulkDevice(d.id)} />
-                        {d.device_name}
-                      </label>
-                    ))}
-                  </div>
+                  <MultiSelect
+                    options={devices}
+                    value={bulkDeviceIds}
+                    onChange={setBulkDeviceIds}
+                    placeholder="Search displays..."
+                    labelKey="device_name"
+                  />
                 </div>
 
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>

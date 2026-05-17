@@ -3,25 +3,41 @@ const prisma = require("../db/prisma");
 const auth = require("../middleware/auth");
 const { parseSignageState } = require("../utils/signageStates");
 
+const userListSelect = {
+  id: true,
+  username: true,
+  role: true,
+  group_id: true,
+  auto_approve: true,
+  can_manage_other_posts: true,
+  creator_priority: true,
+  control_lock_minutes: true,
+  max_signage_state: true,
+  created_at: true,
+  group: true,
+  managed_groups: { select: { group_id: true, group: true } },
+};
+
 router.get("/", auth(["admin"]), async (req, res) => {
   const users = await prisma.user.findMany({
-    select: {
-      id: true,
-      username: true,
-      role: true,
-      group_id: true,
-      auto_approve: true,
-      can_manage_other_posts: true,
-      creator_priority: true,
-      control_lock_minutes: true,
-      max_signage_state: true,
-      created_at: true,
-      group: true,
-    },
+    select: userListSelect,
     orderBy: { created_at: "desc" },
   });
   res.json(users);
 });
+
+const parseGroupIds = (value) => {
+  if (value == null) return null;
+  if (Array.isArray(value)) return value.map(Number).filter(Number.isFinite);
+  try {
+    const parsed = typeof value === "string" ? JSON.parse(value) : value;
+    if (Array.isArray(parsed)) return parsed.map(Number).filter(Number.isFinite);
+  } catch {}
+  return String(value)
+    .split(",")
+    .map((s) => Number(s.trim()))
+    .filter(Number.isFinite);
+};
 
 router.put("/:id", auth(["admin"]), async (req, res) => {
   const {
@@ -52,18 +68,8 @@ router.put("/:id", auth(["admin"]), async (req, res) => {
     ...(parsedMaxState && { max_signage_state: parsedMaxState }),
   };
 
-  const select = {
-    id: true,
-    username: true,
-    role: true,
-    group_id: true,
-    auto_approve: true,
-    can_manage_other_posts: true,
-    creator_priority: true,
-    control_lock_minutes: true,
-    max_signage_state: true,
-    group: true,
-  };
+  const managedGroupIds = parseGroupIds(req.body.managed_group_ids);
+  const select = userListSelect;
 
   try {
     const updated = await prisma.$transaction(async (tx) => {
@@ -135,6 +141,18 @@ router.put("/:id", auth(["admin"]), async (req, res) => {
           await tx.user.update({
             where: { id },
             data: { creator_priority: newPrio },
+          });
+        }
+      }
+
+      if (managedGroupIds !== null) {
+        await tx.userGroup.deleteMany({ where: { user_id: id } });
+        if (managedGroupIds.length > 0) {
+          await tx.userGroup.createMany({
+            data: managedGroupIds.map((gid) => ({
+              user_id: id,
+              group_id: gid,
+            })),
           });
         }
       }

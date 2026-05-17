@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import CreatorSidebar from "../../components/CreatorSidebar";
 import Designer from "../../components/Designer";
+import MultiSelect from "../../components/MultiSelect";
 import api from "../../api/axios";
 import useAuthStore from "../../store/useAuthStore";
 import * as S from "../../styles";
@@ -14,8 +15,9 @@ import {
 } from "../../constants/signageStates";
 
 export default function CreatorEditor() {
-  const { id: userId, group_id, max_signage_state } = useAuthStore();
+  const { id: userId, group_id, managed_group_ids, role: userRole, max_signage_state } = useAuthStore();
   const signageStateOptions = creatorSignageStateOptions(max_signage_state);
+  const [groups, setGroups] = useState([]);
   const [devices, setDevices] = useState([]);
   const [exported, setExported] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -23,6 +25,7 @@ export default function CreatorEditor() {
   const emptyForm = {
     title: "",
     description_markdown: "",
+    group_id: userRole === "admin" ? "" : (group_id || ""),
     publish_to_feed: false,
     publish_to_signage: false,
     status: "draft",
@@ -33,6 +36,10 @@ export default function CreatorEditor() {
     priority: 1,
     display_group: "",
     signage_state: "NORMAL",
+    is_enabled: true,
+    play_order: 0,
+    nocache: false,
+    skip_asset_check: false,
   };
   const [form, setForm, clearForm] = usePersistentState(
     userScopedKey("creator.editor.form", userId),
@@ -44,6 +51,10 @@ export default function CreatorEditor() {
       .get("/devices")
       .then((r) => setDevices(r.data))
       .catch(() => {});
+    api
+      .get("/groups")
+      .then((r) => setGroups(r.data))
+      .catch(() => {});
   }, []);
 
   const handleExport = (file, previewUrl) => {
@@ -53,16 +64,6 @@ export default function CreatorEditor() {
       title: current.title || file.name.replace(/\.[^.]+$/, ""),
     }));
     setMsg("");
-  };
-
-  const toggleDevice = (id) => {
-    const deviceId = Number(id);
-    setForm((current) => ({
-      ...current,
-      device_ids: current.device_ids.includes(deviceId)
-        ? current.device_ids.filter((x) => x !== deviceId)
-        : [...current.device_ids, deviceId],
-    }));
   };
 
   const savePost = async (e) => {
@@ -76,7 +77,11 @@ export default function CreatorEditor() {
     setMsg("");
     try {
       const fd = new FormData();
-      Object.entries({ ...form, group_id }).forEach(([key, value]) => {
+      const payload = { ...form };
+      if (!payload.group_id && userRole !== "admin") {
+        payload.group_id = group_id;
+      }
+      Object.entries(payload).forEach(([key, value]) => {
         fd.append(key, Array.isArray(value) ? JSON.stringify(value) : value);
       });
       fd.append("images", exported.file);
@@ -139,6 +144,34 @@ export default function CreatorEditor() {
                 onSubmit={savePost}
                 style={{ display: "flex", flexDirection: "column", gap: 10 }}
               >
+                {userRole === "admin" || (managed_group_ids || []).length > 0 ? (
+                  <>
+                    <label style={S.label}>Group</label>
+                    <select
+                      style={S.input}
+                      value={form.group_id}
+                      onChange={(e) => setForm({ ...form, group_id: e.target.value })}
+                    >
+                      {userRole === "admin"
+                        ? groups.map((g) => (
+                            <option key={g.id} value={g.id}>
+                              {g.name}
+                            </option>
+                          ))
+                        : [
+                            ...(group_id ? [{ id: group_id, name: groups.find((g) => String(g.id) === String(group_id))?.name || "Primary" }] : []),
+                            ...(managed_group_ids || []).map((gid) => {
+                              const g = groups.find((x) => String(x.id) === String(gid));
+                              return g ? { id: g.id, name: g.name } : null;
+                            }).filter(Boolean),
+                          ].map((g) => (
+                            <option key={g.id} value={g.id}>
+                              {g.name}
+                            </option>
+                          ))}
+                    </select>
+                  </>
+                ) : null}
                 <img
                   src={exported.previewUrl}
                   style={{
@@ -218,19 +251,13 @@ export default function CreatorEditor() {
                     }}
                   >
                     <label style={S.label}>Target Displays</label>
-                    {devices.map((d) => (
-                      <label
-                        key={d.id}
-                        style={{ display: "flex", gap: 8, fontSize: 13 }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={form.device_ids.includes(d.id)}
-                          onChange={() => toggleDevice(d.id)}
-                        />
-                        {d.device_name} ({d.status})
-                      </label>
-                    ))}
+                    <MultiSelect
+                      options={devices}
+                      value={form.device_ids}
+                      onChange={(ids) => setForm((current) => ({ ...current, device_ids: ids }))}
+                      placeholder="Search displays..."
+                      labelKey="device_name"
+                    />
 
                     <SignageStateSelect
                       label="Signage priority level"
@@ -297,6 +324,50 @@ export default function CreatorEditor() {
                         setForm({ ...form, display_group: e.target.value })
                       }
                     />
+
+                    <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={form.is_enabled}
+                        onChange={(e) =>
+                          setForm({ ...form, is_enabled: e.target.checked })
+                        }
+                      />
+                      Enabled (is_enabled)
+                    </label>
+
+                    <label style={S.label}>Play Order</label>
+                    <input
+                      style={S.input}
+                      type="number"
+                      min={0}
+                      value={form.play_order}
+                      onChange={(e) =>
+                        setForm({ ...form, play_order: Number(e.target.value) })
+                      }
+                    />
+
+                    <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={form.nocache}
+                        onChange={(e) =>
+                          setForm({ ...form, nocache: e.target.checked })
+                        }
+                      />
+                      No Cache (nocache)
+                    </label>
+
+                    <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={form.skip_asset_check}
+                        onChange={(e) =>
+                          setForm({ ...form, skip_asset_check: e.target.checked })
+                        }
+                      />
+                      Skip Asset Check
+                    </label>
                   </div>
                 )}
 

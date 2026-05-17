@@ -18,6 +18,20 @@ model Group {
   playlists          Playlist[]
   posts              Post[]
   users              User[]
+  user_memberships   UserGroup[]
+}
+
+model UserGroup {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  group_id   Int
+  created_at DateTime @default(now())
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  group      Group    @relation(fields: [group_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, group_id])
+  @@index([user_id])
+  @@index([group_id])
 }
 
 model DeviceGroup {
@@ -47,6 +61,7 @@ model User {
   device_locks           Device[] @relation("DeviceControlLock")
   posts                  Post[]
   group                  Group?   @relation(fields: [group_id], references: [id])
+  managed_groups         UserGroup[]
 }
 
 model Post {
@@ -92,6 +107,10 @@ model SignageMetadata {
   end_date         DateTime?
   priority         Int       @default(1)
   display_group    String?
+  is_enabled       Boolean   @default(true)
+  play_order       Int       @default(0)
+  nocache          Boolean   @default(false)
+  skip_asset_check Boolean   @default(false)
   created_at       DateTime  @default(now())
   post             Post      @relation(fields: [post_id], references: [id], onDelete: Cascade)
 }
@@ -133,6 +152,10 @@ model SignageDeployment {
   end_date         DateTime?
   priority         Int       @default(1)
   display_group    String?
+  is_enabled       Boolean   @default(true)
+  play_order       Int       @default(0)
+  nocache          Boolean   @default(false)
+  skip_asset_check Boolean   @default(false)
   status           String    @default("pending")
   last_error       String?
   created_at       DateTime  @default(now())

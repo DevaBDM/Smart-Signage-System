@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import AdminSidebar from "../../components/AdminSidebar";
+import MultiSelect from "../../components/MultiSelect";
 import api from "../../api/axios";
 import * as S from "../../styles";
 
@@ -114,16 +115,6 @@ export default function AdminDevices() {
     } catch (e) {
       setMsg(e.response?.data?.error || "❌ Device update failed.");
     }
-  };
-
-  const toggleGroup = (target, setTarget, id) => {
-    const groupId = Number(id);
-    setTarget({
-      ...target,
-      group_ids: target.group_ids.includes(groupId)
-        ? target.group_ids.filter((x) => x !== groupId)
-        : [...target.group_ids, groupId],
-    });
   };
 
   const resetToDefaults = async () => {
@@ -288,18 +279,12 @@ export default function AdminDevices() {
               {!form.all_groups && (
                 <div>
                   <label style={S.label}>Additional Groups</label>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    {groups.map((d) => (
-                      <label key={d.id} style={{ display: "flex", gap: 8, fontSize: 13 }}>
-                        <input
-                          type="checkbox"
-                          checked={form.group_ids.includes(d.id)}
-                          onChange={() => toggleGroup(form, setForm, d.id)}
-                        />
-                        {d.name}
-                      </label>
-                    ))}
-                  </div>
+                  <MultiSelect
+                    options={groups.filter((g) => String(g.id) !== String(form.group_id))}
+                    value={form.group_ids.filter((id) => String(id) !== String(form.group_id))}
+                    onChange={(ids) => setForm({ ...form, group_ids: ids })}
+                    placeholder="Search departments..."
+                  />
                 </div>
               )}
               <button
@@ -567,20 +552,12 @@ export default function AdminDevices() {
                 {!editForm.all_groups && (
                   <div>
                     <label style={S.label}>Additional Groups</label>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                      {groups.map((d) => (
-                        <label key={d.id} style={{ display: "flex", gap: 8, fontSize: 13 }}>
-                          <input
-                            type="checkbox"
-                            checked={editForm.group_ids.includes(d.id)}
-                            onChange={() =>
-                              toggleGroup(editForm, setEditForm, d.id)
-                            }
-                          />
-                          {d.name}
-                        </label>
-                      ))}
-                    </div>
+                    <MultiSelect
+                      options={groups.filter((g) => String(g.id) !== String(editForm.group_id))}
+                      value={editForm.group_ids.filter((id) => String(id) !== String(editForm.group_id))}
+                      onChange={(ids) => setEditForm({ ...editForm, group_ids: ids })}
+                      placeholder="Search departments..."
+                    />
                   </div>
                 )}
                 <button
