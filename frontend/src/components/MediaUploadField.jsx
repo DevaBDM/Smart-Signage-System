@@ -164,7 +164,15 @@ export default function MediaUploadField({ items = [], onChange, max = 10, label
   };
 
   const removeItem = (index) => {
+    const target = items[index];
     onChange(items.filter((_, i) => i !== index));
+    if (target?.image_path) {
+      api
+        .delete("/media", { data: { image_path: target.image_path } })
+        .catch(() => {
+          // Best-effort cleanup; UI removal already succeeded.
+        });
+    }
   };
 
   return (

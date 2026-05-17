@@ -9,7 +9,9 @@ const {
   isVideoMime,
   processMediaFile,
   probeVideo,
+  deleteMediaFile,
 } = require("../utils/mediaProcessor");
+const prisma = require("../db/prisma");
 
 const storage = multer.diskStorage({
   destination: TEMP_DIR,
@@ -83,6 +85,28 @@ router.post("/process", auth(["admin", "creator"]), uploadSingle, async (req, re
     res.json(processed);
   } catch (e) {
     res.status(400).json({ error: e.message || "Media processing failed" });
+  }
+});
+
+/** Remove an orphan processed media file (one not yet attached to any post). */
+router.delete("/", auth(["admin", "creator"]), async (req, res) => {
+  const imagePath = req.body?.image_path || req.query?.image_path;
+  if (!imagePath || typeof imagePath !== "string") {
+    return res.status(400).json({ error: "image_path required" });
+  }
+  try {
+    const inUse = await prisma.postImage.findFirst({
+      where: { image_path: imagePath },
+      select: { id: true },
+    });
+    if (inUse) {
+      // Attached to a post — let post update/delete clean it up.
+      return res.json({ deleted: false, reason: "in_use" });
+    }
+    deleteMediaFile(imagePath);
+    return res.json({ deleted: true });
+  } catch (e) {
+    return res.status(500).json({ error: e.message || "Delete failed" });
   }
 });
 

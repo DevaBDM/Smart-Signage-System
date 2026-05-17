@@ -57,7 +57,10 @@ export default function CreatorPosts() {
       creator_id: "",
     },
   );
-  const [mediaItems, setMediaItems] = useState([]);
+  const [mediaItems, setMediaItems, clearMediaItems] = usePersistentState(
+    userScopedKey("creator.posts.mediaItems", userId),
+    [],
+  );
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -109,7 +112,7 @@ export default function CreatorPosts() {
     setEditingId(null);
     setMsg("");
     clearForm();
-    setMediaItems([]);
+    clearMediaItems();
   };
 
   const startEdit = (post) => {
@@ -185,7 +188,7 @@ export default function CreatorPosts() {
       }
       resetForm();
       load();
-    } catch (e) {
+    } catch (err) {
       const errMsg =
         err.response?.data?.error ||
         (err.response?.status === 404
