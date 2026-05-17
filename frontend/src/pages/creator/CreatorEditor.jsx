@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import CreatorSidebar from "../../components/CreatorSidebar";
 import Designer from "../../components/Designer";
 import MultiSelect from "../../components/MultiSelect";
@@ -25,7 +25,7 @@ export default function CreatorEditor() {
   const emptyForm = {
     title: "",
     description_markdown: "",
-    group_id: userRole === "admin" ? "" : (group_id || ""),
+    group_ids: userRole === "admin" ? [] : (group_id ? [group_id] : []),
     publish_to_feed: false,
     publish_to_signage: false,
     status: "draft",
@@ -57,6 +57,77 @@ export default function CreatorEditor() {
       .catch(() => {});
   }, []);
 
+  const lastGroupIds = useRef("");
+  const lastDeviceIds = useRef("");
+  const devicesLoaded = useRef(false);
+
+  useEffect(() => {
+    if (devices.length > 0) devicesLoaded.current = true;
+  }, [devices.length]);
+
+  // group_ids → device_ids
+  useEffect(() => {
+    if (!devicesLoaded.current) return;
+    const currentGroups = (form.group_ids || []).join(",");
+    if (currentGroups === lastGroupIds.current) return;
+    const selectedGroupIds = new Set((form.group_ids || []).map(Number));
+    const autoDeviceIds = selectedGroupIds.size === 0
+      ? []
+      : devices
+      .filter((d) => {
+        if (d.all_groups) return true;
+        if (selectedGroupIds.has(Number(d.group_id))) return true;
+        if (d.groups?.some((dg) => selectedGroupIds.has(Number(dg.group_id)))) return true;
+        return false;
+      })
+      .map((d) => d.id);
+    const next = [...new Set([...autoDeviceIds])];
+    const nextDevices = next.join(",");
+    if (nextDevices === (form.device_ids || []).join(",")) {
+      lastGroupIds.current = currentGroups;
+      return;
+    }
+    lastGroupIds.current = currentGroups;
+    lastDeviceIds.current = nextDevices;
+    setForm((current) => ({ ...current, device_ids: next }));
+  }, [form.group_ids?.join(",")]);
+
+  // device_ids → group_ids
+  useEffect(() => {
+    if (!devicesLoaded.current) return;
+    const currentDevices = (form.device_ids || []).join(",");
+    if (currentDevices === lastDeviceIds.current) return;
+    const selectedDeviceIds = new Set((form.device_ids || []).map(Number));
+    const availableGroupIds = [
+      ...(group_id ? [group_id] : []),
+      ...(managed_group_ids || []),
+    ];
+    const nextGroupIds = [];
+    for (const gid of availableGroupIds) {
+      const groupDevices = devices.filter((d) => {
+        if (d.all_groups) return true;
+        if (Number(d.group_id) === Number(gid)) return true;
+        if (d.groups?.some((dg) => Number(dg.group_id) === Number(gid))) return true;
+        return false;
+      });
+      if (groupDevices.length === 0) continue;
+      const allSelected = groupDevices.every((d) => selectedDeviceIds.has(d.id));
+      const noneSelected = groupDevices.every((d) => !selectedDeviceIds.has(d.id));
+      if (allSelected) nextGroupIds.push(gid);
+      else if (!noneSelected) {
+        if ((form.group_ids || []).includes(gid)) nextGroupIds.push(gid);
+      }
+    }
+    const nextGroups = nextGroupIds.join(",");
+    if (nextGroups === (form.group_ids || []).join(",")) {
+      lastDeviceIds.current = currentDevices;
+      return;
+    }
+    lastDeviceIds.current = currentDevices;
+    lastGroupIds.current = nextGroups;
+    setForm((current) => ({ ...current, group_ids: nextGroupIds }));
+  }, [form.device_ids?.join(",")]);
+
   const handleExport = (file, previewUrl) => {
     setExported({ file, previewUrl });
     setForm((current) => ({
@@ -78,15 +149,19 @@ export default function CreatorEditor() {
     try {
       const fd = new FormData();
       const payload = { ...form };
-      if (!payload.group_id && userRole !== "admin") {
-        payload.group_id = group_id;
+      const rawGroupIds = Array.isArray(payload.group_ids) ? payload.group_ids : [];
+      if (rawGroupIds.length === 0 && userRole !== "admin") {
+        payload.group_ids = group_id ? [group_id] : [];
       }
+      fd.append("group_ids", JSON.stringify(Array.isArray(payload.group_ids) ? payload.group_ids : rawGroupIds));
       Object.entries(payload).forEach(([key, value]) => {
+        if (key === "group_ids") return;
         fd.append(key, Array.isArray(value) ? JSON.stringify(value) : value);
       });
       fd.append("images", exported.file);
-      await api.post("/posts", fd);
-      setMsg("✅ Design saved to My Posts.");
+      const res = await api.post("/posts", fd);
+      const count = res.data?.count || 1;
+      setMsg(`✅ Design saved to My Posts (${count} group${count > 1 ? "s" : ""}).`);
       setExported(null);
       clearForm();
     } catch (e) {
@@ -144,32 +219,30 @@ export default function CreatorEditor() {
                 onSubmit={savePost}
                 style={{ display: "flex", flexDirection: "column", gap: 10 }}
               >
-                {userRole === "admin" || (managed_group_ids || []).length > 0 ? (
+                {userRole === "admin" || group_id ? (
                   <>
-                    <label style={S.label}>Group</label>
-                    <select
-                      style={S.input}
-                      value={form.group_id}
-                      onChange={(e) => setForm({ ...form, group_id: e.target.value })}
-                    >
-                      {userRole === "admin"
-                        ? groups.map((g) => (
-                            <option key={g.id} value={g.id}>
-                              {g.name}
-                            </option>
-                          ))
+                    <label style={S.label}>Groups</label>
+                    {(() => {
+                      const available = userRole === "admin"
+                        ? groups
                         : [
                             ...(group_id ? [{ id: group_id, name: groups.find((g) => String(g.id) === String(group_id))?.name || "Primary" }] : []),
                             ...(managed_group_ids || []).map((gid) => {
                               const g = groups.find((x) => String(x.id) === String(gid));
                               return g ? { id: g.id, name: g.name } : null;
                             }).filter(Boolean),
-                          ].map((g) => (
-                            <option key={g.id} value={g.id}>
-                              {g.name}
-                            </option>
-                          ))}
-                    </select>
+                          ];
+                      return available.length <= 1 ? (
+                        <input style={{ ...S.input, background: "#f3f4f6" }} value={available[0]?.name || ""} disabled />
+                      ) : (
+                        <MultiSelect
+                          options={available}
+                          value={form.group_ids || []}
+                          onChange={(ids) => setForm({ ...form, group_ids: ids })}
+                          placeholder="Select groups..."
+                        />
+                      );
+                    })()}
                   </>
                 ) : null}
                 <img

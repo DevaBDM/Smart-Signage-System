@@ -1,4 +1,4 @@
-import { createContext, useContext } from "react";
+import { createContext, useContext, useEffect } from "react";
 import useAuthStore from "../store/useAuthStore";
 import api from "../api/axios";
 
@@ -6,6 +6,17 @@ const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const auth = useAuthStore();
+
+  useEffect(() => {
+    if (!auth.token) return;
+    api
+      .get("/auth/me")
+      .then((res) => {
+        const { role, group_id, max_signage_state, managed_group_ids } = res.data;
+        auth.setAuth(auth.token, role, group_id, { max_signage_state, managed_group_ids });
+      })
+      .catch(() => {});
+  }, []);
 
   const login = async (username, password) => {
     const res = await api.post("/auth/login", { username, password });

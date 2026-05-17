@@ -390,6 +390,7 @@ router.post("/", auth(["admin", "creator"]), uploadMedia, async (req, res) => {
     title,
     description_markdown,
     group_id,
+    group_ids,
     allowed_on_feed,
     allowed_on_signage,
     publish_to_feed,
@@ -397,12 +398,27 @@ router.post("/", auth(["admin", "creator"]), uploadMedia, async (req, res) => {
     status,
     device_ids,
   } = req.body;
-  const targetGroupId =
-    req.user.role === "admin" ? Number(group_id) : req.user.group_id;
-  if (!targetGroupId || !canManage(req.user, targetGroupId)) return res.status(403).json({ error: "Invalid group access" });
+
+  const rawGroupIds = group_ids !== undefined
+    ? (typeof group_ids === "string" ? JSON.parse(group_ids) : group_ids)
+    : group_id !== undefined
+    ? [group_id]
+    : [];
+  const targetGroupIds = Array.isArray(rawGroupIds)
+    ? rawGroupIds.map(Number).filter((n) => Number.isFinite(n) && n > 0)
+    : [];
+
+  if (targetGroupIds.length === 0) {
+    return res.status(400).json({ error: "At least one group is required" });
+  }
+  for (const gid of targetGroupIds) {
+    if (!canManage(req.user, gid)) {
+      return res.status(403).json({ error: `Invalid group access for group ${gid}` });
+    }
+  }
 
   const selectedDeviceIds = parseDeviceIds(device_ids);
-  
+
   const creator = await prisma.user.findUnique({ where: { id: req.user.id } });
   const isAutoApprove = creator?.auto_approve || req.user.role === 'admin';
 
@@ -429,56 +445,58 @@ router.post("/", auth(["admin", "creator"]), uploadMedia, async (req, res) => {
       Number(req.body.duration_seconds) ||
       primaryMediaDuration(mediaRows, 10);
 
-    const post = await prisma.post.create({
-      data: {
-        title,
-        slug: slugify(title),
-        description_markdown: description_markdown || null,
-        group_id: Number(targetGroupId),
-        created_by: req.user.id,
-        signage_state: signageState,
-        // Permissions
-        allowed_on_feed: isAutoApprove ? requestedFeed : false,
-        allowed_on_signage: isAutoApprove ? requestedSignage : false,
-        // Intent
-        requested_feed: requestedFeed,
-        requested_signage: requestedSignage,
-        status: status || "draft",
-        images: {
-          create: (mediaRows || []).map((m, i) => ({
-            image_path: m.image_path,
-            media_type: m.media_type || "IMAGE",
-            duration_seconds: m.duration_seconds ?? null,
-            order_index: i,
-          })),
-        },
-        signage_metadata: {
-          create: {
-            duration_seconds: signageDuration,
-            start_date: req.body.start_date ? new Date(req.body.start_date) : null,
-            end_date: req.body.end_date ? new Date(req.body.end_date) : null,
-            priority: Number(req.body.priority) || 1,
-            display_group: req.body.display_group || null,
-            is_enabled: toBool(req.body.is_enabled),
-            play_order: Number(req.body.play_order) || 0,
-            nocache: toBool(req.body.nocache),
-            skip_asset_check: toBool(req.body.skip_asset_check),
+    const createdPosts = [];
+    for (const targetGroupId of targetGroupIds) {
+      const post = await prisma.post.create({
+        data: {
+          title,
+          slug: slugify(title + "-" + targetGroupId),
+          description_markdown: description_markdown || null,
+          group_id: Number(targetGroupId),
+          created_by: req.user.id,
+          signage_state: signageState,
+          // Permissions
+          allowed_on_feed: isAutoApprove ? requestedFeed : false,
+          allowed_on_signage: isAutoApprove ? requestedSignage : false,
+          // Intent
+          requested_feed: requestedFeed,
+          requested_signage: requestedSignage,
+          status: status || "draft",
+          images: {
+            create: (mediaRows || []).map((m, i) => ({
+              image_path: m.image_path,
+              media_type: m.media_type || "IMAGE",
+              duration_seconds: m.duration_seconds ?? null,
+              order_index: i,
+            })),
+          },
+          signage_metadata: {
+            create: {
+              duration_seconds: signageDuration,
+              start_date: req.body.start_date ? new Date(req.body.start_date) : null,
+              end_date: req.body.end_date ? new Date(req.body.end_date) : null,
+              priority: Number(req.body.priority) || 1,
+              display_group: req.body.display_group || null,
+              is_enabled: toBool(req.body.is_enabled),
+              play_order: Number(req.body.play_order) || 0,
+              nocache: toBool(req.body.nocache),
+              skip_asset_check: toBool(req.body.skip_asset_check),
+            },
           },
         },
-      },
-      include: { images: true, signage_metadata: true },
-    });
+        include: { images: true, signage_metadata: true },
+      });
 
-    // Always create deployment records
-    const targetDevices = await prisma.device.findMany({ where: { id: { in: selectedDeviceIds } } });
-    const signage_deployments = await deployToSignage(
-      req,
-      post,
-      targetDevices,
-      req.body,
-    );
+      // Deployment records
+      if (selectedDeviceIds.length > 0) {
+        const targetDevices = await prisma.device.findMany({ where: { id: { in: selectedDeviceIds } } });
+        await deployToSignage(req, post, targetDevices, req.body);
+      }
 
-    res.json({ ...post, signage_deployments });
+      createdPosts.push(post);
+    }
+
+    res.json({ posts: createdPosts, count: createdPosts.length });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }

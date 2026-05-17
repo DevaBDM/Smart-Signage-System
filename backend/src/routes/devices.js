@@ -17,14 +17,18 @@ const toBool = (val) => val === true || val === "true";
 // List devices. Admins see all; creators see displays in their group or all groups.
 router.get("/", auth(["admin", "creator"]), async (req, res) => {
   const { sortBy = "id", sortOrder = "asc" } = req.query;
+  const allowedGroupIds = [
+    req.user.group_id,
+    ...(req.user.managed_group_ids || []),
+  ].filter(Boolean);
   const where =
     req.user.role === "admin"
       ? {}
       : {
           OR: [
             { all_groups: true },
-            { group_id: req.user.group_id },
-            { groups: { some: { group_id: req.user.group_id } } },
+            { group_id: { in: allowedGroupIds } },
+            { groups: { some: { group_id: { in: allowedGroupIds } } } },
           ],
         };
 

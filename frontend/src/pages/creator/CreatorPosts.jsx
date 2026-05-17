@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import CreatorSidebar from "../../components/CreatorSidebar";
 import MultiSelect from "../../components/MultiSelect";
 import MediaUploadField from "../../components/MediaUploadField";
@@ -38,7 +38,7 @@ export default function CreatorPosts() {
   const emptyForm = {
     title: "",
     description_markdown: "",
-    group_id: userRole === "admin" ? "" : (group_id || ""),
+    group_ids: userRole === "admin" ? [] : (group_id ? [group_id] : []),
     publish_to_feed: false,
     publish_to_signage: false,
     status: "draft",
@@ -75,7 +75,7 @@ export default function CreatorPosts() {
 
   const load = () => {
     const params = new URLSearchParams();
-    const selectedGroup = Number(form?.group_id || group_id);
+    const selectedGroup = Number(form?.group_ids?.[0] || group_id);
     if (selectedGroup) params.set("group_id", selectedGroup);
     if (filters.channel !== "all") params.set("channel", filters.channel);
     if (filters.device_id) params.set("device_id", filters.device_id);
@@ -96,7 +96,7 @@ export default function CreatorPosts() {
       .get("/groups")
       .then((r) => setGroups(r.data))
       .catch(() => {});
-  }, [group_id, filters.channel, filters.creator_id, filters.device_id]);
+  }, [group_id, form.group_ids, filters.channel, filters.creator_id, filters.device_id]);
 
   useEffect(() => {
     if (!group_id) {
@@ -108,6 +108,77 @@ export default function CreatorPosts() {
       .then((r) => setGroupCreators(r.data))
       .catch(() => setGroupCreators([]));
   }, [group_id]);
+
+  const lastGroupIds = useRef("");
+  const lastDeviceIds = useRef("");
+  const devicesLoaded = useRef(false);
+
+  useEffect(() => {
+    if (devices.length > 0) devicesLoaded.current = true;
+  }, [devices.length]);
+
+  // group_ids → device_ids
+  useEffect(() => {
+    if (editingId || !devicesLoaded.current) return;
+    const currentGroups = (form.group_ids || []).join(",");
+    if (currentGroups === lastGroupIds.current) return;
+    const selectedGroupIds = new Set((form.group_ids || []).map(Number));
+    const autoDeviceIds = selectedGroupIds.size === 0
+      ? []
+      : devices
+      .filter((d) => {
+        if (d.all_groups) return true;
+        if (selectedGroupIds.has(Number(d.group_id))) return true;
+        if (d.groups?.some((dg) => selectedGroupIds.has(Number(dg.group_id)))) return true;
+        return false;
+      })
+      .map((d) => d.id);
+    const next = [...new Set([...autoDeviceIds])];
+    const nextDevices = next.join(",");
+    if (nextDevices === (form.device_ids || []).join(",")) {
+      lastGroupIds.current = currentGroups;
+      return;
+    }
+    lastGroupIds.current = currentGroups;
+    lastDeviceIds.current = nextDevices;
+    setForm((current) => ({ ...current, device_ids: next }));
+  }, [form.group_ids?.join(",")]);
+
+  // device_ids → group_ids
+  useEffect(() => {
+    if (editingId || !devicesLoaded.current) return;
+    const currentDevices = (form.device_ids || []).join(",");
+    if (currentDevices === lastDeviceIds.current) return;
+    const selectedDeviceIds = new Set((form.device_ids || []).map(Number));
+    const availableGroupIds = [
+      ...(group_id ? [group_id] : []),
+      ...(managed_group_ids || []),
+    ];
+    const nextGroupIds = [];
+    for (const gid of availableGroupIds) {
+      const groupDevices = devices.filter((d) => {
+        if (d.all_groups) return true;
+        if (Number(d.group_id) === Number(gid)) return true;
+        if (d.groups?.some((dg) => Number(dg.group_id) === Number(gid))) return true;
+        return false;
+      });
+      if (groupDevices.length === 0) continue;
+      const allSelected = groupDevices.every((d) => selectedDeviceIds.has(d.id));
+      const noneSelected = groupDevices.every((d) => !selectedDeviceIds.has(d.id));
+      if (allSelected) nextGroupIds.push(gid);
+      else if (!noneSelected) {
+        if ((form.group_ids || []).includes(gid)) nextGroupIds.push(gid);
+      }
+    }
+    const nextGroups = nextGroupIds.join(",");
+    if (nextGroups === (form.group_ids || []).join(",")) {
+      lastDeviceIds.current = currentDevices;
+      return;
+    }
+    lastDeviceIds.current = currentDevices;
+    lastGroupIds.current = nextGroups;
+    setForm((current) => ({ ...current, group_ids: nextGroupIds }));
+  }, [form.device_ids?.join(",")]);
 
   const onChannelFilterChange = (channel) => {
     setFilters((f) => ({
@@ -135,6 +206,7 @@ export default function CreatorPosts() {
     setForm({
       title: post.title,
       description_markdown: post.description_markdown || "",
+      group_ids: post.group_id ? [post.group_id] : [],
       publish_to_feed: !!(post.requested_feed || post.allowed_on_feed),
       publish_to_signage: !!(post.requested_signage || post.allowed_on_signage),
       status: post.status,
@@ -175,9 +247,17 @@ export default function CreatorPosts() {
 
       const fd = new FormData();
       const payload = { ...form };
-      // Creators default to their primary group if none selected
-      if (!payload.group_id && userRole !== "admin") {
-        payload.group_id = group_id;
+      // Ensure group_ids is an array
+      const rawGroupIds = Array.isArray(payload.group_ids) ? payload.group_ids : [];
+      if (rawGroupIds.length === 0 && userRole !== "admin") {
+        payload.group_ids = group_id ? [group_id] : [];
+      }
+      if (editingId) {
+        // Editing: send single group_id
+        fd.append("group_id", String(rawGroupIds[0] || group_id || ""));
+      } else {
+        // Creating: send group_ids array
+        fd.append("group_ids", JSON.stringify(Array.isArray(payload.group_ids) ? payload.group_ids : rawGroupIds));
       }
       if (mediaItems.length > 0) {
         const videoDur = mediaItems.find((m) => m.media_type === "VIDEO")?.duration_seconds;
@@ -205,8 +285,9 @@ export default function CreatorPosts() {
         await api.put(`/posts/${editingId}`, fd, saveOpts);
         setMsg("✅ Post updated!");
       } else {
-        await api.post("/posts", fd, saveOpts);
-        setMsg("✅ Post created!");
+        const res = await api.post("/posts", fd, saveOpts);
+        const count = res.data?.count || 1;
+        setMsg(`✅ Created ${count} post${count > 1 ? "s" : ""} across ${count} group${count > 1 ? "s" : ""}!`);
       }
       resetForm();
       load();
@@ -315,32 +396,32 @@ export default function CreatorPosts() {
               onSubmit={submit}
               style={{ display: "flex", flexDirection: "column", gap: 10 }}
             >
-              {userRole === "admin" || (managed_group_ids || []).length > 0 ? (
+              {userRole === "admin" || group_id ? (
                 <>
-                  <label style={S.label}>Group</label>
-                  <select
-                    style={S.input}
-                    value={form.group_id}
-                    onChange={(e) => setForm({ ...form, group_id: e.target.value })}
-                  >
-                    {userRole === "admin"
-                      ? groups.map((g) => (
-                          <option key={g.id} value={g.id}>
-                            {g.name}
-                          </option>
-                        ))
+                  <label style={S.label}>Group{editingId ? "" : "s"}</label>
+                  {(() => {
+                    const available = userRole === "admin"
+                      ? groups
                       : [
                           ...(group_id ? [{ id: group_id, name: groups.find((g) => String(g.id) === String(group_id))?.name || "Primary" }] : []),
                           ...(managed_group_ids || []).map((gid) => {
                             const g = groups.find((x) => String(x.id) === String(gid));
                             return g ? { id: g.id, name: g.name } : null;
                           }).filter(Boolean),
-                        ].map((g) => (
-                          <option key={g.id} value={g.id}>
-                            {g.name}
-                          </option>
-                        ))}
-                  </select>
+                        ];
+                    if (editingId) {
+                      const current = groups.find((g) => String(g.id) === String(form.group_ids?.[0]));
+                      return <input style={{ ...S.input, background: "#f3f4f6" }} value={current?.name || "—"} disabled />;
+                    }
+                    return (
+                      <MultiSelect
+                        options={available}
+                        value={form.group_ids || []}
+                        onChange={(ids) => setForm({ ...form, group_ids: ids })}
+                        placeholder="Select groups..."
+                      />
+                    );
+                  })()}
                 </>
               ) : null}
 

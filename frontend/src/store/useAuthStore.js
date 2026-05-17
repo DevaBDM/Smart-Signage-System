@@ -23,6 +23,14 @@ const managedGroupIds = (user) => {
   }
 };
 
+const readManagedGroups = () => {
+  try {
+    const raw = localStorage.getItem("managed_group_ids");
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return managedGroupIds(storedUser);
+};
+
 const useAuthStore = create((set) => ({
   token: storedToken,
   id: storedUser.id || null,
@@ -35,7 +43,7 @@ const useAuthStore = create((set) => ({
     "NORMAL",
   role: localStorage.getItem("role") || null,
   group_id: localStorage.getItem("group_id") || null,
-  managed_group_ids: managedGroupIds(storedUser),
+  managed_group_ids: readManagedGroups(),
 
   setAuth: (token, role, group_id, profile = {}) => {
     const user = decodeToken(token);
@@ -46,6 +54,7 @@ const useAuthStore = create((set) => ({
     localStorage.setItem("role", role);
     localStorage.setItem("group_id", group_id ?? "");
     localStorage.setItem("max_signage_state", max_signage_state);
+    localStorage.setItem("managed_group_ids", JSON.stringify(mgIds));
     set({
       token,
       id: user.id || null,
@@ -64,6 +73,7 @@ const useAuthStore = create((set) => ({
     localStorage.removeItem("role");
     localStorage.removeItem("group_id");
     localStorage.removeItem("max_signage_state");
+    localStorage.removeItem("managed_group_ids");
     set({
       token: null,
       id: null,

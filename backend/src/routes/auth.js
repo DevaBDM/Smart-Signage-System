@@ -100,6 +100,26 @@ router.post("/register", requireAdminAfterFirstUser, async (req, res) => {
   }
 });
 
+router.get("/me", auth(), async (req, res) => {
+  const user = await prisma.user.findUnique({
+    where: { id: req.user.id },
+    include: { managed_groups: { select: { group_id: true } } },
+  });
+  if (!user) return res.status(404).json({ error: "User not found" });
+  const managedGroupIds = (user.managed_groups || []).map((g) => g.group_id);
+  res.json({
+    id: user.id,
+    username: user.username,
+    role: user.role,
+    group_id: user.group_id,
+    can_manage_other_posts: user.can_manage_other_posts,
+    creator_priority: user.creator_priority,
+    control_lock_minutes: user.control_lock_minutes,
+    max_signage_state: user.max_signage_state,
+    managed_group_ids: managedGroupIds,
+  });
+});
+
 router.post("/login", async (req, res) => {
   const { username, password } = req.body;
   const user = await prisma.user.findUnique({

@@ -10,9 +10,21 @@ router.get("/states", (_req, res) => {
   });
 });
 
-router.get("/", auth(["admin"]), async (req, res) => {
+router.get("/", auth(["admin", "creator"]), async (req, res) => {
+  const where =
+    req.user.role === "admin"
+      ? {}
+      : {
+          id: {
+            in: [
+              req.user.group_id,
+              ...(req.user.managed_group_ids || []),
+            ].filter(Boolean),
+          },
+        };
   res.json(
     await prisma.group.findMany({
+      where,
       include: {
         _count: {
           select: {
