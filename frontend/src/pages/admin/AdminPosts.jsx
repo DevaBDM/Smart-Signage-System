@@ -2,9 +2,7 @@ import { useEffect, useState } from "react";
 import AdminSidebar from "../../components/AdminSidebar";
 import api from "../../api/axios";
 import * as S from "../../styles";
-import { assetOrigin } from "../../config/apiBase";
-
-const BASE = assetOrigin();
+import PostMedia from "../../components/PostMedia";
 
 export default function AdminPosts() {
   const [posts, setPosts] = useState([]);
@@ -73,14 +71,15 @@ export default function AdminPosts() {
                 <tr key={p.id}>
                   <td style={S.td}>
                     {p.images?.[0] ? (
-                      <img
-                        src={`${BASE}${p.images[0].image_path}`}
+                      <PostMedia
+                        item={p.images[0]}
                         style={{
                           width: 48,
                           height: 48,
                           objectFit: "cover",
                           borderRadius: 6,
                         }}
+                        videoProps={{ style: { width: 48, height: 48 } }}
                       />
                     ) : (
                       <div

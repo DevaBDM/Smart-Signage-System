@@ -5,6 +5,7 @@ const {
   syncSignageAssetList,
   upsertSignageAsset,
 } = require("../utils/signageAssets");
+const { mediaFileExists } = require("../utils/mediaProcessor");
 const {
   postVisibleForGroup,
   compareByUrgency,
@@ -142,6 +143,7 @@ router.get("/device/:device_id/deployments", async (req, res) => {
 
   const visible = deployments
     .filter((deployment) => deployment.post.images[0])
+    .filter((deployment) => mediaFileExists(deployment.post.images[0].image_path))
     .filter((deployment) =>
       postVisibleForGroup(
         deployment.post.signage_state,
@@ -161,8 +163,11 @@ router.get("/device/:device_id/deployments", async (req, res) => {
       deployment_id: deployment.id,
       post_id: deployment.post_id,
       title: deployment.post.title,
-      image_url: deployment.post.images[0].image_path,
-      duration_seconds: deployment.duration_seconds,
+        image_url: deployment.post.images[0].image_path,
+        media_type: deployment.post.images[0].media_type || "IMAGE",
+        duration_seconds:
+          deployment.post.images[0].duration_seconds ||
+          deployment.duration_seconds,
       start_date: deployment.start_date,
       end_date: deployment.end_date,
       priority: deployment.priority,
@@ -222,7 +227,15 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
   }
 
   const image = post.images[0];
-  if (!image) return res.status(400).json({ error: "Post has no image" });
+  if (!image) return res.status(400).json({ error: "Post has no media" });
+  if (!mediaFileExists(image.image_path)) {
+    return res.status(400).json({
+      error: `Media file missing on server: ${image.image_path}. Re-upload the video on the post.`,
+    });
+  }
+
+  const mediaDuration =
+    image.duration_seconds || Number(duration_seconds) || 10;
 
   const device = await prisma.device.findUnique({
     where: { id: Number(device_id) },
@@ -252,7 +265,7 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
   await prisma.signageMetadata.upsert({
     where: { post_id: Number(post_id) },
     update: {
-      duration_seconds: Number(duration_seconds) || 10,
+      duration_seconds: mediaDuration,
       start_date: start_date ? new Date(start_date) : null,
       end_date: end_date ? new Date(end_date) : null,
       priority: Number(priority) || 1,
@@ -260,7 +273,7 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
     },
     create: {
       post_id: Number(post_id),
-      duration_seconds: Number(duration_seconds) || 10,
+      duration_seconds: mediaDuration,
       start_date: start_date ? new Date(start_date) : null,
       end_date: end_date ? new Date(end_date) : null,
       priority: Number(priority) || 1,
@@ -283,7 +296,8 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
     post_id: post.id,
     title: post.title,
     image_url: image?.image_path,
-    duration_seconds: Number(duration_seconds) || 10,
+    media_type: image.media_type || "IMAGE",
+    duration_seconds: mediaDuration,
     start_date: start_date || null,
     end_date: end_date || null,
   };
@@ -303,7 +317,7 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
       },
     },
     update: {
-      duration_seconds: Number(duration_seconds) || 10,
+      duration_seconds: mediaDuration,
       start_date: start_date ? new Date(start_date) : null,
       end_date: end_date ? new Date(end_date) : null,
       priority: Number(priority) || 1,
@@ -314,7 +328,7 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
     create: {
       device_id: Number(device_id),
       post_id: post.id,
-      duration_seconds: Number(duration_seconds) || 10,
+      duration_seconds: mediaDuration,
       start_date: start_date ? new Date(start_date) : null,
       end_date: end_date ? new Date(end_date) : null,
       priority: Number(priority) || 1,
@@ -383,10 +397,12 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
     }
   }
 
-  res.json({
-    ok: true,
+  const piOk = !isAutoApprove || result.ok;
+  res.status(piOk ? 200 : 502).json({
+    ok: piOk,
     pi_notified: !!(isAutoApprove && result.ok),
     pi_result: result,
+    error: piOk ? undefined : result.error || "Display could not sync this asset",
   });
 });
 
@@ -399,21 +415,55 @@ router.get(
     if (!device) return;
     const trackedAssets = await prisma.signageAsset.findMany({
       where: { device_id: device.id },
-      include: { post: { select: { title: true, id: true } } },
+      include: {
+        post: {
+          select: {
+            title: true,
+            id: true,
+            images: { orderBy: { order_index: "asc" }, take: 1 },
+          },
+        },
+      },
       orderBy: { updated_at: "desc" },
     });
+
+    const mapTracked = (rows) =>
+      rows.map((asset) => {
+        const media = asset.post?.images?.[0];
+        return {
+          asset_id: asset.asset_id,
+          post_id: asset.post_id,
+          image_url: asset.image_url,
+          mimetype: asset.mimetype,
+          media_type: media?.media_type || null,
+          clip_duration_seconds: media?.duration_seconds ?? null,
+        };
+      });
     const result = await sendSignageCommand(device.id, { action: "list" });
     if (result.ok) {
-      const tracked = await syncSignageAssetList(
-        prisma,
-        device.id,
-        result.assets,
-      );
-      return res.json({ ...result, tracked_assets: tracked });
+      await syncSignageAssetList(prisma, device.id, result.assets);
+      const trackedRows = await prisma.signageAsset.findMany({
+        where: { device_id: device.id },
+        include: {
+          post: {
+            select: {
+              title: true,
+              id: true,
+              images: { orderBy: { order_index: "asc" }, take: 1 },
+            },
+          },
+        },
+        orderBy: { updated_at: "desc" },
+      });
+      return res.json({
+        ...result,
+        tracked_assets: mapTracked(trackedRows),
+      });
     }
     res.json({
       ...result,
       stale: true,
+      tracked_assets: mapTracked(trackedAssets),
       assets: trackedAssets.map((asset) => ({
         asset_id: asset.asset_id,
         name: asset.asset_name || asset.post?.title,
@@ -563,7 +613,7 @@ router.delete(
         if (remainingDeployments === 0) {
           await prisma.post.update({
             where: { id: trackedAsset.post_id },
-            data: { allowed_on_signage: false },
+            data: { allowed_on_signage: false, requested_signage: false },
           });
         }
       }

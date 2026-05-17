@@ -90,7 +90,17 @@ def on_signage_command(data):
             subprocess.run(["pkill", "-HUP", "anthias"], capture_output=True)
             return res
         if action == "publish_asset":
-            return push_to_anthias(data)
+            result = push_to_anthias(data)
+            if not result.get("ok") and sio.connected:
+                sio.emit(
+                    "error_log",
+                    {
+                        "device_id": DEVICE_ID,
+                        "error_type": "publish_asset_failed",
+                        "message": result.get("error") or "push_to_anthias failed",
+                    },
+                )
+            return result
         if action == "delete_asset":
             return delete_asset(data.get("asset_id"))
         if action == "delete_post_assets":

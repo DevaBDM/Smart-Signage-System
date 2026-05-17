@@ -1,18 +1,15 @@
 # ~/signage/content_sync.py
-import mimetypes
 import os
 import re
 import tempfile
 import time
 from datetime import datetime, timedelta, timezone
-from urllib.parse import quote
-from urllib.parse import urljoin
-
 import requests
 
 from config import ANTHIAS_URL, DEVICE_ID, SERVER_URL
 
 REQUEST_TIMEOUT = 10
+MEDIA_DOWNLOAD_TIMEOUT = 300
 API_BASE = ANTHIAS_URL.rstrip("/")
 SERVER_BASE = SERVER_URL.replace("/api", "").rstrip("/")
 ASSET_ENDPOINTS = ("/api/v2/assets", "/api/v1/assets")
@@ -100,27 +97,127 @@ def get_posts():
         print(f"[content_sync] Deployment fetch error: {e}")
         return None
 
-def download_image(url):
+def media_absolute_url(image_path):
+    """Build a fetchable URL for /uploads/... paths (no urljoin footguns)."""
+    if not image_path:
+        return None
+    path = str(image_path).strip()
+    if path.startswith("http://") or path.startswith("https://"):
+        return path
+    base = SERVER_BASE.rstrip("/")
+    if not path.startswith("/"):
+        path = f"/{path}"
+    return f"{base}{path}"
+
+
+def download_media(url, timeout=MEDIA_DOWNLOAD_TIMEOUT):
     try:
-        r = requests.get(url, timeout=REQUEST_TIMEOUT, stream=True)
+        r = requests.get(url, timeout=timeout, stream=True)
         r.raise_for_status()
-        ext = os.path.splitext(url)[1] or ".jpg"
+        ext = os.path.splitext(url.split("?")[0])[1].lower()
+        if ext not in (".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp4", ".webm", ".mov", ".m4v"):
+            ext = ".mp4" if "video" in (r.headers.get("Content-Type") or "") else ".jpg"
         fd, path = tempfile.mkstemp(suffix=ext)
+        size = 0
         with os.fdopen(fd, "wb") as f:
-            for chunk in r.iter_content(chunk_size=8192): f.write(chunk)
+            for chunk in r.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+                    size += len(chunk)
+        if size < 1:
+            if os.path.exists(path):
+                os.remove(path)
+            print(f"[content_sync] Download empty body from {url}")
+            return None
         return path
     except Exception as e:
         print(f"[content_sync] Download failed {url}: {e}")
+        if hasattr(e, "response") and e.response is not None:
+            print(f"[content_sync] HTTP {e.response.status_code}: {e.response.text[:200]}")
         return None
+
+download_image = download_media
+
+
+def anthias_mimetype(image_path, is_video):
+    """Anthias expects 'video' | 'image' | 'webpage', not video/mp4."""
+    if is_video:
+        return "video"
+    return "image"
+
+
+def upload_file_to_anthias(local_file):
+    """Upload media to Anthias; returns local uri string or None."""
+    size = os.path.getsize(local_file) if os.path.exists(local_file) else 0
+    timeout = max(120, min(600, int(size / 40000) + 60))
+
+    for endpoint in ("/api/v2/file_asset", "/api/v1/file_asset"):
+        try:
+            with open(local_file, "rb") as f:
+                r = requests.post(
+                    f"{API_BASE}{endpoint}",
+                    files={"file_upload": (os.path.basename(local_file), f)},
+                    timeout=timeout,
+                )
+            if r.status_code >= 400:
+                print(
+                    f"[content_sync] Anthias upload {endpoint} HTTP {r.status_code}: "
+                    f"{r.text[:400]}"
+                )
+                continue
+            try:
+                data = r.json()
+            except ValueError:
+                return r.text.strip().strip('"')
+            if isinstance(data, dict):
+                uri = data.get("uri") or data.get("url")
+                if uri:
+                    print(f"[content_sync] Anthias file uploaded via {endpoint} -> {uri}")
+                    return uri
+            text = r.text.strip().strip('"')
+            if text:
+                print(f"[content_sync] Anthias file uploaded via {endpoint} -> {text}")
+                return text
+        except Exception as e:
+            print(f"[content_sync] Anthias upload {endpoint} error: {e}")
+    return None
+
+
+def register_anthias_asset(payload):
+    """Create asset metadata in Anthias v2 then v1."""
+    res = anthias_request("POST", "/api/v2/assets", json=payload)
+    if res.get("ok"):
+        return res
+    print(f"[content_sync] v2 asset create failed: {res.get('error')}")
+
+    # v1 API uses integer flags and omits v2-only fields (e.g. ext).
+    payload_v1 = {
+        "name": payload["name"],
+        "uri": payload["uri"],
+        "mimetype": payload["mimetype"],
+        "start_date": payload["start_date"],
+        "end_date": payload["end_date"],
+        "duration": payload["duration"],
+        "is_enabled": 1,
+        "skip_asset_check": 1,
+    }
+    if payload_v1["mimetype"] == "image":
+        payload_v1["duration"] = str(payload_v1["duration"])
+    return anthias_request("POST", "/api/v1/assets", json=payload_v1)
+
 
 def push_to_anthias(post):
     post_id = str(post.get("post_id") or post.get("id"))
     image_path = post.get("image_url") or (post.get("images")[0].get("image_path") if post.get("images") else None)
-    if not image_path: return {"ok": False, "error": "No image"}
+    if not image_path: return {"ok": False, "error": "No media"}
+    media_type = (post.get("media_type") or "IMAGE").upper()
+    is_video = media_type == "VIDEO" or image_path.lower().endswith((".mp4", ".webm", ".mov", ".m4v"))
 
     title = post.get("title") or f"Post {post_id}"
     asset_name = f"{title} ({post_id})"
-    image_url = urljoin(f"{SERVER_BASE}/", image_path.lstrip("/"))
+    image_url = media_absolute_url(image_path)
+    if not image_url:
+        return {"ok": False, "error": "No media URL"}
     
     # Check current assets
     current = get_anthias_assets()
@@ -138,35 +235,60 @@ def push_to_anthias(post):
         for a in matches: delete_from_anthias(_asset_id(a))
 
     # Re-upload
-    local_file = download_image(image_url)
-    if not local_file: return {"ok": False, "error": "Download failed"}
+    print(f"[content_sync] Downloading {image_url} ...")
+    local_file = download_media(image_url)
+    if not local_file:
+        return {"ok": False, "error": f"Download failed: {image_url}"}
 
-    local_uri = None
     try:
-        with open(local_file, 'rb') as f:
-            r = requests.post(f"{API_BASE}/api/v1/file_asset", files={'file_upload': f}, timeout=20)
-        if r.status_code == 200:
-            try: local_uri = r.json()["uri"] if isinstance(r.json(), dict) else r.text.strip('"').strip()
-            except: local_uri = r.text.strip('"').strip()
+        local_uri = upload_file_to_anthias(local_file)
     finally:
-        if os.path.exists(local_file): os.remove(local_file)
+        if os.path.exists(local_file):
+            os.remove(local_file)
 
-    if not local_uri: return {"ok": False, "error": "Upload failed"}
+    if not local_uri:
+        return {"ok": False, "error": "Anthias file upload failed"}
 
     now = datetime.now(timezone.utc)
+    mimetype = anthias_mimetype(image_path, is_video)
+    clip_seconds = int(post.get("duration_seconds") or 10)
+    # Anthias v2: video duration must be 0 (uses native video length); images use slide time.
+    duration = 0 if is_video else clip_seconds
     payload = {
-        "name": asset_name, "uri": local_uri, "mimetype": "image",
+        "name": asset_name,
+        "uri": local_uri,
+        "mimetype": mimetype,
         "start_date": (now - timedelta(minutes=1)).isoformat().replace("+00:00", "Z"),
         "end_date": (now + timedelta(days=3650)).isoformat().replace("+00:00", "Z"),
-        "duration": str(post.get("duration_seconds") or 10),
-        "is_enabled": 1, "skip_asset_check": 1
+        "duration": duration,
+        "is_enabled": True,
+        "skip_asset_check": True,
     }
+    if is_video and image_path.lower().endswith(".mp4"):
+        payload["ext"] = "mp4"
 
-    res = anthias_request("POST", "/api/v2/assets", json=payload)
-    if not res.get("ok"): res = anthias_request("POST", "/api/v1/assets", json=payload)
-    
-    if res.get("ok"): return {"ok": True, "post_id": post_id, "asset": normalize_asset(res.get("data"))}
-    return {"ok": False, "error": "Metadata registration failed"}
+    if is_video:
+        print(
+            f"[content_sync] Registering asset '{asset_name}' "
+            f"({mimetype}, anthias duration=0, clip={clip_seconds}s)"
+        )
+    else:
+        print(f"[content_sync] Registering asset '{asset_name}' ({mimetype}, {duration}s)")
+    res = register_anthias_asset(payload)
+    if res.get("ok"):
+        raw = res.get("data")
+        asset = normalize_asset(raw if isinstance(raw, dict) else {})
+        print(f"[content_sync] Asset registered: {asset.get('asset_id')}")
+        return {
+            "ok": True,
+            "post_id": post_id,
+            "asset": asset,
+            "image_url": image_path,
+        }
+
+    err = res.get("error") or "Metadata registration failed"
+    print(f"[content_sync] Asset registration failed: {err}")
+    return {"ok": False, "error": err}
 
 def sync():
     posts = get_posts()
@@ -205,7 +327,11 @@ def sync():
     pushed = []
     for post in posts:
         res = push_to_anthias(post)
-        if res.get("ok"): pushed.append(res)
+        if res.get("ok"):
+            pushed.append(res)
+        else:
+            pid = post.get("post_id") or post.get("id")
+            print(f"[content_sync] Sync skipped post {pid}: {res.get('error')}")
     
     return pushed
 

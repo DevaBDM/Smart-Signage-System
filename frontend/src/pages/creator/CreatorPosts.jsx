@@ -1,17 +1,16 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import CreatorSidebar from "../../components/CreatorSidebar";
+import MediaUploadField from "../../components/MediaUploadField";
+import PostMedia, { mediaSrc } from "../../components/PostMedia";
 import api from "../../api/axios";
 import useAuthStore from "../../store/useAuthStore";
 import * as S from "../../styles";
-import { assetOrigin } from "../../config/apiBase";
 import usePersistentState from "../../hooks/usePersistentState";
 import SignageStateSelect from "../../components/SignageStateSelect";
 import {
   SIGNAGE_STATE_LABELS,
   creatorSignageStateOptions,
 } from "../../constants/signageStates";
-
-const BASE = assetOrigin();
 
 export default function CreatorPosts() {
   const {
@@ -46,10 +45,9 @@ export default function CreatorPosts() {
     device_id: "",
     creator_id: "",
   });
-  const [files, setFiles] = useState([]);
+  const [mediaItems, setMediaItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
-  const fileRef = useRef();
 
   const load = () => {
     const params = new URLSearchParams();
@@ -88,8 +86,7 @@ export default function CreatorPosts() {
     setEditingId(null);
     setMsg("");
     clearForm();
-    setFiles([]);
-    if (fileRef.current) fileRef.current.value = "";
+    setMediaItems([]);
   };
 
   const startEdit = (post) => {
@@ -109,6 +106,14 @@ export default function CreatorPosts() {
       display_group: post.signage_metadata?.display_group || "",
       signage_state: post.signage_state || "NORMAL",
     });
+    setMediaItems(
+      (post.images || []).map((img) => ({
+        image_path: img.image_path,
+        media_type: img.media_type || "IMAGE",
+        duration_seconds: img.duration_seconds,
+        previewUrl: mediaSrc(img),
+      })),
+    );
     setMsg(`Editing: ${post.title}`);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -118,23 +123,54 @@ export default function CreatorPosts() {
     setLoading(true);
     setMsg("");
     try {
+      if (!editingId && mediaItems.length === 0) {
+        setMsg("❌ Add at least one image or video.");
+        setLoading(false);
+        return;
+      }
+
       const fd = new FormData();
-      Object.entries({ ...form, group_id }).forEach(([k, v]) =>
+      const payload = { ...form, group_id };
+      if (mediaItems.length > 0) {
+        const videoDur = mediaItems.find((m) => m.media_type === "VIDEO")?.duration_seconds;
+        if (videoDur && form.publish_to_signage) {
+          payload.duration_seconds = videoDur;
+        }
+        fd.append(
+          "processed_media",
+          JSON.stringify(
+            mediaItems.map(({ image_path, media_type, duration_seconds }) => ({
+              image_path,
+              media_type,
+              duration_seconds,
+            })),
+          ),
+        );
+      }
+      Object.entries(payload).forEach(([k, v]) =>
         fd.append(k, Array.isArray(v) ? JSON.stringify(v) : v),
       );
-      files.forEach((f) => fd.append("images", f));
+
+      const saveOpts = mediaItems.length > 0 ? { timeout: 120000 } : {};
 
       if (editingId) {
-        await api.put(`/posts/${editingId}`, fd);
+        await api.put(`/posts/${editingId}`, fd, saveOpts);
         setMsg("✅ Post updated!");
       } else {
-        await api.post("/posts", fd);
+        await api.post("/posts", fd, saveOpts);
         setMsg("✅ Post created!");
       }
       resetForm();
       load();
     } catch (e) {
-      setMsg(e.response?.data?.error || e.message || "Failed to save post.");
+      const errMsg =
+        err.response?.data?.error ||
+        (err.response?.status === 404
+          ? "Save failed (404) — restart the backend and try again."
+          : null) ||
+        err.message ||
+        "Failed to save post.";
+      setMsg(`❌ ${errMsg}`);
     } finally {
       setLoading(false);
     }
@@ -269,13 +305,11 @@ export default function CreatorPosts() {
                 placeholder="## Announcement&#10;Write your **markdown** here..."
               />
 
-              <label style={S.label}>{editingId ? "Replace Image (optional)" : "Images"}</label>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={(e) => setFiles([...e.target.files])}
+              <MediaUploadField
+                label={editingId ? "Media (add or replace)" : "Images & videos"}
+                items={mediaItems}
+                onChange={setMediaItems}
+                max={10}
               />
 
               <div style={{ display: "flex", gap: 16, marginTop: 4 }}>
@@ -586,8 +620,9 @@ export default function CreatorPosts() {
                     title={canManage ? "Select post" : "Admin approval is required to manage this post"}
                   />
                   {p.images?.[0] ? (
-                    <img
-                      src={`${BASE}${p.images[0].image_path}`}
+                    <PostMedia
+                      item={p.images[0]}
+                      alt=""
                       style={{
                         width: 56,
                         height: 56,
@@ -595,6 +630,7 @@ export default function CreatorPosts() {
                         borderRadius: 8,
                         flexShrink: 0,
                       }}
+                      videoProps={{ style: { width: 56, height: 56 } }}
                     />
                   ) : (
                     <div

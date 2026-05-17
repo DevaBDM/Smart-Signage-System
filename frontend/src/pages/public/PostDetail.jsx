@@ -7,7 +7,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import remarkWikiLink from "remark-wiki-link";
 import api from "../../api/axios";
-import { assetOrigin } from "../../config/apiBase";
+import PostMedia from "../../components/PostMedia";
 import "katex/dist/katex.min.css"; // For LaTeX math
 
 // Custom renderer for Obsidian Callouts
@@ -65,8 +65,6 @@ export default function PostDetail() {
   const [imgIdx, setImgIdx] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  const origin = assetOrigin();
-
   useEffect(() => {
     setLoading(true);
     api
@@ -121,14 +119,11 @@ export default function PostDetail() {
         {/* Image Carousel */}
         {images.length > 0 && (
           <div style={s.carousel}>
-            <img
-              src={
-                images[imgIdx].image_path?.startsWith("http")
-                  ? images[imgIdx].image_path
-                  : `${origin}${images[imgIdx].image_path}`
-              }
+            <PostMedia
+              item={images[imgIdx]}
               alt={post.title}
               style={s.carouselImg}
+              videoProps={{ style: s.carouselImg, controls: true }}
             />
             {images.length > 1 && (
               <div style={s.carouselControls}>

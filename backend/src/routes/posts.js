@@ -11,9 +11,18 @@ const {
   parseSignageState,
   canCreatorAssignState,
 } = require("../utils/signageStates");
+const { parseMediaCrops } = require("../utils/parseMediaCrops");
+const {
+  TEMP_DIR,
+  isImageMime,
+  isVideoMime,
+  processMediaFiles,
+  deleteMediaFile,
+  mediaFileExists,
+} = require("../utils/mediaProcessor");
 
 const storage = multer.diskStorage({
-  destination: "uploads/images/",
+  destination: TEMP_DIR,
   filename: (_, file, cb) =>
     cb(
       null,
@@ -22,25 +31,46 @@ const storage = multer.diskStorage({
 });
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  limits: { fileSize: 200 * 1024 * 1024 },
   fileFilter: (_, file, cb) => {
-    const allowed = [".png", ".jpg", ".jpeg", ".webp"];
-    if (!allowed.includes(path.extname(file.originalname).toLowerCase())) {
-      return cb(new Error("Only PNG, JPG, JPEG, and WEBP images are allowed"));
-    }
-    cb(null, true);
+    const ext = path.extname(file.originalname).toLowerCase();
+    const mime = file.mimetype || "";
+    const imageExt = [".png", ".jpg", ".jpeg", ".webp", ".gif"];
+    const videoExt = [".mp4", ".webm", ".mov", ".m4v"];
+    if (isImageMime(mime) || imageExt.includes(ext)) return cb(null, true);
+    if (isVideoMime(mime) || videoExt.includes(ext)) return cb(null, true);
+    return cb(new Error("Only image or video files are allowed"));
   },
 });
 
-const uploadImages = (req, res, next) => {
+const uploadMedia = (req, res, next) => {
   upload.array("images", 10)(req, res, (err) => {
     if (!err) return next();
     const message =
       err.code === "LIMIT_FILE_SIZE"
-        ? "Each image must be 10MB or smaller"
-        : err.message || "Image upload failed";
+        ? "Each file must be 200MB or smaller"
+        : err.message || "Media upload failed";
     return res.status(400).json({ error: message });
   });
+};
+
+const primaryMediaDuration = (mediaRows, fallback = 10) => {
+  const first = mediaRows?.[0];
+  if (first?.media_type === "VIDEO" && first.duration_seconds) {
+    return first.duration_seconds;
+  }
+  return fallback;
+};
+
+const parseProcessedMedia = (body) => {
+  const raw = body?.processed_media;
+  if (!raw) return null;
+  try {
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
 };
 
 const slugify = (text) =>
@@ -150,9 +180,22 @@ const deployToSignage = async (req, post, targetDevices, signageData) => {
   const emitToDeviceAck = req.app.get("emitToDeviceAck");
   const image = post.images?.[0];
   if (!image) return [];
+  if (!mediaFileExists(image.image_path)) {
+    console.warn(`[deploy] missing media file: ${image.image_path}`);
+    return targetDevices.map((device) => ({
+      device_id: device.id,
+      device_name: device.device_name,
+      result: {
+        ok: false,
+        error: `Media file missing on server: ${image.image_path}. Re-upload the video.`,
+      },
+    }));
+  }
   const actor = await getActor(req.user);
 
   const sched = deploymentSchedule(signageData);
+  const mediaDuration = image?.duration_seconds || sched.duration_seconds;
+  const schedWithMedia = { ...sched, duration_seconds: mediaDuration };
   const results = [];
   for (const device of targetDevices) {
     try {
@@ -168,8 +211,8 @@ const deployToSignage = async (req, post, targetDevices, signageData) => {
 
       await prisma.signageDeployment.upsert({
         where: { device_id_post_id: { device_id: device.id, post_id: post.id } },
-        update: { ...sched, status: "pending", last_error: null },
-        create: { device_id: device.id, post_id: post.id, ...sched, status: "pending" },
+        update: { ...schedWithMedia, status: "pending", last_error: null },
+        create: { device_id: device.id, post_id: post.id, ...schedWithMedia, status: "pending" },
       });
 
       // 2. Push to Pi only when published + allowed + display online (offline: DB row stays pending for pull/sync later)
@@ -206,7 +249,8 @@ const deployToSignage = async (req, post, targetDevices, signageData) => {
                   post_id: post.id,
                   title: post.title,
                   image_url: image.image_path,
-                  duration_seconds: sched.duration_seconds,
+                  media_type: image.media_type || "IMAGE",
+                  duration_seconds: mediaDuration,
                   start_date: sched.start_date || null,
                   end_date: sched.end_date || null,
                 },
@@ -301,7 +345,7 @@ router.get("/:id", async (req, res) => {
 });
 
 // POST create post
-router.post("/", auth(["admin", "creator"]), uploadImages, async (req, res) => {
+router.post("/", auth(["admin", "creator"]), uploadMedia, async (req, res) => {
   const {
     title,
     description_markdown,
@@ -336,6 +380,15 @@ router.post("/", auth(["admin", "creator"]), uploadImages, async (req, res) => {
   if (signageState?.error) return res.status(403).json({ error: signageState.error });
 
   try {
+    let mediaRows = parseProcessedMedia(req.body);
+    if (!mediaRows?.length && req.files?.length) {
+      const crops = parseMediaCrops(req.body, req.files.length);
+      mediaRows = await processMediaFiles(req.files, crops);
+    }
+    const signageDuration =
+      Number(req.body.duration_seconds) ||
+      primaryMediaDuration(mediaRows, 10);
+
     const post = await prisma.post.create({
       data: {
         title,
@@ -352,14 +405,16 @@ router.post("/", auth(["admin", "creator"]), uploadImages, async (req, res) => {
         requested_signage: requestedSignage,
         status: status || "draft",
         images: {
-          create: (req.files || []).map((f, i) => ({
-            image_path: `/uploads/images/${f.filename}`,
+          create: (mediaRows || []).map((m, i) => ({
+            image_path: m.image_path,
+            media_type: m.media_type || "IMAGE",
+            duration_seconds: m.duration_seconds ?? null,
             order_index: i,
           })),
         },
         signage_metadata: {
           create: {
-            duration_seconds: Number(req.body.duration_seconds) || 10,
+            duration_seconds: signageDuration,
             start_date: req.body.start_date ? new Date(req.body.start_date) : null,
             end_date: req.body.end_date ? new Date(req.body.end_date) : null,
             priority: Number(req.body.priority) || 1,
@@ -386,7 +441,7 @@ router.post("/", auth(["admin", "creator"]), uploadImages, async (req, res) => {
 });
 
 // PUT update post
-router.put("/:id", auth(["admin", "creator"]), uploadImages, async (req, res) => {
+router.put("/:id", auth(["admin", "creator"]), uploadMedia, async (req, res) => {
   const actor = await getActor(req.user);
   const postId = Number(req.params.id);
   const post = await prisma.post.findUnique({ where: { id: postId }, include: { images: true, author: true } });
@@ -399,25 +454,43 @@ router.put("/:id", auth(["admin", "creator"]), uploadImages, async (req, res) =>
   const isAutoApprove = post.author?.auto_approve || actor.role === 'admin';
 
   try {
-    if (req.files && req.files.length > 0) {
+    let mediaRows = parseProcessedMedia(req.body);
+    if (!mediaRows?.length && req.files?.length) {
+      const crops = parseMediaCrops(req.body, req.files.length);
+      mediaRows = await processMediaFiles(req.files, crops);
+    }
+
+    if (mediaRows?.length) {
       for (const img of post.images) {
-        const fullPath = path.join(__dirname, "../..", img.image_path);
-        if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+        deleteMediaFile(img.image_path);
       }
       await prisma.postImage.deleteMany({ where: { post_id: postId } });
       await prisma.postImage.createMany({
-        data: req.files.map((f, i) => ({
+        data: mediaRows.map((m, i) => ({
           post_id: postId,
-          image_path: `/uploads/images/${f.filename}`,
+          image_path: m.image_path,
+          media_type: m.media_type || "IMAGE",
+          duration_seconds: m.duration_seconds ?? null,
           order_index: i,
         })),
       });
     }
 
+    const updatedMedia =
+      mediaRows?.length
+        ? mediaRows
+        : await prisma.postImage.findMany({
+            where: { post_id: postId },
+            orderBy: { order_index: "asc" },
+          });
+    const metaDuration =
+      Number(req.body.duration_seconds) ||
+      primaryMediaDuration(updatedMedia, 10);
+
     await prisma.signageMetadata.upsert({
       where: { post_id: postId },
       update: {
-        duration_seconds: Number(req.body.duration_seconds) || 10,
+        duration_seconds: metaDuration,
         start_date: req.body.start_date ? new Date(req.body.start_date) : null,
         end_date: req.body.end_date ? new Date(req.body.end_date) : null,
         priority: Number(req.body.priority) || 1,
@@ -425,7 +498,7 @@ router.put("/:id", auth(["admin", "creator"]), uploadImages, async (req, res) =>
       },
       create: {
         post_id: postId,
-        duration_seconds: Number(req.body.duration_seconds) || 10,
+        duration_seconds: metaDuration,
         start_date: req.body.start_date ? new Date(req.body.start_date) : null,
         end_date: req.body.end_date ? new Date(req.body.end_date) : null,
         priority: Number(req.body.priority) || 1,
@@ -593,8 +666,7 @@ router.delete("/:id", auth(["admin", "creator"]), async (req, res) => {
   }
 
   for (const img of post.images) {
-    const fullPath = path.join(__dirname, "../..", img.image_path);
-    if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+    deleteMediaFile(img.image_path);
   }
 
   await prisma.post.delete({ where: { id: Number(req.params.id) } });
@@ -636,8 +708,7 @@ router.post("/bulk-action", auth(["admin", "creator"]), async (req, res) => {
           }
         }
         for (const img of p.images) {
-          const fullPath = path.join(__dirname, "../..", img.image_path);
-          if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+          deleteMediaFile(img.image_path);
         }
       }
       await prisma.post.deleteMany({ where: { id: { in: validIds } } });

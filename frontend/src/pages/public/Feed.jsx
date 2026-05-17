@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../api/axios";
-import { assetOrigin } from "../../config/apiBase";
+import PostMedia from "../../components/PostMedia";
 
 export default function Feed() {
   const [posts, setPosts] = useState([]);
@@ -9,8 +9,6 @@ export default function Feed() {
   const [loading, setLoading] = useState(true);
   const [time, setTime] = useState(new Date());
   const navigate = useNavigate();
-
-  const origin = assetOrigin();
 
   const fetchFeed = () =>
     api
@@ -104,15 +102,7 @@ export default function Feed() {
               style={s.card}
             >
               {p.images?.[0] ? (
-                <img
-                  src={
-                    p.images[0].image_path?.startsWith("http")
-                      ? p.images[0].image_path
-                      : `${origin}${p.images[0].image_path}`
-                  }
-                  alt={p.title}
-                  style={s.img}
-                />
+                <PostMedia item={p.images[0]} alt={p.title} style={s.img} />
               ) : (
                 <div style={s.imgPlaceholder}>📋</div>
               )}
