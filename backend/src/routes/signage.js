@@ -5,6 +5,12 @@ const {
   syncSignageAssetList,
   upsertSignageAsset,
 } = require("../utils/signageAssets");
+const {
+  postVisibleForGroup,
+  compareByUrgency,
+  parseSignageState,
+  canCreatorAssignState,
+} = require("../utils/signageStates");
 
 let _emitToDeviceAck; // injected from index.js
 
@@ -30,6 +36,7 @@ const getActor = async (user) => {
       can_manage_other_posts: true,
       creator_priority: true,
       control_lock_minutes: true,
+      max_signage_state: true,
     },
   });
   return dbUser || user;
@@ -126,26 +133,43 @@ router.get("/device/:device_id/deployments", async (req, res) => {
       post: {
         include: {
           images: { orderBy: { order_index: "asc" }, take: 1 },
+          group: { select: { id: true, signage_state: true } },
         },
       },
     },
     orderBy: [{ priority: "asc" }, { created_at: "desc" }],
   });
 
+  const visible = deployments
+    .filter((deployment) => deployment.post.images[0])
+    .filter((deployment) =>
+      postVisibleForGroup(
+        deployment.post.signage_state,
+        deployment.post.group?.signage_state,
+      ),
+    )
+    .sort((a, b) => {
+      const byState = compareByUrgency(a.post.signage_state, b.post.signage_state);
+      if (byState !== 0) return byState;
+      const byPriority = (a.priority || 1) - (b.priority || 1);
+      if (byPriority !== 0) return byPriority;
+      return b.created_at - a.created_at;
+    });
+
   res.json(
-    deployments
-      .filter((deployment) => deployment.post.images[0])
-      .map((deployment) => ({
-        deployment_id: deployment.id,
-        post_id: deployment.post_id,
-        title: deployment.post.title,
-        image_url: deployment.post.images[0].image_path,
-        duration_seconds: deployment.duration_seconds,
-        start_date: deployment.start_date,
-        end_date: deployment.end_date,
-        priority: deployment.priority,
-        display_group: deployment.display_group,
-      })),
+    visible.map((deployment) => ({
+      deployment_id: deployment.id,
+      post_id: deployment.post_id,
+      title: deployment.post.title,
+      image_url: deployment.post.images[0].image_path,
+      duration_seconds: deployment.duration_seconds,
+      start_date: deployment.start_date,
+      end_date: deployment.end_date,
+      priority: deployment.priority,
+      display_group: deployment.display_group,
+      signage_state: deployment.post.signage_state,
+      group_signage_state: deployment.post.group?.signage_state,
+    })),
   );
 });
 
@@ -170,6 +194,31 @@ router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
   
   if (!canManagePost(actor, post)) {
     return res.status(403).json({ error: "Cannot publish this post" });
+  }
+
+  if (req.body.signage_state !== undefined) {
+    const parsed = parseSignageState(req.body.signage_state);
+    if (!parsed) return res.status(400).json({ error: "Invalid signage_state" });
+    if (
+      actor.role !== "admin" &&
+      !canCreatorAssignState(actor.max_signage_state, parsed)
+    ) {
+      return res.status(403).json({
+        error: `You may only publish signage posts up to ${actor.max_signage_state || "NORMAL"} level.`,
+      });
+    }
+    await prisma.post.update({
+      where: { id: post.id },
+      data: { signage_state: parsed },
+    });
+    post.signage_state = parsed;
+  } else if (
+    actor.role !== "admin" &&
+    !canCreatorAssignState(actor.max_signage_state, post.signage_state)
+  ) {
+    return res.status(403).json({
+      error: `This post's signage level exceeds your allowed maximum (${actor.max_signage_state || "NORMAL"}).`,
+    });
   }
 
   const image = post.images[0];

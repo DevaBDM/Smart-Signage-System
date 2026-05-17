@@ -5,6 +5,11 @@ import useAuthStore from "../../store/useAuthStore";
 import * as S from "../../styles";
 import { assetOrigin } from "../../config/apiBase";
 import usePersistentState from "../../hooks/usePersistentState";
+import SignageStateSelect from "../../components/SignageStateSelect";
+import {
+  SIGNAGE_STATE_LABELS,
+  creatorSignageStateOptions,
+} from "../../constants/signageStates";
 
 const BASE = assetOrigin();
 
@@ -13,7 +18,9 @@ export default function CreatorPosts() {
     id: userId,
     group_id,
     can_manage_other_posts,
+    max_signage_state,
   } = useAuthStore();
+  const signageStateOptions = creatorSignageStateOptions(max_signage_state);
   const [posts, setPosts] = useState([]);
   const [devices, setDevices] = useState([]);
   const [editingId, setEditingId] = useState(null);
@@ -31,6 +38,7 @@ export default function CreatorPosts() {
     end_date: "",
     priority: 1,
     display_group: "",
+    signage_state: "NORMAL",
   };
   const [form, setForm, clearForm] = usePersistentState("creator.posts.form", emptyForm);
   const [filters, setFilters] = usePersistentState("creator.posts.filters", {
@@ -99,6 +107,7 @@ export default function CreatorPosts() {
       end_date: post.signage_metadata?.end_date?.split(".")[0] || "",
       priority: post.signage_metadata?.priority || 1,
       display_group: post.signage_metadata?.display_group || "",
+      signage_state: post.signage_state || "NORMAL",
     });
     setMsg(`Editing: ${post.title}`);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -347,6 +356,16 @@ export default function CreatorPosts() {
                       </label>
                     ))}
                   </div>
+
+                  <SignageStateSelect
+                    label="Signage priority level"
+                    value={form.signage_state}
+                    options={signageStateOptions}
+                    hint={`Your account may post up to ${SIGNAGE_STATE_LABELS[max_signage_state] || "Normal"}.`}
+                    onChange={(signage_state) =>
+                      setForm({ ...form, signage_state })
+                    }
+                  />
 
                   <label style={S.label}>Duration (seconds)</label>
                   <input
@@ -607,7 +626,10 @@ export default function CreatorPosts() {
                       style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}
                     >
                       {p.allowed_on_feed ? "📰 Feed " : ""}
-                      {p.allowed_on_signage ? `🖥 Signage (${p.signage_deployments?.length || 0})` : ""} · {p.status}
+                      {p.allowed_on_signage ? `🖥 Signage (${p.signage_deployments?.length || 0})` : ""}
+                      {p.signage_state ? ` · ${SIGNAGE_STATE_LABELS[p.signage_state] || p.signage_state}` : ""}
+                      {" · "}
+                      {p.status}
                       {p.status === 'published' && (
                         <>
                           {(!p.allowed_on_feed && p.requested_feed) && " · ⏳ Feed Pending"}

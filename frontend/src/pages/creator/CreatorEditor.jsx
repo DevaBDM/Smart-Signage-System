@@ -5,9 +5,15 @@ import api from "../../api/axios";
 import useAuthStore from "../../store/useAuthStore";
 import * as S from "../../styles";
 import usePersistentState from "../../hooks/usePersistentState";
+import SignageStateSelect from "../../components/SignageStateSelect";
+import {
+  SIGNAGE_STATE_LABELS,
+  creatorSignageStateOptions,
+} from "../../constants/signageStates";
 
 export default function CreatorEditor() {
-  const { group_id } = useAuthStore();
+  const { group_id, max_signage_state } = useAuthStore();
+  const signageStateOptions = creatorSignageStateOptions(max_signage_state);
   const [devices, setDevices] = useState([]);
   const [exported, setExported] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -24,6 +30,7 @@ export default function CreatorEditor() {
     end_date: "",
     priority: 1,
     display_group: "",
+    signage_state: "NORMAL",
   };
   const [form, setForm, clearForm] = usePersistentState("creator.editor.form", emptyForm);
 
@@ -65,7 +72,7 @@ export default function CreatorEditor() {
     try {
       const fd = new FormData();
       Object.entries({ ...form, group_id }).forEach(([key, value]) => {
-        fd.append(key, Array.isArray(value) ? JSON.stringify(value) : v);
+        fd.append(key, Array.isArray(value) ? JSON.stringify(value) : value);
       });
       fd.append("images", exported.file);
       await api.post("/posts", fd);
@@ -219,6 +226,16 @@ export default function CreatorEditor() {
                         {d.device_name} ({d.status})
                       </label>
                     ))}
+
+                    <SignageStateSelect
+                      label="Signage priority level"
+                      value={form.signage_state}
+                      options={signageStateOptions}
+                      hint={`Your account may post up to ${SIGNAGE_STATE_LABELS[max_signage_state] || "Normal"}.`}
+                      onChange={(signage_state) =>
+                        setForm({ ...form, signage_state })
+                      }
+                    />
 
                     <label style={S.label}>Duration (seconds)</label>
                     <input

@@ -7,6 +7,10 @@ const crypto = require("crypto");
 const fs = require("fs");
 const { upsertSignageAsset } = require("../utils/signageAssets");
 const { ensureDevicesOnline, getOnlineDeviceIdSet } = require("../utils/devices");
+const {
+  parseSignageState,
+  canCreatorAssignState,
+} = require("../utils/signageStates");
 
 const storage = multer.diskStorage({
   destination: "uploads/images/",
@@ -66,9 +70,21 @@ const getActor = async (user) => {
       can_manage_other_posts: true,
       creator_priority: true,
       control_lock_minutes: true,
+      max_signage_state: true,
     },
   });
   return dbUser || user;
+};
+
+const resolvePostSignageState = (actor, rawState) => {
+  const parsed = parseSignageState(rawState) || "NORMAL";
+  if (actor.role === "admin") return parsed;
+  if (!canCreatorAssignState(actor.max_signage_state, parsed)) {
+    return {
+      error: `You may only create signage posts up to ${actor.max_signage_state || "NORMAL"} level.`,
+    };
+  }
+  return parsed;
 };
 
 const assertControlAllowed = (user, device) => {
@@ -315,6 +331,10 @@ router.post("/", auth(["admin", "creator"]), uploadImages, async (req, res) => {
     if (!chk.ok) return res.status(400).json({ error: chk.error });
   }
 
+  const actor = await getActor(req.user);
+  const signageState = resolvePostSignageState(actor, req.body.signage_state);
+  if (signageState?.error) return res.status(403).json({ error: signageState.error });
+
   try {
     const post = await prisma.post.create({
       data: {
@@ -323,6 +343,7 @@ router.post("/", auth(["admin", "creator"]), uploadImages, async (req, res) => {
         description_markdown: description_markdown || null,
         group_id: Number(targetGroupId),
         created_by: req.user.id,
+        signage_state: signageState,
         // Permissions
         allowed_on_feed: isAutoApprove ? requestedFeed : false,
         allowed_on_signage: isAutoApprove ? requestedSignage : false,
@@ -453,6 +474,12 @@ router.put("/:id", auth(["admin", "creator"]), uploadImages, async (req, res) =>
     if (selectedIds.length > 0) {
       const chk = await ensureDevicesOnline(prisma, selectedIds);
       if (!chk.ok) return res.status(400).json({ error: chk.error });
+    }
+
+    if (req.body.signage_state !== undefined) {
+      const signageState = resolvePostSignageState(actor, req.body.signage_state);
+      if (signageState?.error) return res.status(403).json({ error: signageState.error });
+      data.signage_state = signageState;
     }
 
     const updated = await prisma.post.update({

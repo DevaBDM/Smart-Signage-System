@@ -11,6 +11,7 @@ model Group {
   id                 Int           @id @default(autoincrement())
   name               String        @unique
   description        String?
+  signage_state      SignageState  @default(NORMAL)
   created_at         DateTime      @default(now())
   devices            Device[]      @relation("GroupDevices")
   device_memberships DeviceGroup[]
@@ -39,9 +40,10 @@ model User {
   group_id               Int?
   auto_approve           Boolean  @default(true)
   can_manage_other_posts Boolean  @default(false)
-  creator_priority       Int      @default(1)
-  control_lock_minutes   Int      @default(120)
-  created_at             DateTime @default(now())
+  creator_priority       Int          @default(1)
+  control_lock_minutes   Int          @default(120)
+  max_signage_state      SignageState @default(NORMAL)
+  created_at             DateTime     @default(now())
   device_locks           Device[] @relation("DeviceControlLock")
   posts                  Post[]
   group                  Group?   @relation(fields: [group_id], references: [id])
@@ -59,6 +61,7 @@ model Post {
   requested_feed       Boolean             @default(false)
   requested_signage    Boolean             @default(false)
   status               PostStatus          @default(draft)
+  signage_state        SignageState        @default(NORMAL)
   created_at           DateTime            @default(now())
   updated_at           DateTime            @updatedAt
   playlist_items       PlaylistItem[]
@@ -212,4 +215,11 @@ enum Role {
 enum PostStatus {
   draft
   published
+}
+
+enum SignageState {
+  EMERGENCY
+  SECURITY_RISK
+  BREAKING_NEWS
+  NORMAL
 }

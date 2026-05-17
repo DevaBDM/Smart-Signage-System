@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
 import AdminSidebar from "../../components/AdminSidebar";
+import SignageStateSelect from "../../components/SignageStateSelect";
 import api from "../../api/axios";
+import { SIGNAGE_STATE_LABELS, SIGNAGE_STATES } from "../../constants/signageStates";
 import * as S from "../../styles";
+
+const maxStateOptions = SIGNAGE_STATES.map((value) => ({
+  value,
+  label: SIGNAGE_STATE_LABELS[value],
+}));
 
 export default function AdminUsers() {
   const [users, setUsers] = useState([]);
@@ -15,6 +22,7 @@ export default function AdminUsers() {
     can_manage_other_posts: false,
     creator_priority: 1,
     control_lock_minutes: 120,
+    max_signage_state: "NORMAL",
   });
   const [error, setError] = useState("");
 
@@ -49,6 +57,7 @@ export default function AdminUsers() {
         can_manage_other_posts: false,
         creator_priority: 1,
         control_lock_minutes: 120,
+        max_signage_state: "NORMAL",
       });
       load();
     } catch (e) {
@@ -162,6 +171,14 @@ export default function AdminUsers() {
                 />
                 Can edit/delete other creators' posts
               </label>
+              <SignageStateSelect
+                label="Max signage level (creator can post up to)"
+                value={form.max_signage_state}
+                options={maxStateOptions}
+                onChange={(max_signage_state) =>
+                  setForm({ ...form, max_signage_state })
+                }
+              />
               <label style={S.label}>Creator Priority</label>
               <input
                 style={S.input}
@@ -216,6 +233,7 @@ export default function AdminUsers() {
                     "Auto-Approve",
                     "Other Posts",
                     "Priority",
+                    "Signage level",
                     "Block",
                     "Created",
                     "",
@@ -299,6 +317,21 @@ export default function AdminUsers() {
                           })
                         }
                       />
+                    </td>
+                    <td style={S.td}>
+                      <select
+                        style={{ ...S.input, minWidth: 150 }}
+                        value={u.max_signage_state || "NORMAL"}
+                        onChange={(e) =>
+                          updateUser(u.id, { max_signage_state: e.target.value })
+                        }
+                      >
+                        {maxStateOptions.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
                     </td>
                     <td style={S.td}>
                       <input

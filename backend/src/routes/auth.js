@@ -3,6 +3,7 @@ const prisma = require("../db/prisma");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const auth = require("../middleware/auth");
+const { parseSignageState } = require("../utils/signageStates");
 
 const requireAdminAfterFirstUser = async (req, res, next) => {
   const userCount = await prisma.user.count();
@@ -20,7 +21,15 @@ router.post("/register", requireAdminAfterFirstUser, async (req, res) => {
     can_manage_other_posts,
     creator_priority,
     control_lock_minutes,
+    max_signage_state,
   } = req.body;
+
+  const parsedMaxState = max_signage_state
+    ? parseSignageState(max_signage_state)
+    : "NORMAL";
+  if (max_signage_state && !parsedMaxState) {
+    return res.status(400).json({ error: "Invalid max_signage_state" });
+  }
   if (!username || !password) {
     return res.status(400).json({ error: "Username and password are required" });
   }
@@ -41,6 +50,7 @@ router.post("/register", requireAdminAfterFirstUser, async (req, res) => {
         can_manage_other_posts: Boolean(can_manage_other_posts),
         creator_priority: Number(creator_priority) || 1,
         control_lock_minutes: Number(control_lock_minutes) || 120,
+        max_signage_state: parsedMaxState || "NORMAL",
       },
     });
     res.json({
@@ -51,6 +61,7 @@ router.post("/register", requireAdminAfterFirstUser, async (req, res) => {
       can_manage_other_posts: user.can_manage_other_posts,
       creator_priority: user.creator_priority,
       control_lock_minutes: user.control_lock_minutes,
+      max_signage_state: user.max_signage_state,
     });
   } catch (e) {
     if (e.code === "P2002") {
@@ -74,6 +85,7 @@ router.post("/login", async (req, res) => {
       can_manage_other_posts: user.can_manage_other_posts,
       creator_priority: user.creator_priority,
       control_lock_minutes: user.control_lock_minutes,
+      max_signage_state: user.max_signage_state,
     },
     process.env.JWT_SECRET,
     { expiresIn: "8h" },
@@ -85,6 +97,7 @@ router.post("/login", async (req, res) => {
     can_manage_other_posts: user.can_manage_other_posts,
     creator_priority: user.creator_priority,
     control_lock_minutes: user.control_lock_minutes,
+    max_signage_state: user.max_signage_state,
   });
 });
 

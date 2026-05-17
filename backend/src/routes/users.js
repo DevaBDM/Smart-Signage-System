@@ -1,6 +1,7 @@
 const router = require("express").Router();
 const prisma = require("../db/prisma");
 const auth = require("../middleware/auth");
+const { parseSignageState } = require("../utils/signageStates");
 
 router.get("/", auth(["admin"]), async (req, res) => {
   const users = await prisma.user.findMany({
@@ -13,6 +14,7 @@ router.get("/", auth(["admin"]), async (req, res) => {
       can_manage_other_posts: true,
       creator_priority: true,
       control_lock_minutes: true,
+      max_signage_state: true,
       created_at: true,
       group: true,
     },
@@ -28,8 +30,16 @@ router.put("/:id", auth(["admin"]), async (req, res) => {
     auto_approve, 
     can_manage_other_posts, 
     creator_priority, 
-    control_lock_minutes 
+    control_lock_minutes,
+    max_signage_state,
   } = req.body;
+
+  const parsedMaxState =
+    max_signage_state !== undefined ? parseSignageState(max_signage_state) : undefined;
+  if (max_signage_state !== undefined && !parsedMaxState) {
+    return res.status(400).json({ error: "Invalid max_signage_state" });
+  }
+
   try {
     const user = await prisma.user.update({
       where: { id: Number(req.params.id) },
@@ -40,6 +50,7 @@ router.put("/:id", auth(["admin"]), async (req, res) => {
         can_manage_other_posts: can_manage_other_posts !== undefined ? Boolean(can_manage_other_posts) : undefined,
         creator_priority: creator_priority !== undefined ? Number(creator_priority) : undefined,
         control_lock_minutes: control_lock_minutes !== undefined ? Number(control_lock_minutes) : undefined,
+        ...(parsedMaxState && { max_signage_state: parsedMaxState }),
       },
       select: {
         id: true,
@@ -50,6 +61,7 @@ router.put("/:id", auth(["admin"]), async (req, res) => {
         can_manage_other_posts: true,
         creator_priority: true,
         control_lock_minutes: true,
+        max_signage_state: true,
         group: true,
       },
     });
