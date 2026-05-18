@@ -347,7 +347,7 @@ A phase is done when:
 - [x] Phase B2: signage permissions to utils/
 - [x] Phase B3: signageService
 - [x] Phase B4: signage validators
-- [ ] Phase C1: deviceService + repo
+- [x] Phase C1: deviceService + repo
 - [ ] Phase C2: userService (priority swap with unit test)
 - [ ] Phase C3: authService unified JWT shape
 - [ ] Phase D1: central error handler
