@@ -17,7 +17,8 @@ A LAN-based digital content distribution and monitoring platform for university 
 9. [Accessing the System](#accessing-the-system)
 10. [Environment Variables Reference](#environment-variables-reference)
 11. [API Reference](#api-reference)
-12. [Troubleshooting](#troubleshooting)
+12. [Testing](#testing)
+13. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -312,6 +313,32 @@ Copy `pi-scripts/signage.service` to `/etc/systemd/system/`, then:
 sudo systemctl daemon-reload
 sudo systemctl enable signage
 sudo systemctl start signage
+```
+
+---
+
+## Testing
+
+See [`docs/TESTING.md`](docs/TESTING.md) for complete instructions on:
+
+- Setting up the test database (`signage_test`)
+- Running backend tests: `cd backend && npm test` (Jest + Supertest, 11 tests)
+- Running frontend e2e tests: `cd frontend && npm run test:e2e` (Playwright, 2 tests)
+- Installing Playwright browsers
+- Lint and format commands
+- CI/CD configuration
+
+Quick start:
+
+```bash
+# Backend
+cd backend
+npm test
+
+# Frontend
+cd frontend
+npx playwright install  # one-time
+npm run test:e2e
 ```
 
 ---
