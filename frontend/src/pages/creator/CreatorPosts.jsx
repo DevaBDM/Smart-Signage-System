@@ -11,7 +11,7 @@ import * as S from "../../styles";
 import usePersistentState, {
   userScopedKey,
 } from "../../hooks/usePersistentState";
-import SignageStateSelect from "../../components/SignageStateSelect";
+import SignagePanel from "../../components/SignagePanel";
 import {
   SIGNAGE_STATE_LABELS,
   creatorSignageStateOptions,
@@ -496,163 +496,18 @@ export default function CreatorPosts() {
               </div>
               
               {form.publish_to_signage && (
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 10,
-                    padding: 12,
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 8,
-                    background: "#f9fafb",
-                  }}
-                >
-                  {userRole === "admin" || group_id ? (
-                    <>
-                      <label style={S.label}>Groups</label>
-                      {(() => {
-                        const available = userRole === "admin"
-                          ? groups
-                          : [
-                              ...(group_id ? [{ id: group_id, name: groups.find((g) => String(g.id) === String(group_id))?.name || "Primary" }] : []),
-                              ...(managed_group_ids || []).map((gid) => {
-                                const g = groups.find((x) => String(x.id) === String(gid));
-                                return g ? { id: g.id, name: g.name } : null;
-                              }).filter(Boolean),
-                            ];
-                        return available.length <= 1 ? (
-                          <input style={{ ...S.input, background: "#f3f4f6" }} value={available[0]?.name || ""} disabled />
-                        ) : (
-                          <MultiSelect
-                            options={available}
-                            value={form.group_ids || []}
-                            onChange={(ids) => setForm({ ...form, group_ids: ids })}
-                            placeholder="Select groups..."
-                          />
-                        );
-                      })()}
-                    </>
-                  ) : null}
-
-                  <label style={S.label}>Target Displays</label>
-                  <MultiSelect
-                    options={devices}
-                    value={form.device_ids}
-                    onChange={(ids) => setForm((current) => ({ ...current, device_ids: ids }))}
-                    placeholder="Search displays..."
-                    labelKey="device_name"
-                  />
-
-                  <SignageStateSelect
-                    label="Signage priority level"
-                    value={form.signage_state}
-                    options={signageStateOptions}
-                    hint={`Your account may post up to ${SIGNAGE_STATE_LABELS[max_signage_state] || "Normal"}.`}
-                    onChange={(signage_state) =>
-                      setForm({ ...form, signage_state })
-                    }
-                  />
-
-                  <label style={S.label}>Duration (seconds)</label>
-                  <input
-                    style={S.input}
-                    type="number"
-                    min={1}
-                    max={300}
-                    value={form.duration_seconds}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        duration_seconds: Number(e.target.value),
-                      })
-                    }
-                  />
-
-                  <label style={S.label}>Priority (1 = highest)</label>
-                  <input
-                    style={S.input}
-                    type="number"
-                    min={1}
-                    max={10}
-                    value={form.priority}
-                    onChange={(e) =>
-                      setForm({ ...form, priority: Number(e.target.value) })
-                    }
-                  />
-
-                  <label style={S.label}>Start Date (optional)</label>
-                  <input
-                    style={S.input}
-                    type="datetime-local"
-                    value={form.start_date}
-                    onChange={(e) =>
-                      setForm({ ...form, start_date: e.target.value })
-                    }
-                  />
-
-                  <label style={S.label}>End Date (optional)</label>
-                  <input
-                    style={S.input}
-                    type="datetime-local"
-                    value={form.end_date}
-                    onChange={(e) =>
-                      setForm({ ...form, end_date: e.target.value })
-                    }
-                  />
-
-                  <label style={S.label}>Display Group (optional)</label>
-                  <input
-                    style={S.input}
-                    value={form.display_group}
-                    onChange={(e) =>
-                      setForm({ ...form, display_group: e.target.value })
-                    }
-                  />
-
-                  <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer" }}>
-                    <input
-                      type="checkbox"
-                      checked={form.is_enabled}
-                      onChange={(e) =>
-                        setForm({ ...form, is_enabled: e.target.checked })
-                      }
-                    />
-                    Enabled (is_enabled)
-                  </label>
-
-                  <label style={S.label}>Play Order</label>
-                  <input
-                    style={S.input}
-                    type="number"
-                    min={0}
-                    value={form.play_order}
-                    onChange={(e) =>
-                      setForm({ ...form, play_order: Number(e.target.value) })
-                    }
-                  />
-
-                  <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer" }}>
-                    <input
-                      type="checkbox"
-                      checked={form.nocache}
-                      onChange={(e) =>
-                        setForm({ ...form, nocache: e.target.checked })
-                      }
-                    />
-                    No Cache (nocache)
-                  </label>
-
-                  <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, cursor: "pointer" }}>
-                    <input
-                      type="checkbox"
-                      checked={form.skip_asset_check}
-                      onChange={(e) =>
-                        setForm({ ...form, skip_asset_check: e.target.checked })
-                      }
-                    />
-                    Skip Asset Check
-                  </label>
-                </div>
+                <SignagePanel
+                  form={form}
+                  onChange={setForm}
+                  devices={devices}
+                  groups={groups}
+                  userRole={userRole}
+                  groupId={group_id}
+                  managedGroupIds={managed_group_ids}
+                  signageStateOptions={signageStateOptions}
+                  maxSignageStateLabel={SIGNAGE_STATE_LABELS[max_signage_state]}
+                  showGroups
+                />
               )}
 
               <label style={S.label}>Post Status</label>

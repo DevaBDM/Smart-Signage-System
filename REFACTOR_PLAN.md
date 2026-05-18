@@ -358,8 +358,8 @@ A phase is done when:
 - [ ] Phase E2: AdminDevices split
 - [ ] Phase E3: CreatorSignage split
 - [ ] Phase E4: CreatorEditor reuses SignagePanel
-- [ ] Phase F1: frontend api/ modules
-- [ ] Phase F2: postsApi.listForGroups
+- [x] Phase F1: frontend api/ modules
+- [x] Phase F2: postsApi.listForGroups
 - [ ] Phase G1: design tokens
 - [ ] Phase G2: CSS modules per feature
 - [ ] Phase G3: components/ui kit
