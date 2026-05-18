@@ -30,7 +30,7 @@ afterAll(async () => {
 describe("userService priority swap", () => {
   it("assigns next priority when a user becomes a creator without explicit priority", async () => {
     const g = await prisma.group.create({ data: { name: "g1" } });
-    const alice = await prisma.user.create({
+    await prisma.user.create({
       data: { username: "alice", password_hash: "hash", role: "creator", group_id: g.id, creator_priority: 1 },
     });
     const bob = await prisma.user.create({

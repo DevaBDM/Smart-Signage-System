@@ -4,6 +4,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const prisma = require("../src/db/prisma");
 const { UPLOAD_ROOT } = require("../src/utils/mediaProcessor");
+const { buildUserPayload } = require("../src/services/authService");
 
 const JWT_SECRET = process.env.JWT_SECRET || "test-secret";
 
@@ -54,16 +55,7 @@ async function createUser({
   }
 
   const token = jwt.sign(
-    {
-      id: user.id,
-      role: user.role,
-      group_id: user.group_id,
-      can_manage_other_posts: user.can_manage_other_posts,
-      creator_priority: user.creator_priority,
-      control_lock_minutes: user.control_lock_minutes,
-      max_signage_state: user.max_signage_state,
-      managed_group_ids,
-    },
+    buildUserPayload({ ...user, managed_groups: managed_group_ids.map((id) => ({ group_id: id })) }),
     JWT_SECRET,
     { expiresIn: "1h" },
   );
