@@ -1,9 +1,7 @@
 const router = require("express").Router();
 const prisma = require("../db/prisma");
 const auth = require("../middleware/auth");
-const multer = require("multer");
-const path = require("path");
-const crypto = require("crypto");
+const { uploadMedia } = require("../middleware/upload");
 const { upsertSignageAsset } = require("../utils/signageAssets");
 const { ensureDevicesOnline, getOnlineDeviceIdSet } = require("../utils/devices");
 const {
@@ -12,46 +10,13 @@ const {
 } = require("../utils/signageStates");
 const { parseMediaCrops } = require("../utils/parseMediaCrops");
 const {
-  TEMP_DIR,
-  isImageMime,
-  isVideoMime,
   processMediaFiles,
   deleteMediaFile,
   mediaFileExists,
 } = require("../utils/mediaProcessor");
-
-const storage = multer.diskStorage({
-  destination: TEMP_DIR,
-  filename: (_, file, cb) =>
-    cb(
-      null,
-      `${Date.now()}-${crypto.randomBytes(4).toString("hex")}${path.extname(file.originalname)}`,
-    ),
-});
-const upload = multer({
-  storage,
-  limits: { fileSize: 200 * 1024 * 1024 },
-  fileFilter: (_, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const mime = file.mimetype || "";
-    const imageExt = [".png", ".jpg", ".jpeg", ".webp", ".gif"];
-    const videoExt = [".mp4", ".webm", ".mov", ".m4v"];
-    if (isImageMime(mime) || imageExt.includes(ext)) return cb(null, true);
-    if (isVideoMime(mime) || videoExt.includes(ext)) return cb(null, true);
-    return cb(new Error("Only image or video files are allowed"));
-  },
-});
-
-const uploadMedia = (req, res, next) => {
-  upload.array("images", 10)(req, res, (err) => {
-    if (!err) return next();
-    const message =
-      err.code === "LIMIT_FILE_SIZE"
-        ? "Each file must be 200MB or smaller"
-        : err.message || "Media upload failed";
-    return res.status(400).json({ error: message });
-  });
-};
+const { canManage, canManagePost, getActor } = require("../utils/permissions");
+const { assertControlAllowed, applyControlLock } = require("../utils/controlLock");
+const { toBool, parseDeviceIds } = require("../utils/parsers");
 
 const primaryMediaDuration = (mediaRows, fallback = 10) => {
   const first = mediaRows?.[0];
@@ -80,48 +45,6 @@ const slugify = (text) =>
   "-" +
   Date.now();
 
-const canManage = (user, group_id) => {
-  if (user.role === "admin") return true;
-  const g = Number(group_id);
-  if (user.group_id === g) return true;
-  const managed = Array.isArray(user.managed_group_ids)
-    ? user.managed_group_ids
-    : [];
-  return managed.includes(g);
-};
-
-const canManagePost = (user, post) => {
-  if (user.role === "admin") return true;
-  if (post.created_by === user.id) return true;
-  if (!user.can_manage_other_posts) return false;
-  const managed = Array.isArray(user.managed_group_ids)
-    ? user.managed_group_ids
-    : [];
-  return user.group_id === post.group_id || managed.includes(post.group_id);
-};
-
-const getActor = async (user) => {
-  if (user.role === "admin") return user;
-  const dbUser = await prisma.user.findUnique({
-    where: { id: user.id },
-    select: {
-      id: true,
-      role: true,
-      group_id: true,
-      can_manage_other_posts: true,
-      creator_priority: true,
-      control_lock_minutes: true,
-      max_signage_state: true,
-      managed_groups: { select: { group_id: true } },
-    },
-  });
-  if (!dbUser) return user;
-  return {
-    ...dbUser,
-    managed_group_ids: (dbUser.managed_groups || []).map((g) => g.group_id),
-  };
-};
-
 const resolvePostSignageState = (actor, rawState) => {
   const parsed = parseSignageState(rawState) || "NORMAL";
   if (actor.role === "admin") return parsed;
@@ -132,57 +55,6 @@ const resolvePostSignageState = (actor, rawState) => {
   }
   return parsed;
 };
-
-const assertControlAllowed = (user, device) => {
-  if (user.role === "admin") return { ok: true };
-  const lockUntil = device.control_lock_until;
-  const lockActive = lockUntil && lockUntil > new Date();
-  const lockOwner = device.control_lock_user_id;
-  const lockPriority = device.control_lock_priority || 0;
-  const userPriority = user.creator_priority || 1;
-
-  if (
-    lockActive &&
-    lockOwner &&
-    lockOwner !== user.id &&
-    lockPriority > userPriority
-  ) {
-    return {
-      ok: false,
-      error:
-        `Display is locked by a higher-priority creator until ${lockUntil.toLocaleString()}.`,
-    };
-  }
-  return { ok: true };
-};
-
-const applyControlLock = async (user, deviceId, action) => {
-  if (user.role === "admin") return;
-  const minutes = Math.max(1, Number(user.control_lock_minutes) || 120);
-  await prisma.device.update({
-    where: { id: deviceId },
-    data: {
-      control_lock_user_id: user.id,
-      control_lock_priority: user.creator_priority || 1,
-      control_lock_until: new Date(Date.now() + minutes * 60_000),
-      control_lock_action: action,
-    },
-  });
-};
-
-const parseDeviceIds = (value) => {
-  if (!value) return [];
-  if (Array.isArray(value)) return value.map(Number).filter(Boolean);
-  try {
-    const parsed = typeof value === "string" ? JSON.parse(value) : value;
-    if (Array.isArray(parsed)) return parsed.map(Number).filter(Boolean);
-  } catch {
-    /* ignore parse errors */
-  }
-  return String(value).split(",").map(Number).filter(Boolean);
-};
-
-const toBool = (val) => val === true || val === "true";
 
 /** Normalize schedule and Anthias fields from req.body or Prisma signage_metadata. */
 const deploymentSchedule = (raw) => ({

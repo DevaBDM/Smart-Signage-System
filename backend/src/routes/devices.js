@@ -1,20 +1,7 @@
 const router = require("express").Router();
 const prisma = require("../db/prisma");
 const auth = require("../middleware/auth");
-
-const parseGroupIds = (value) => {
-  if (!value) return [];
-  if (Array.isArray(value)) return value.map(Number).filter(Boolean);
-  try {
-    const parsed = typeof value === "string" ? JSON.parse(value) : value;
-    if (Array.isArray(parsed)) return parsed.map(Number).filter(Boolean);
-  } catch {
-    /* ignore parse errors */
-  }
-  return String(value).split(",").map(Number).filter(Boolean);
-};
-
-const toBool = (val) => val === true || val === "true";
+const { toBool, parseGroupIds } = require("../utils/parsers");
 
 // List devices. Admins see all; creators see displays in their group or all groups.
 router.get("/", auth(["admin", "creator"]), async (req, res) => {
