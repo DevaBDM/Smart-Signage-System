@@ -3,19 +3,17 @@ const prisma = require("../db/prisma");
 const auth = require("../middleware/auth");
 const {
   syncSignageAssetList,
-  upsertSignageAsset,
 } = require("../utils/signageAssets");
 const { mediaFileExists } = require("../utils/mediaProcessor");
 const {
   postVisibleForGroup,
   compareByUrgency,
-  parseSignageState,
-  canCreatorAssignState,
 } = require("../utils/signageStates");
-const { getActor, canManagePost } = require("../utils/permissions");
+const { getActor } = require("../utils/permissions");
 const { assertControlAllowed, applyControlLock } = require("../utils/controlLock");
-const { canUseDevice, getAllowedDevice } = require("../utils/devicePermissions");
+const { getAllowedDevice } = require("../utils/devicePermissions");
 const { assertCanManageAsset } = require("../utils/signagePermissions");
+const { publishPost, deleteDeviceAsset } = require("../services/signageService");
 const piBridge = require("../services/piBridge");
 
 const sendSignageCommand = async (device_id, payload) =>
@@ -82,230 +80,12 @@ router.get("/device/:device_id/deployments", async (req, res) => {
 
 // Publish a post to signage → notifies Pi via Socket.IO
 router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
-  const actor = await getActor(req.user);
-  const {
-    post_id,
-    device_id,
-    duration_seconds,
-    start_date,
-    end_date,
-    priority,
-    display_group,
-  } = req.body;
-
-  const post = await prisma.post.findUnique({
-    where: { id: Number(post_id) },
-    include: { images: true, signage_metadata: true, author: true },
-  });
-  if (!post) return res.status(404).json({ error: "Post not found" });
-  
-  if (!canManagePost(actor, post)) {
-    return res.status(403).json({ error: "Cannot publish this post" });
+  try {
+    const result = await publishPost(req.user, req.body);
+    res.status(result.statusCode).json(result);
+  } catch (err) {
+    res.status(err.statusCode || 400).json({ error: err.message });
   }
-
-  if (req.body.signage_state !== undefined) {
-    const parsed = parseSignageState(req.body.signage_state);
-    if (!parsed) return res.status(400).json({ error: "Invalid signage_state" });
-    if (
-      actor.role !== "admin" &&
-      !canCreatorAssignState(actor.max_signage_state, parsed)
-    ) {
-      return res.status(403).json({
-        error: `You may only publish signage posts up to ${actor.max_signage_state || "NORMAL"} level.`,
-      });
-    }
-    await prisma.post.update({
-      where: { id: post.id },
-      data: { signage_state: parsed },
-    });
-    post.signage_state = parsed;
-  } else if (
-    actor.role !== "admin" &&
-    !canCreatorAssignState(actor.max_signage_state, post.signage_state)
-  ) {
-    return res.status(403).json({
-      error: `This post's signage level exceeds your allowed maximum (${actor.max_signage_state || "NORMAL"}).`,
-    });
-  }
-
-  const image = post.images[0];
-  if (!image) return res.status(400).json({ error: "Post has no media" });
-  if (!mediaFileExists(image.image_path)) {
-    return res.status(400).json({
-      error: `Media file missing on server: ${image.image_path}. Re-upload the video on the post.`,
-    });
-  }
-
-  const mediaDuration =
-    image.duration_seconds || Number(duration_seconds) || 10;
-
-  const device = await prisma.device.findUnique({
-    where: { id: Number(device_id) },
-    include: { groups: true }
-  });
-  if (!device) return res.status(404).json({ error: "Device not found" });
-  
-  if (!canUseDevice(actor, device)) {
-    return res.status(403).json({ error: "Cannot publish to this device" });
-  }
-
-  const lock = assertControlAllowed(actor, device);
-  if (!lock.ok) return res.status(403).json({ error: lock.error });
-
-  if (!device.is_approved) {
-    return res.status(403).json({
-      error: "This device is pending approval and cannot be controlled yet.",
-    });
-  }
-  if (device.status !== "online") {
-    return res.status(400).json({
-      error: `Update cancelled. These displays are offline: ${device.device_name}`,
-    });
-  }
-
-  // Upsert signage metadata
-  await prisma.signageMetadata.upsert({
-    where: { post_id: Number(post_id) },
-    update: {
-      duration_seconds: mediaDuration,
-      start_date: start_date ? new Date(start_date) : null,
-      end_date: end_date ? new Date(end_date) : null,
-      priority: Number(priority) || 1,
-      display_group: display_group || null,
-    },
-    create: {
-      post_id: Number(post_id),
-      duration_seconds: mediaDuration,
-      start_date: start_date ? new Date(start_date) : null,
-      end_date: end_date ? new Date(end_date) : null,
-      priority: Number(priority) || 1,
-      display_group: display_group || null,
-    },
-  });
-
-  const isAutoApprove = post.author?.auto_approve || actor.role === 'admin';
-
-  // Mark signage intent / permission (post status stays draft until creator publishes)
-  await prisma.post.update({
-    where: { id: Number(post_id) },
-    data: { 
-       requested_signage: true,
-       allowed_on_signage: isAutoApprove, 
-    },
-  });
-
-  const payload = {
-    post_id: post.id,
-    title: post.title,
-    image_url: image?.image_path,
-    media_type: image.media_type || "IMAGE",
-    duration_seconds: mediaDuration,
-    start_date: start_date || null,
-    end_date: end_date || null,
-  };
-
-  const existingAsset = await prisma.signageAsset.findFirst({
-    where: {
-      device_id: Number(device_id),
-      post_id: post.id,
-    },
-  });
-
-  await prisma.signageDeployment.upsert({
-    where: {
-      device_id_post_id: {
-        device_id: Number(device_id),
-        post_id: post.id,
-      },
-    },
-    update: {
-      duration_seconds: mediaDuration,
-      start_date: start_date ? new Date(start_date) : null,
-      end_date: end_date ? new Date(end_date) : null,
-      priority: Number(priority) || 1,
-      display_group: display_group || null,
-      status: "pending",
-      last_error: null,
-    },
-    create: {
-      device_id: Number(device_id),
-      post_id: post.id,
-      duration_seconds: mediaDuration,
-      start_date: start_date ? new Date(start_date) : null,
-      end_date: end_date ? new Date(end_date) : null,
-      priority: Number(priority) || 1,
-      display_group: display_group || null,
-      status: "pending",
-    },
-  });
-
-  // When auto-approved, Pi is online (checked above); otherwise only DB rows change until an admin allows signage.
-  let result = { ok: true, note: "Deployment saved. Awaiting admin approval." };
-  if (isAutoApprove) {
-    if (existingAsset) {
-      result = { ok: true, already_exists: true, asset: existingAsset };
-      await upsertSignageAsset(prisma, {
-        device_id,
-        post_id: post.id,
-        image_url: image?.image_path,
-        asset: existingAsset,
-      });
-      await prisma.signageDeployment.update({
-        where: {
-          device_id_post_id: {
-            device_id: Number(device_id),
-            post_id: post.id,
-          },
-        },
-        data: { status: "synced", last_error: null },
-      });
-      await applyControlLock(actor, Number(device_id), "publish_asset");
-    } else {
-      result = await sendSignageCommand(device_id, {
-        action: "publish_asset",
-        ...payload,
-      });
-
-      if (result.ok) {
-        if (result.asset) {
-          await upsertSignageAsset(prisma, {
-            device_id: device.id,
-            post_id: post.id,
-            image_url: image?.image_path,
-            asset: result.asset,
-          });
-        }
-        await prisma.signageDeployment.update({
-          where: {
-            device_id_post_id: {
-              device_id: Number(device_id),
-              post_id: post.id,
-            },
-          },
-          data: { status: "synced", last_error: null },
-        });
-        await applyControlLock(actor, Number(device_id), "publish_asset");
-      } else {
-        await prisma.signageDeployment.update({
-          where: {
-            device_id_post_id: {
-              device_id: Number(device_id),
-              post_id: post.id,
-            },
-          },
-          data: { status: "pending", last_error: result.error || null },
-        });
-      }
-    }
-  }
-
-  const piOk = !isAutoApprove || result.ok;
-  res.status(piOk ? 200 : 502).json({
-    ok: piOk,
-    pi_notified: !!(isAutoApprove && result.ok),
-    pi_result: result,
-    error: piOk ? undefined : result.error || "Display could not sync this asset",
-  });
 });
 
 // List assets currently known to Anthias on one display.
@@ -498,69 +278,21 @@ router.delete(
   "/devices/:device_id/assets/:asset_id",
   auth(["admin", "creator"]),
   async (req, res) => {
-    const actor = await getActor(req.user);
-    const device = await getAllowedDevice(req, res);
-    if (!device) return;
+    try {
+      const actor = await getActor(req.user);
+      const device = await getAllowedDevice(req, res);
+      if (!device) return;
 
-    const lock = assertControlAllowed(actor, device);
-    if (!lock.ok) return res.status(403).json({ error: lock.error });
-
-    const assetId = String(req.params.asset_id);
-
-    const perm = await assertCanManageAsset(actor, device.id, assetId);
-    if (!perm.ok) return res.status(403).json({ error: perm.error });
-
-    const trackedAsset = perm.tracked;
-
-    // Notify the Pi to delete from local Anthias
-    const result = await sendSignageCommand(device.id, {
-      action: "delete_asset",
-      asset_id: assetId,
-    });
-
-    // 3. If socket command worked (or even if it failed but we want to clean DB),
-    // we MUST remove the deployment/asset records so the Pi doesn't re-sync them.
-    if (result.ok || req.query.force === "true") {
-      // Remove from SignageAsset (tracking)
-      await prisma.signageAsset
-        .delete({
-          where: {
-            device_id_asset_id: {
-              device_id: device.id,
-              asset_id: assetId,
-            },
-          },
-        })
-        .catch(() => {});
-
-      // If we know which post this was, remove the SignageDeployment
-      // so the /deployments endpoint no longer lists it for this device.
-      if (trackedAsset && trackedAsset.post_id) {
-        await prisma.signageDeployment
-          .delete({
-            where: {
-              device_id_post_id: {
-                device_id: device.id,
-                post_id: trackedAsset.post_id,
-              },
-            },
-          })
-          .catch(() => {});
-
-        // If no more deployments for this post, clear signage flag on the post.
-        const remainingDeployments = await prisma.signageDeployment.count({
-          where: { post_id: trackedAsset.post_id },
-        });
-        if (remainingDeployments === 0) {
-          await prisma.post.update({
-            where: { id: trackedAsset.post_id },
-            data: { allowed_on_signage: false, requested_signage: false },
-          });
-        }
-      }
-      await applyControlLock(actor, device.id, "delete_asset");
+      const result = await deleteDeviceAsset(
+        actor,
+        device,
+        req.params.asset_id,
+        req.query.force === "true",
+      );
+      res.status(result.statusCode).json(result);
+    } catch (err) {
+      res.status(err.statusCode || 400).json({ error: err.message });
     }
-    res.status(result.ok ? 200 : 503).json(result);
   },
 );
 
