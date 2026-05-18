@@ -4,7 +4,6 @@ const auth = require("../middleware/auth");
 const multer = require("multer");
 const path = require("path");
 const crypto = require("crypto");
-const fs = require("fs");
 const { upsertSignageAsset } = require("../utils/signageAssets");
 const { ensureDevicesOnline, getOnlineDeviceIdSet } = require("../utils/devices");
 const {
@@ -177,7 +176,9 @@ const parseDeviceIds = (value) => {
   try {
     const parsed = typeof value === "string" ? JSON.parse(value) : value;
     if (Array.isArray(parsed)) return parsed.map(Number).filter(Boolean);
-  } catch {}
+  } catch {
+    /* ignore parse errors */
+  }
   return String(value).split(",").map(Number).filter(Boolean);
 };
 

@@ -76,7 +76,9 @@ export default function CreatorSignage() {
         try {
           const r = await api.get(`/posts?group_id=${gid}`);
           allPosts.push(...(r.data || []));
-        } catch {}
+        } catch {
+          /* ignore group fetch errors */
+        }
       }
       // Deduplicate by post id
       const unique = [];

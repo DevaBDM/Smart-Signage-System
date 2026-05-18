@@ -8,7 +8,9 @@ const parseGroupIds = (value) => {
   try {
     const parsed = typeof value === "string" ? JSON.parse(value) : value;
     if (Array.isArray(parsed)) return parsed.map(Number).filter(Boolean);
-  } catch {}
+  } catch {
+    /* ignore parse errors */
+  }
   return String(value).split(",").map(Number).filter(Boolean);
 };
 
@@ -184,6 +186,7 @@ router.put("/:id", auth(["admin"]), async (req, res) => {
         ...(group_id !== undefined && {
           group_id: group_id ? Number(group_id) : null,
         }),
+        ...(req.body.status !== undefined && { status: req.body.status }),
         ...(groupIds !== null && {
           groups: {
             create: groupIds.map((g_id) => ({ group_id: g_id })),

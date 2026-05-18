@@ -27,7 +27,9 @@ const readManagedGroups = () => {
   try {
     const raw = localStorage.getItem("managed_group_ids");
     if (raw) return JSON.parse(raw);
-  } catch {}
+  } catch {
+    /* ignore malformed localStorage */
+  }
   return managedGroupIds(storedUser);
 };
 

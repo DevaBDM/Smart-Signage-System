@@ -32,7 +32,9 @@ const parseGroupIds = (value) => {
   try {
     const parsed = typeof value === "string" ? JSON.parse(value) : value;
     if (Array.isArray(parsed)) return parsed.map(Number).filter(Number.isFinite);
-  } catch {}
+  } catch {
+    /* ignore parse errors */
+  }
   return String(value)
     .split(",")
     .map((s) => Number(s.trim()))
