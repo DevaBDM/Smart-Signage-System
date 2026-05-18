@@ -6,6 +6,7 @@ import DeviceList from "../../components/DeviceList";
 import * as devicesApi from "../../api/devices";
 import * as groupsApi from "../../api/groups";
 import * as S from "../../styles";
+import { messageStyle } from "../../tokens";
 
 export default function AdminDevices() {
   const [devices, setDevices] = useState([]);
@@ -286,15 +287,7 @@ export default function AdminDevices() {
                   }}
                 >
                 {msg && (
-                  <div
-                    style={{
-                      padding: "8px 12px",
-                      borderRadius: 8,
-                      fontSize: 13,
-                      background: msg.startsWith("✅") ? "#dcfce7" : "#fee2e2",
-                      color: msg.startsWith("✅") ? "#166534" : "#b91c1c",
-                    }}
-                  >
+                  <div style={messageStyle(msg)}>
                     {msg}
                   </div>
                 )}

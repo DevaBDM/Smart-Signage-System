@@ -1,5 +1,6 @@
 import MultiSelect from "./MultiSelect";
 import * as S from "../styles";
+import { messageStyle } from "../tokens";
 
 export default function DeviceRegisterForm({
   form,
@@ -17,19 +18,7 @@ export default function DeviceRegisterForm({
         onSubmit={onSubmit}
         style={{ display: "flex", flexDirection: "column", gap: 10 }}
       >
-        {regMsg && (
-          <div
-            style={{
-              padding: "8px 12px",
-              borderRadius: 8,
-              fontSize: 13,
-              background: regMsg.startsWith("✅") ? "#dcfce7" : "#fee2e2",
-              color: regMsg.startsWith("✅") ? "#166534" : "#b91c1c",
-            }}
-          >
-            {regMsg}
-          </div>
-        )}
+        {regMsg && <div style={messageStyle(regMsg)}>{regMsg}</div>}
         <label style={S.label}>Device ID (from config.py)</label>
         <input
           style={S.input}

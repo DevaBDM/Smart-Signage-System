@@ -354,9 +354,9 @@ A phase is done when:
 - [x] Phase D2: asyncHandler
 - [x] Phase D3: piBridge module (drop app.set)
 - [x] Phase D4: app.js / index.js split
-- [ ] Phase E1: CreatorPosts split
-- [ ] Phase E2: AdminDevices split
-- [ ] Phase E3: CreatorSignage split
+- [x] Phase E1: CreatorPosts split
+- [x] Phase E2: AdminDevices split
+- [x] Phase E3: CreatorSignage split
 - [x] Phase E4: CreatorEditor reuses SignagePanel
 - [x] Phase F1: frontend api/ modules
 - [x] Phase F2: postsApi.listForGroups

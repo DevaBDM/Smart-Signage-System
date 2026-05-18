@@ -1,4 +1,5 @@
 import * as S from "../styles";
+import { statusBadge } from "../tokens";
 
 export default function DeviceList({
   devices,
@@ -75,18 +76,7 @@ export default function DeviceList({
                 {d.location}
               </div>
             )}
-            <span
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                padding: "2px 8px",
-                borderRadius: 99,
-                marginTop: 4,
-                display: "inline-block",
-                background: d.status === "online" ? "#dcfce7" : "#fee2e2",
-                color: d.status === "online" ? "#16a34a" : "#dc2626",
-              }}
-            >
+            <span style={statusBadge(d.status)}>
               {d.status}
             </span>
             {!d.is_approved && (

@@ -8,28 +8,12 @@ import SignageAssetList from "../../components/SignageAssetList";
 import useAuthStore from "../../store/useAuthStore";
 import * as S from "../../styles";
 import { assetOrigin } from "../../config/apiBase";
+import { messageStyle } from "../../tokens";
 import usePersistentState, {
   userScopedKey,
 } from "../../hooks/usePersistentState";
 
 const BASE = assetOrigin();
-
-const messageStyle = (msg) => ({
-  padding: "8px 12px",
-  borderRadius: 8,
-  marginBottom: 12,
-  fontSize: 13,
-  background: msg.startsWith("✅")
-    ? "#dcfce7"
-    : msg.startsWith("⚠️")
-      ? "#fffbeb"
-      : "#fee2e2",
-  color: msg.startsWith("✅")
-    ? "#166534"
-    : msg.startsWith("⚠️")
-      ? "#92400e"
-      : "#b91c1c",
-});
 
 function postMediaMeta(post) {
   const media = post?.images?.[0];

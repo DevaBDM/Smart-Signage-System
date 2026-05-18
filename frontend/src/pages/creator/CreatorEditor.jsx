@@ -11,6 +11,7 @@ import usePersistentState, {
   userScopedKey,
 } from "../../hooks/usePersistentState";
 import SignagePanel from "../../components/SignagePanel";
+import { messageStyle } from "../../tokens";
 import {
   SIGNAGE_STATE_LABELS,
   creatorSignageStateOptions,
@@ -188,15 +189,7 @@ export default function CreatorEditor() {
         </p>
 
         {msg && (
-          <div
-            style={{
-              ...S.card,
-              padding: "10px 14px",
-              background: msg.startsWith("✅") ? "#f0fdf4" : "#fef2f2",
-              border: `1.5px solid ${msg.startsWith("✅") ? "#86efac" : "#fecaca"}`,
-              color: msg.startsWith("✅") ? "#166534" : "#b91c1c",
-            }}
-          >
+          <div style={{ ...S.card, padding: "10px 14px", ...messageStyle(msg) }}>
             {msg}
           </div>
         )}

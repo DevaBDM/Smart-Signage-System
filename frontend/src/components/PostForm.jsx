@@ -1,6 +1,7 @@
 import MediaUploadField from "./MediaUploadField";
 import SignagePanel from "./SignagePanel";
 import * as S from "../styles";
+import { messageStyle } from "../tokens";
 
 export default function PostForm({
   form,
@@ -30,20 +31,7 @@ export default function PostForm({
           <button onClick={onCancelEdit} style={{ ...S.btn, padding: '4px 8px', fontSize: 12 }}>Cancel Edit</button>
         )}
       </div>
-      {msg && (
-        <div
-          style={{
-            padding: "8px 12px",
-            borderRadius: 8,
-            marginBottom: 12,
-            fontSize: 13,
-            background: msg.startsWith("✅") ? "#dcfce7" : "#fee2e2",
-            color: msg.startsWith("✅") ? "#166534" : "#b91c1c",
-          }}
-        >
-          {msg}
-        </div>
-      )}
+      {msg && <div style={messageStyle(msg)}>{msg}</div>}
       <form
         onSubmit={onSubmit}
         style={{ display: "flex", flexDirection: "column", gap: 10 }}
