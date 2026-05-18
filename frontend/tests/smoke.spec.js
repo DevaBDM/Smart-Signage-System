@@ -135,3 +135,30 @@ test.describe("happy path smoke tests", () => {
     expect(pubBody.ok).toBe(true);
   });
 });
+
+test.describe("UI smoke tests", () => {
+  test("login via frontend form succeeds", async ({ page }) => {
+    // Use the pre-seeded test admin account (seedTestDb.js creates this)
+    const username = "test-admin";
+    const password = "TestPass123!";
+
+    // Navigate to login page (baseURL set in playwright.config.js)
+    await page.goto("/login");
+
+    // Fill form and submit
+    await page.fill('input[name="username"]', username);
+    await page.fill('input[name="password"]', password);
+    await page.click('button[type="submit"]');
+
+    // Wait for navigation away from login (dashboard loads)
+    await page.waitForURL(/^(?!.*\/login).*$/, { timeout: 5000 });
+
+    // Verify no error toast / error message is visible
+    const error = page.locator("text=Invalid username or password.");
+    await expect(error).not.toBeVisible();
+
+    // Verify auth state persisted (token in localStorage)
+    const token = await page.evaluate(() => localStorage.getItem("token"));
+    expect(token).toBeTruthy();
+  });
+});
