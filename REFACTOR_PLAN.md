@@ -341,7 +341,7 @@ A phase is done when:
 - [x] Phase 0 guardrails: lint, smoke tests, Playwright happy paths
 - [x] Phase A1: extract posts.js helpers to utils/
 - [x] Phase A2: postService
-- [ ] Phase A3: postRepo
+- [x] Phase A3: postRepo
 - [ ] Phase A4: post validators
 - [ ] Phase B1: piBridge
 - [ ] Phase B2: signage permissions to utils/

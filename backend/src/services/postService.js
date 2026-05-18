@@ -1,4 +1,5 @@
 const prisma = require("../db/prisma");
+const postRepo = require("../repositories/postRepo");
 const { canManage, canManagePost, getActor } = require("../utils/permissions");
 const { parseDeviceIds, toBool } = require("../utils/parsers");
 const { ensureDevicesOnline, getOnlineDeviceIdSet } = require("../utils/devices");
@@ -100,7 +101,7 @@ async function createPost(user, body, files) {
 
   const selectedDeviceIds = parseDeviceIds(device_ids);
 
-  const creator = await prisma.user.findUnique({ where: { id: user.id } });
+  const creator = await postRepo.findUserById(user.id);
   const isAutoApprove = creator?.auto_approve || user.role === "admin";
 
   const requestedFeed = toBool(allowed_on_feed !== undefined ? allowed_on_feed : publish_to_feed);
@@ -129,36 +130,31 @@ async function createPost(user, body, files) {
 
   const createdPosts = [];
   for (const targetGroupId of targetGroupIds) {
-    const post = await prisma.post.create({
-      data: {
-        title,
-        slug: slugify(title + "-" + targetGroupId),
-        description_markdown: description_markdown || null,
-        group_id: Number(targetGroupId),
-        created_by: user.id,
-        signage_state: signageState,
-        allowed_on_feed: isAutoApprove ? requestedFeed : false,
-        allowed_on_signage: isAutoApprove ? requestedSignage : false,
-        requested_feed: requestedFeed,
-        requested_signage: requestedSignage,
-        status: status || "draft",
-        images: {
-          create: (mediaRows || []).map((m, i) => ({
-            image_path: m.image_path,
-            media_type: m.media_type || "IMAGE",
-            duration_seconds: m.duration_seconds ?? null,
-            order_index: i,
-          })),
-        },
-        signage_metadata: { create: metaPayload },
+    const post = await postRepo.createPost({
+      title,
+      slug: slugify(title + "-" + targetGroupId),
+      description_markdown: description_markdown || null,
+      group_id: Number(targetGroupId),
+      created_by: user.id,
+      signage_state: signageState,
+      allowed_on_feed: isAutoApprove ? requestedFeed : false,
+      allowed_on_signage: isAutoApprove ? requestedSignage : false,
+      requested_feed: requestedFeed,
+      requested_signage: requestedSignage,
+      status: status || "draft",
+      images: {
+        create: (mediaRows || []).map((m, i) => ({
+          image_path: m.image_path,
+          media_type: m.media_type || "IMAGE",
+          duration_seconds: m.duration_seconds ?? null,
+          order_index: i,
+        })),
       },
-      include: { images: true, signage_metadata: true },
+      signage_metadata: { create: metaPayload },
     });
 
     if (selectedDeviceIds.length > 0) {
-      const targetDevices = await prisma.device.findMany({
-        where: { id: { in: selectedDeviceIds } },
-      });
+      const targetDevices = await postRepo.findDevicesByIds(selectedDeviceIds);
       await deployPostToDevices(null, post, targetDevices, body);
     }
 
@@ -170,10 +166,7 @@ async function createPost(user, body, files) {
 
 async function updatePost(user, postId, body, files, emitter) {
   const actor = await getActor(user);
-  const post = await prisma.post.findUnique({
-    where: { id: postId },
-    include: { images: true, author: true },
-  });
+  const post = await postRepo.findPostWithImagesAndAuthor(postId);
   if (!post) throw Object.assign(new Error("Not found"), { statusCode: 404 });
   if (!canManage(actor, post.group_id)) {
     throw Object.assign(new Error("Forbidden"), { statusCode: 403 });
@@ -208,32 +201,29 @@ async function updatePost(user, postId, body, files, emitter) {
     for (const img of post.images) {
       deleteMediaFile(img.image_path);
     }
-    await prisma.postImage.deleteMany({ where: { post_id: postId } });
-    await prisma.postImage.createMany({
-      data: mediaRows.map((m, i) => ({
+    await postRepo.deletePostImages(postId);
+    await postRepo.createPostImages(
+      mediaRows.map((m, i) => ({
         post_id: postId,
         image_path: m.image_path,
         media_type: m.media_type || "IMAGE",
         duration_seconds: m.duration_seconds ?? null,
         order_index: i,
       })),
-    });
+    );
   }
 
   const updatedMedia = mediaRows?.length
     ? mediaRows
-    : await prisma.postImage.findMany({
-        where: { post_id: postId },
-        orderBy: { order_index: "asc" },
-      });
+    : await postRepo.findPostImages(postId);
   const metaDuration =
     Number(body.duration_seconds) || primaryMediaDuration(updatedMedia, 10);
 
-  await prisma.signageMetadata.upsert({
-    where: { post_id: postId },
-    update: buildSignageMeta(body, metaDuration),
-    create: { post_id: postId, ...buildSignageMeta(body, metaDuration) },
-  });
+  await postRepo.upsertSignageMetadata(
+    postId,
+    buildSignageMeta(body, metaDuration),
+    buildSignageMeta(body, metaDuration),
+  );
 
   const data = { title, description_markdown, status };
 
@@ -278,19 +268,13 @@ async function updatePost(user, postId, body, files, emitter) {
     data.signage_state = signageState;
   }
 
-  const updated = await prisma.post.update({
-    where: { id: postId },
-    data,
-    include: { images: true, signage_metadata: true },
-  });
+  const updated = await postRepo.updatePost(postId, data);
 
   // ---- deployment sync ----
-  const allDeps = await prisma.signageDeployment.findMany({
-    where: { post_id: postId },
-  });
+  const allDeps = await postRepo.findAllDeploymentsForPost(postId);
 
   if (!updated.allowed_on_signage) {
-    await prisma.signageAsset.deleteMany({ where: { post_id: postId } });
+    await postRepo.deleteSignageAssetsForPost(postId);
     if (updated.status === "published" && emitter) {
       const purgeOnline = await getOnlineDeviceIdSet(
         prisma,
@@ -320,9 +304,7 @@ async function updatePost(user, postId, body, files, emitter) {
     if (!removedIds.length) return;
     const removedOnline = await getOnlineDeviceIdSet(prisma, removedIds);
     for (const did of removedIds) {
-      await prisma.signageAsset.deleteMany({
-        where: { post_id: postId, device_id: did },
-      });
+      await postRepo.deleteSignageAssetsForDevice(postId, did);
       if (emitter && removedOnline.has(did)) {
         await emitter(
           did,
@@ -331,26 +313,20 @@ async function updatePost(user, postId, body, files, emitter) {
           5000,
         ).catch(() => {});
       }
-      await prisma.signageDeployment.delete({
-        where: { device_id_post_id: { device_id: did, post_id: postId } },
-      });
+      await postRepo.deleteDeployment(postId, did);
     }
   };
 
   if (syncIds !== null) {
     if (syncIds.length > 0) {
-      const targetDevices = await prisma.device.findMany({
-        where: { id: { in: syncIds } },
-      });
+      const targetDevices = await postRepo.findDevicesByIds(syncIds);
       await deployPostToDevices(emitter, updated, targetDevices, body);
       const removedIds = allDeps.map((d) => d.device_id).filter((id) => !syncIds.includes(id));
       await removeDeployments(removedIds);
     } else if (actor.role !== "admin" && allDeps.length > 0) {
       await removeDeployments(allDeps.map((d) => d.device_id));
     } else if (actor.role === "admin" && updated.allowed_on_signage && allDeps.length > 0) {
-      const targetDevices = await prisma.device.findMany({
-        where: { id: { in: allDeps.map((d) => d.device_id) } },
-      });
+      const targetDevices = await postRepo.findDevicesByIds(allDeps.map((d) => d.device_id));
       await deployPostToDevices(emitter, updated, targetDevices, updated.signage_metadata || {});
     }
   }
@@ -360,10 +336,7 @@ async function updatePost(user, postId, body, files, emitter) {
 
 async function removePost(user, postId, emitter) {
   const actor = await getActor(user);
-  const post = await prisma.post.findUnique({
-    where: { id: postId },
-    include: { images: true },
-  });
+  const post = await postRepo.findPostWithImages(postId);
   if (!post || !canManage(actor, post.group_id)) {
     throw Object.assign(new Error("Forbidden"), { statusCode: 403 });
   }
@@ -374,12 +347,10 @@ async function removePost(user, postId, emitter) {
     );
   }
 
-  const signageDeps = await prisma.signageDeployment.findMany({
-    where: { post_id: post.id },
-  });
+  const signageDeps = await postRepo.findAllDeploymentsForPost(post.id);
   const depDeviceIds = signageDeps.map((d) => d.device_id);
 
-  await prisma.playlistItem.deleteMany({ where: { post_id: post.id } });
+  await postRepo.deletePlaylistItemsForPost(post.id);
 
   const deleteOnline = await getOnlineDeviceIdSet(prisma, depDeviceIds);
   if (emitter) {
@@ -398,7 +369,7 @@ async function removePost(user, postId, emitter) {
     deleteMediaFile(img.image_path);
   }
 
-  await prisma.post.delete({ where: { id: postId } });
+  await postRepo.deletePost(postId);
   return { ok: true };
 }
 
