@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import AdminSidebar from "../../components/AdminSidebar";
 import MultiSelect from "../../components/MultiSelect";
-import api from "../../api/axios";
+import * as devicesApi from "../../api/devices";
+import * as groupsApi from "../../api/groups";
 import * as S from "../../styles";
 
 export default function AdminDevices() {
@@ -32,13 +33,11 @@ export default function AdminDevices() {
   const [sort, setSort] = useState({ by: "id", order: "asc" });
 
   const load = () => {
-    api
-      .get(`/devices?sortBy=${sort.by}&sortOrder=${sort.order}`)
-      .then((r) => setDevices(r.data))
+    devicesApi.listDevices(sort.by, sort.order)
+      .then(setDevices)
       .catch(() => {});
-    api
-      .get("/groups")
-      .then((r) => setGroups(r.data))
+    groupsApi.listGroups()
+      .then(setGroups)
       .catch(() => {});
   };
   useEffect(() => {
@@ -51,8 +50,8 @@ export default function AdminDevices() {
     if (!device) return;
     setSensorLoading(true);
     try {
-      const r = await api.get(`/devices/${device.id}`);
-      setSensors(r.data.sensor_logs || []);
+      const data = await devicesApi.getDevice(device.id);
+      setSensors(data.sensor_logs || []);
     } finally {
       setSensorLoading(false);
     }
@@ -76,7 +75,7 @@ export default function AdminDevices() {
     e.preventDefault();
     setRegMsg("");
     try {
-      await api.post("/devices/register", {
+      await devicesApi.registerDevice({
         ...form,
         group_id: form.group_id || null,
         group_ids: form.group_ids,
@@ -103,7 +102,7 @@ export default function AdminDevices() {
     if (!sel) return;
     setMsg("");
     try {
-      const r = await api.put(`/devices/${sel.id}`, {
+      const r = await devicesApi.updateDevice(sel.id, {
         ...editForm,
         group_id: editForm.group_id || null,
         group_ids: editForm.group_ids,
@@ -121,7 +120,7 @@ export default function AdminDevices() {
     if (!sel || !window.confirm("Are you sure you want to reset this device to its agent defaults?")) return;
     setMsg("");
     try {
-      await api.put(`/devices/${sel.id}/reset`);
+      await devicesApi.resetDevice(sel.id);
       setMsg("✅ Reset successful. Waiting for next heartbeat.");
       load();
       setSel(null);
@@ -134,7 +133,7 @@ export default function AdminDevices() {
     if (!sel || !window.confirm("CRITICAL: This will wipe all images from the TV and remove the device from the system. Continue?")) return;
     setMsg("");
     try {
-      await api.delete(`/devices/${sel.id}`);
+      await devicesApi.removeDevice(sel.id);
       setMsg("✅ Device and signage data erased.");
       load();
       setSel(null);
@@ -147,7 +146,7 @@ export default function AdminDevices() {
     if (!sel) return;
     setMsg("");
     try {
-      const r = await api.post(`/devices/${sel.id}/approve`, {
+      const r = await devicesApi.approveDevice(sel.id, {
         group_id: editForm.group_id || null,
         group_ids: editForm.group_ids,
         all_groups: editForm.all_groups,
@@ -172,7 +171,7 @@ export default function AdminDevices() {
     if (!sel || !window.confirm("Reject this registration / these changes?")) return;
     setMsg("");
     try {
-      await api.post(`/devices/${sel.id}/reject`);
+      await devicesApi.rejectDevice(sel.id);
       setMsg("✅ Rejected.");
       load();
       setSel(null);

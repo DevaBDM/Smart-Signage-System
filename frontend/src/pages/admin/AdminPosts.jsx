@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import AdminSidebar from "../../components/AdminSidebar";
-import api from "../../api/axios";
+import * as postsApi from "../../api/posts";
 import * as S from "../../styles";
 import PostMedia from "../../components/PostMedia";
 
@@ -8,9 +8,8 @@ export default function AdminPosts() {
   const [posts, setPosts] = useState([]);
 
   const load = () =>
-    api
-      .get("/posts")
-      .then((r) => setPosts(r.data))
+    postsApi.listPosts()
+      .then(setPosts)
       .catch(() => {});
   useEffect(() => {
     load();
@@ -19,14 +18,12 @@ export default function AdminPosts() {
   const del = async (id) => {
     if (!confirm("Delete post?")) return;
     const deleteSignage = confirm("Also remove this post from signage displays?");
-    await api.delete(`/posts/${id}`, {
-      params: { delete_signage: deleteSignage },
-    });
+    await postsApi.deletePost(id, deleteSignage);
     load();
   };
 
   const toggle = async (post, field) => {
-    await api.put(`/posts/${post.id}`, { [field]: !post[field] });
+    await postsApi.togglePostField(post, field);
     load();
   };
 

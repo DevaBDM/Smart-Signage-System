@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import AdminSidebar from "../../components/AdminSidebar";
 import SignageStateSelect from "../../components/SignageStateSelect";
-import api from "../../api/axios";
+import * as groupsApi from "../../api/groups";
 import {
   SIGNAGE_STATE_LABELS,
   SIGNAGE_STATES,
@@ -23,9 +23,8 @@ export default function AdminGroups() {
   });
 
   const load = () =>
-    api
-      .get("/groups")
-      .then((r) => setGroups(r.data))
+    groupsApi.listGroups()
+      .then(setGroups)
       .catch(() => {});
   useEffect(() => {
     load();
@@ -33,19 +32,19 @@ export default function AdminGroups() {
 
   const create = async (e) => {
     e.preventDefault();
-    await api.post("/groups", form);
+    await groupsApi.createGroup(form);
     setForm({ name: "", description: "", signage_state: "NORMAL" });
     load();
   };
 
   const update = async (group, changes) => {
-    await api.put(`/groups/${group.id}`, changes);
+    await groupsApi.updateGroup(group.id, changes);
     load();
   };
 
   const del = async (id) => {
     if (!confirm("Delete group?")) return;
-    await api.delete(`/groups/${id}`);
+    await groupsApi.deleteGroup(id);
     load();
   };
 

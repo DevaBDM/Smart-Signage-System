@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import AdminSidebar from "../../components/AdminSidebar";
 import SignageStateSelect from "../../components/SignageStateSelect";
 import MultiSelect from "../../components/MultiSelect";
-import api from "../../api/axios";
+import * as usersApi from "../../api/users";
+import * as groupsApi from "../../api/groups";
 import { SIGNAGE_STATE_LABELS, SIGNAGE_STATES } from "../../constants/signageStates";
 import * as S from "../../styles";
 
@@ -28,14 +29,8 @@ export default function AdminUsers() {
   const [error, setError] = useState("");
 
   const load = () => {
-    api
-      .get("/users")
-      .then((r) => setUsers(r.data))
-      .catch(() => {});
-    api
-      .get("/groups")
-      .then((r) => setGroups(r.data))
-      .catch(() => {});
+    usersApi.listUsers().then(setUsers).catch(() => {});
+    groupsApi.listGroups().then(setGroups).catch(() => {});
   };
   useEffect(() => {
     load();
@@ -45,7 +40,7 @@ export default function AdminUsers() {
     e.preventDefault();
     setError("");
     try {
-      await api.post("/auth/register", {
+      await usersApi.registerUser({
         ...form,
         group_id: form.group_id || null,
       });
@@ -79,7 +74,7 @@ export default function AdminUsers() {
   const updateUser = async (id, changes) => {
     setError("");
     try {
-      await api.put(`/users/${id}`, changes);
+      await usersApi.updateUser(id, changes);
       load();
     } catch (e) {
       setError(e.response?.data?.error || "Failed to update user");
@@ -88,7 +83,7 @@ export default function AdminUsers() {
 
   const del = async (id) => {
     if (!confirm("Delete user?")) return;
-    await api.delete(`/users/${id}`);
+    await usersApi.deleteUser(id);
     load();
   };
 

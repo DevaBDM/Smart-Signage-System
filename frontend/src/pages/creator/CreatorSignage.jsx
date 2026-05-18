@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import CreatorSidebar from "../../components/CreatorSidebar";
-import api from "../../api/axios";
+import * as signageApi from "../../api/signage";
+import * as postsApi from "../../api/posts";
+import * as devicesApi from "../../api/devices";
 import useAuthStore from "../../store/useAuthStore";
 import * as S from "../../styles";
 import { assetOrigin } from "../../config/apiBase";
@@ -71,15 +73,7 @@ export default function CreatorSignage() {
   useEffect(() => {
     const allowedGroupIds = [group_id, ...(managed_group_ids || [])].filter(Boolean);
     const loadAll = async () => {
-      const allPosts = [];
-      for (const gid of allowedGroupIds) {
-        try {
-          const r = await api.get(`/posts?group_id=${gid}`);
-          allPosts.push(...(r.data || []));
-        } catch {
-          /* ignore group fetch errors */
-        }
-      }
+      const allPosts = await postsApi.listPostsForGroups(allowedGroupIds);
       // Deduplicate by post id
       const unique = [];
       const seen = new Set();
@@ -92,9 +86,8 @@ export default function CreatorSignage() {
       setPosts(unique.filter((p) => p.images?.length > 0));
     };
     loadAll();
-    api
-      .get("/devices")
-      .then((r) => setDevices(r.data))
+    devicesApi.listDevices()
+      .then(setDevices)
       .catch(() => {});
   }, [group_id, managed_group_ids?.join(",")]);
 
@@ -105,9 +98,9 @@ export default function CreatorSignage() {
     }
     setAssetLoading(true);
     try {
-      const r = await api.get(`/signage/devices/${deviceId}/assets`);
-      const tracked = r.data.tracked_assets || [];
-      const merged = (r.data.assets || []).map((piAsset) => {
+      const data = await signageApi.getDeviceAssets(deviceId);
+      const tracked = data.tracked_assets || [];
+      const merged = (data.assets || []).map((piAsset) => {
         const t = tracked.find((ta) => ta.asset_id === piAsset.asset_id);
         const serverPath = t?.image_url;
         const isVideo =
@@ -161,12 +154,12 @@ export default function CreatorSignage() {
     e.preventDefault();
     setMsg("");
     try {
-      const r = await api.post("/signage/publish", form);
-      if (r.data.pi_notified) {
+      const r = await signageApi.publish(form);
+      if (r.pi_notified) {
         setMsg("✅ Published — display updated.");
-      } else if (r.data.error || r.data.pi_result?.error) {
+      } else if (r.error || r.pi_result?.error) {
         setMsg(
-          `⚠️ Saved on server; display sync failed: ${r.data.error || r.data.pi_result?.error}`,
+          `⚠️ Saved on server; display sync failed: ${r.error || r.pi_result?.error}`,
         );
       } else {
         setMsg("✅ Published (awaiting admin approval or offline sync).");
@@ -184,10 +177,7 @@ export default function CreatorSignage() {
     if (!selectedDeviceId) return;
     setMsg("");
     try {
-      await api.post(`/signage/devices/${selectedDeviceId}/control`, {
-        command,
-        asset_id,
-      });
+      await signageApi.controlDevice(selectedDeviceId, { command, asset_id });
       setMsg("✅ Display command sent.");
     } catch (e) {
       setMsg(e.response?.data?.error || "❌ Display command failed.");
@@ -196,10 +186,7 @@ export default function CreatorSignage() {
 
   const setAssetEnabled = async (asset, is_enabled) => {
     try {
-      await api.patch(
-        `/signage/devices/${selectedDeviceId}/assets/${asset.asset_id}`,
-        { is_enabled },
-      );
+      await signageApi.patchAsset(selectedDeviceId, asset.asset_id, { is_enabled });
       setMsg(is_enabled ? "✅ Asset shown." : "✅ Asset hidden.");
       await loadAssets();
     } catch (e) {
@@ -210,9 +197,7 @@ export default function CreatorSignage() {
   const deleteAsset = async (asset) => {
     if (!confirm(`Delete "${asset.name}" from this display?`)) return;
     try {
-      await api.delete(
-        `/signage/devices/${selectedDeviceId}/assets/${asset.asset_id}`,
-      );
+      await signageApi.deleteAsset(selectedDeviceId, asset.asset_id);
       setMsg("✅ Asset removed from display.");
       await loadAssets();
     } catch (e) {

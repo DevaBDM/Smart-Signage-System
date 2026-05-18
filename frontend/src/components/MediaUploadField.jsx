@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Cropper from "react-easy-crop";
-import api from "../api/axios";
+import * as mediaApi from "../api/media";
 import { mediaSrc } from "./PostMedia";
 import VideoTrimSlider from "./VideoTrimSlider";
 import * as S from "../styles";
@@ -140,10 +140,7 @@ export default function MediaUploadField({ items = [], onChange, max = 10, label
       const fd = new FormData();
       fd.append("file", draft.file);
       fd.append("crop", JSON.stringify(cropPayload));
-      const res = await api.post("/media/process", fd, {
-        headers: { "Content-Type": "multipart/form-data" },
-        timeout: 600000,
-      });
+      const res = await mediaApi.processMedia(fd);
       onChange([
         ...items,
         { ...res.data, previewUrl: mediaSrc(res.data) },

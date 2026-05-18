@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import AdminSidebar from "../../components/AdminSidebar";
-import api from "../../api/axios";
+import * as playlistsApi from "../../api/playlists";
+import * as groupsApi from "../../api/groups";
 import * as S from "../../styles";
 
 export default function AdminPlaylists() {
@@ -9,14 +10,8 @@ export default function AdminPlaylists() {
   const [form, setForm] = useState({ name: "", group_id: "" });
 
   const load = () => {
-    api
-      .get("/playlists")
-      .then((r) => setPlaylists(r.data))
-      .catch(() => {});
-    api
-      .get("/groups")
-      .then((r) => setGroups(r.data))
-      .catch(() => {});
+    playlistsApi.listPlaylists().then(setPlaylists).catch(() => {});
+    groupsApi.listGroups().then(setGroups).catch(() => {});
   };
   useEffect(() => {
     load();
@@ -24,14 +19,14 @@ export default function AdminPlaylists() {
 
   const create = async (e) => {
     e.preventDefault();
-    await api.post("/playlists", form);
+    await playlistsApi.createPlaylist(form);
     setForm({ name: "", group_id: "" });
     load();
   };
 
   const del = async (id) => {
     if (!confirm("Delete playlist?")) return;
-    await api.delete(`/playlists/${id}`);
+    await playlistsApi.deletePlaylist(id);
     load();
   };
 

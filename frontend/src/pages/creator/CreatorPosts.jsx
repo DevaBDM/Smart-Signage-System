@@ -3,7 +3,9 @@ import CreatorSidebar from "../../components/CreatorSidebar";
 import MultiSelect from "../../components/MultiSelect";
 import MediaUploadField from "../../components/MediaUploadField";
 import PostMedia, { mediaSrc } from "../../components/PostMedia";
-import api from "../../api/axios";
+import * as postsApi from "../../api/posts";
+import * as devicesApi from "../../api/devices";
+import * as groupsApi from "../../api/groups";
 import useAuthStore from "../../store/useAuthStore";
 import * as S from "../../styles";
 import usePersistentState, {
@@ -75,26 +77,23 @@ export default function CreatorPosts() {
   const [msg, setMsg] = useState("");
 
   const load = () => {
-    const params = new URLSearchParams();
-    if (filters.group_id) params.set("group_id", Number(filters.group_id));
-    if (filters.channel !== "all") params.set("channel", filters.channel);
-    if (filters.device_id) params.set("device_id", filters.device_id);
-    if (filters.creator_id) params.set("creator_id", filters.creator_id);
-    return api
-      .get(`/posts?${params.toString()}`)
-      .then((r) => setPosts(r.data))
+    const params = {};
+    if (filters.group_id) params.group_id = Number(filters.group_id);
+    if (filters.channel !== "all") params.channel = filters.channel;
+    if (filters.device_id) params.device_id = filters.device_id;
+    if (filters.creator_id) params.creator_id = filters.creator_id;
+    return postsApi.listPosts(params)
+      .then(setPosts)
       .catch(() => {});
   };
 
   useEffect(() => {
     load();
-    api
-      .get("/devices")
-      .then((r) => setDevices(r.data))
+    devicesApi.listDevices()
+      .then(setDevices)
       .catch(() => {});
-    api
-      .get("/groups")
-      .then((r) => setGroups(r.data))
+    groupsApi.listGroups()
+      .then(setGroups)
       .catch(() => {});
   }, [group_id, filters.group_id, filters.channel, filters.creator_id, filters.device_id]);
 
@@ -300,11 +299,11 @@ export default function CreatorPosts() {
       const saveOpts = mediaItems.length > 0 ? { timeout: 120000 } : {};
 
       if (editingId) {
-        await api.put(`/posts/${editingId}`, fd, saveOpts);
+        await postsApi.updatePost(editingId, fd, saveOpts);
         setMsg("✅ Post updated!");
       } else {
-        const res = await api.post("/posts", fd, saveOpts);
-        const count = res.data?.count || 1;
+        const res = await postsApi.createPost(fd, saveOpts);
+        const count = res.count || 1;
         setMsg(`✅ Created ${count} post${count > 1 ? "s" : ""} across ${count} group${count > 1 ? "s" : ""}!`);
       }
       resetForm();
@@ -326,9 +325,7 @@ export default function CreatorPosts() {
   const del = async (id) => {
     if (!confirm("Delete?")) return;
     const deleteSignage = confirm("Also remove this post from signage displays?");
-    await api.delete(`/posts/${id}`, {
-      params: { delete_signage: deleteSignage },
-    });
+    await postsApi.deletePost(id, deleteSignage);
     load();
   };
 
@@ -352,7 +349,7 @@ export default function CreatorPosts() {
     
     setLoading(true);
     try {
-      await api.post("/posts/bulk-action", { 
+      await postsApi.bulkAction({ 
         ids: selectedIds, 
         action,
         device_ids: bulkDeviceIds,

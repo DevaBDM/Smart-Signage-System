@@ -350,10 +350,10 @@ A phase is done when:
 - [x] Phase C1: deviceService + repo
 - [x] Phase C2: userService (priority swap with unit test)
 - [x] Phase C3: authService unified JWT shape
-- [ ] Phase D1: central error handler
-- [ ] Phase D2: asyncHandler
-- [ ] Phase D3: piBridge module (drop app.set)
-- [ ] Phase D4: app.js / index.js split
+- [x] Phase D1: central error handler
+- [x] Phase D2: asyncHandler
+- [x] Phase D3: piBridge module (drop app.set)
+- [x] Phase D4: app.js / index.js split
 - [ ] Phase E1: CreatorPosts split
 - [ ] Phase E2: AdminDevices split
 - [ ] Phase E3: CreatorSignage split

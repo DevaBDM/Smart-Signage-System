@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect } from "react";
 import useAuthStore from "../store/useAuthStore";
-import api from "../api/axios";
+import * as authApi from "../api/auth";
 
 const AuthContext = createContext();
 
@@ -9,9 +9,8 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     if (!auth.token) return;
-    api
-      .get("/auth/me")
-      .then((res) => {
+    authApi.me()
+      .then((data) => {
         const {
           role,
           group_id,
@@ -21,7 +20,7 @@ export const AuthProvider = ({ children }) => {
           creator_priority,
           control_lock_minutes,
           auto_approve,
-        } = res.data;
+        } = data;
         auth.setAuth(auth.token, role, group_id, {
           max_signage_state,
           managed_group_ids,
@@ -35,7 +34,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (username, password) => {
-    const res = await api.post("/auth/login", { username, password });
+    const res = await authApi.login(username, password);
     const {
       token,
       role,

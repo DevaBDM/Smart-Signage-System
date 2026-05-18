@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import CreatorSidebar from "../../components/CreatorSidebar";
 import Designer from "../../components/Designer";
 import MultiSelect from "../../components/MultiSelect";
-import api from "../../api/axios";
+import * as postsApi from "../../api/posts";
+import * as groupsApi from "../../api/groups";
+import * as devicesApi from "../../api/devices";
 import useAuthStore from "../../store/useAuthStore";
 import * as S from "../../styles";
 import usePersistentState, {
@@ -47,13 +49,11 @@ export default function CreatorEditor() {
   );
 
   useEffect(() => {
-    api
-      .get("/devices")
-      .then((r) => setDevices(r.data))
+    devicesApi.listDevices()
+      .then(setDevices)
       .catch(() => {});
-    api
-      .get("/groups")
-      .then((r) => setGroups(r.data))
+    groupsApi.listGroups()
+      .then(setGroups)
       .catch(() => {});
   }, []);
 
@@ -165,8 +165,8 @@ export default function CreatorEditor() {
         fd.append(key, Array.isArray(value) ? JSON.stringify(value) : value);
       });
       fd.append("images", exported.file);
-      const res = await api.post("/posts", fd);
-      const count = res.data?.count || 1;
+      const res = await postsApi.createPost(fd);
+      const count = res.count || 1;
       setMsg(`✅ Design saved to My Posts (${count} group${count > 1 ? "s" : ""}).`);
       setExported(null);
       clearForm();
