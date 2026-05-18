@@ -1,6 +1,7 @@
 const router = require("express").Router();
 const prisma = require("../db/prisma");
 const auth = require("../middleware/auth");
+const asyncHandler = require("../middleware/asyncHandler");
 const { uploadMedia } = require("../middleware/upload");
 const { ensureDevicesOnline, getOnlineDeviceIdSet } = require("../utils/devices");
 const { createPost, updatePost, removePost } = require("../services/postService");
@@ -119,37 +120,25 @@ router.get("/:id", auth(["admin", "creator"]), async (req, res) => {
 });
 
 // POST create post
-router.post("/", auth(["admin", "creator"]), uploadMedia, async (req, res) => {
-  try {
-    const result = await createPost(req.user, req.body, req.files);
-    res.json(result);
-  } catch (err) {
-    res.status(err.statusCode || 400).json({ error: err.message });
-  }
-});
+router.post("/", auth(["admin", "creator"]), uploadMedia, asyncHandler(async (req, res) => {
+  const result = await createPost(req.user, req.body, req.files);
+  res.json(result);
+}));
 
 // PUT update post
-router.put("/:id", auth(["admin", "creator"]), uploadMedia, async (req, res) => {
-  try {
-    const updated = await updatePost(req.user, Number(req.params.id), req.body, req.files, piBridge.getEmitter());
-    res.json(updated);
-  } catch (err) {
-    res.status(err.statusCode || 400).json({ error: err.message });
-  }
-});
+router.put("/:id", auth(["admin", "creator"]), uploadMedia, asyncHandler(async (req, res) => {
+  const updated = await updatePost(req.user, Number(req.params.id), req.body, req.files, piBridge.getEmitter());
+  res.json(updated);
+}));
 
 // DELETE post
-router.delete("/:id", auth(["admin", "creator"]), async (req, res) => {
-  try {
-    const result = await removePost(req.user, Number(req.params.id), piBridge.getEmitter());
-    res.json(result);
-  } catch (err) {
-    res.status(err.statusCode || 400).json({ error: err.message });
-  }
-});
+router.delete("/:id", auth(["admin", "creator"]), asyncHandler(async (req, res) => {
+  const result = await removePost(req.user, Number(req.params.id), piBridge.getEmitter());
+  res.json(result);
+}));
 
 // BULK ACTIONS
-router.post("/bulk-action", auth(["admin", "creator"]), async (req, res) => {
+router.post("/bulk-action", auth(["admin", "creator"]), asyncHandler(async (req, res) => {
   const actor = await getActor(req.user);
   const { ids, action, device_ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "No IDs provided" });
@@ -172,108 +161,104 @@ router.post("/bulk-action", auth(["admin", "creator"]), async (req, res) => {
 
   const emitter = piBridge.getEmitter();
 
-  try {
-    if (action === "delete") {
-      await prisma.playlistItem.deleteMany({ where: { post_id: { in: validIds } } });
-      for (const p of posts) {
-        if (!validIds.includes(p.id)) continue;
-        if (emitter) {
-          const bulkDelOnline = await getOnlineDeviceIdSet(
-            prisma,
-            p.signage_deployments.map((d) => d.device_id),
-          );
-          for (const d of p.signage_deployments) {
-            if (!bulkDelOnline.has(d.device_id)) continue;
-            await emitter(d.device_id, "signage_command", { action: "delete_post_assets", post_id: p.id }, 2000).catch(() => {});
-          }
-        }
-        for (const img of p.images) {
-          deleteMediaFile(img.image_path);
-        }
-      }
-      await prisma.post.deleteMany({ where: { id: { in: validIds } } });
-    } 
-    else if (action === "remove-signage") {
+  if (action === "delete") {
+    await prisma.playlistItem.deleteMany({ where: { post_id: { in: validIds } } });
+    for (const p of posts) {
+      if (!validIds.includes(p.id)) continue;
       if (emitter) {
-        const deps = await prisma.signageDeployment.findMany({ where: { post_id: { in: validIds } } });
-        const rsOnline = await getOnlineDeviceIdSet(
+        const bulkDelOnline = await getOnlineDeviceIdSet(
           prisma,
-          deps.map((d) => d.device_id),
+          p.signage_deployments.map((d) => d.device_id),
         );
-        for (const dep of deps) {
-          if (!rsOnline.has(dep.device_id)) continue;
-          await emitter(dep.device_id, "signage_command", { action: "delete_post_assets", post_id: dep.post_id }, 2000).catch(() => {});
+        for (const d of p.signage_deployments) {
+          if (!bulkDelOnline.has(d.device_id)) continue;
+          await emitter(d.device_id, "signage_command", { action: "delete_post_assets", post_id: p.id }, 2000).catch(() => {});
         }
       }
-      await prisma.signageAsset.deleteMany({ where: { post_id: { in: validIds } } });
-      await prisma.post.updateMany({
-        where: { id: { in: validIds } },
-        data: { allowed_on_signage: false, requested_signage: false },
-      });
-    }
-    else if (action === "remove-feed") {
-      await prisma.post.updateMany({
-        where: { id: { in: validIds } },
-        data: { allowed_on_feed: false, requested_feed: false },
-      });
-    }
-    else if (action === "add-feed") {
-      for (const p of posts) {
-         if (!validIds.includes(p.id)) continue;
-         const isAutoApprove = p.author?.auto_approve || actor.role === 'admin';
-         await prisma.post.update({
-           where: { id: p.id },
-           data: { 
-             requested_feed: true, 
-             allowed_on_feed: isAutoApprove, 
-           }
-         });
+      for (const img of p.images) {
+        deleteMediaFile(img.image_path);
       }
     }
-    else if (action === "add-signage" || action === "add-both") {
-      const publishFeed = action === "add-both";
-      const unionTargets = new Set();
-      for (const p of posts) {
-        if (!validIds.includes(p.id)) continue;
-        const t =
-          selectedDeviceIds.length > 0
-            ? selectedDeviceIds
-            : p.signage_deployments.map((d) => d.device_id);
-        t.forEach((id) => unionTargets.add(id));
-      }
-      const unionArr = [...unionTargets];
-      if (unionArr.length > 0) {
-        const chk = await ensureDevicesOnline(prisma, unionArr);
-        if (!chk.ok) return res.status(400).json({ error: chk.error });
-      }
-      for (const p of posts) {
-        if (!validIds.includes(p.id)) continue;
-        const isAutoApprove = p.author?.auto_approve || actor.role === 'admin';
-        const updated = await prisma.post.update({
-          where: { id: p.id },
-          data: { 
-            requested_signage: true, 
-            allowed_on_signage: isAutoApprove,
-            ...(publishFeed && { requested_feed: true, allowed_on_feed: isAutoApprove }) 
-          },
-          include: { images: true, signage_metadata: true }
-        });
-        const targetIds = selectedDeviceIds.length > 0 ? selectedDeviceIds : p.signage_deployments.map(d => d.device_id);
-        if (targetIds.length > 0) {
-          const targetDevices = await prisma.device.findMany({ where: { id: { in: targetIds } } });
-          await deployPostToDevices(
-            piBridge.getEmitter(),
-            updated,
-            targetDevices,
-            updated.signage_metadata || {},
-          );
-        }
+    await prisma.post.deleteMany({ where: { id: { in: validIds } } });
+  } 
+  else if (action === "remove-signage") {
+    if (emitter) {
+      const deps = await prisma.signageDeployment.findMany({ where: { post_id: { in: validIds } } });
+      const rsOnline = await getOnlineDeviceIdSet(
+        prisma,
+        deps.map((d) => d.device_id),
+      );
+      for (const dep of deps) {
+        if (!rsOnline.has(dep.device_id)) continue;
+        await emitter(dep.device_id, "signage_command", { action: "delete_post_assets", post_id: dep.post_id }, 2000).catch(() => {});
       }
     }
-    res.json({ ok: true, count: validIds.length });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
+    await prisma.signageAsset.deleteMany({ where: { post_id: { in: validIds } } });
+    await prisma.post.updateMany({
+      where: { id: { in: validIds } },
+      data: { allowed_on_signage: false, requested_signage: false },
+    });
   }
-});
+  else if (action === "remove-feed") {
+    await prisma.post.updateMany({
+      where: { id: { in: validIds } },
+      data: { allowed_on_feed: false, requested_feed: false },
+    });
+  }
+  else if (action === "add-feed") {
+    for (const p of posts) {
+       if (!validIds.includes(p.id)) continue;
+       const isAutoApprove = p.author?.auto_approve || actor.role === 'admin';
+       await prisma.post.update({
+         where: { id: p.id },
+         data: { 
+           requested_feed: true, 
+           allowed_on_feed: isAutoApprove, 
+         }
+       });
+    }
+  }
+  else if (action === "add-signage" || action === "add-both") {
+    const publishFeed = action === "add-both";
+    const unionTargets = new Set();
+    for (const p of posts) {
+      if (!validIds.includes(p.id)) continue;
+      const t =
+        selectedDeviceIds.length > 0
+          ? selectedDeviceIds
+          : p.signage_deployments.map((d) => d.device_id);
+      t.forEach((id) => unionTargets.add(id));
+    }
+    const unionArr = [...unionTargets];
+    if (unionArr.length > 0) {
+      const chk = await ensureDevicesOnline(prisma, unionArr);
+      if (!chk.ok) return res.status(400).json({ error: chk.error });
+    }
+    for (const p of posts) {
+      if (!validIds.includes(p.id)) continue;
+      const isAutoApprove = p.author?.auto_approve || actor.role === 'admin';
+      const updated = await prisma.post.update({
+        where: { id: p.id },
+        data: { 
+          requested_signage: true, 
+          allowed_on_signage: isAutoApprove,
+          ...(publishFeed && { requested_feed: true, allowed_on_feed: isAutoApprove }) 
+        },
+        include: { images: true, signage_metadata: true }
+      });
+      const targetIds = selectedDeviceIds.length > 0 ? selectedDeviceIds : p.signage_deployments.map(d => d.device_id);
+      if (targetIds.length > 0) {
+        const targetDevices = await prisma.device.findMany({ where: { id: { in: targetIds } } });
+        await deployPostToDevices(
+          piBridge.getEmitter(),
+          updated,
+          targetDevices,
+          updated.signage_metadata || {},
+        );
+      }
+    }
+  }
+  res.json({ ok: true, count: validIds.length });
+}));
 
 module.exports = router;

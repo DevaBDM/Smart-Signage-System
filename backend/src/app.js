@@ -80,4 +80,6 @@ app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", uploads_dir: UPLOADS_DIR });
 });
 
+app.use(require("./middleware/error"));
+
 module.exports = app;

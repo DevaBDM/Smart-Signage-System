@@ -1,6 +1,7 @@
 const router = require("express").Router();
 const prisma = require("../db/prisma");
 const auth = require("../middleware/auth");
+const asyncHandler = require("../middleware/asyncHandler");
 const {
   registerDevice,
   approveDevice,
@@ -56,63 +57,39 @@ router.get("/:id", auth(["admin"]), async (req, res) => {
 });
 
 // Register device from the admin dashboard.
-router.post("/register", auth(["admin"]), async (req, res) => {
-  try {
-    const device = await registerDevice(req.body);
-    res.json(device);
-  } catch (err) {
-    res.status(err.statusCode || 400).json({ error: err.message });
-  }
-});
+router.post("/register", auth(["admin"]), asyncHandler(async (req, res) => {
+  const device = await registerDevice(req.body);
+  res.json(device);
+}));
 
 // Approve a device or its pending changes (optionally apply group settings from body).
-router.post("/:id/approve", auth(["admin"]), async (req, res) => {
-  try {
-    const updated = await approveDevice(Number(req.params.id), req.body);
-    res.json(updated);
-  } catch (err) {
-    res.status(err.statusCode || 400).json({ error: err.message });
-  }
-});
+router.post("/:id/approve", auth(["admin"]), asyncHandler(async (req, res) => {
+  const updated = await approveDevice(Number(req.params.id), req.body);
+  res.json(updated);
+}));
 
 // Reject/Clear pending changes or unapproved device.
-router.post("/:id/reject", auth(["admin"]), async (req, res) => {
-  try {
-    const result = await rejectDevice(Number(req.params.id));
-    res.json(result);
-  } catch (err) {
-    res.status(err.statusCode || 400).json({ error: err.message });
-  }
-});
+router.post("/:id/reject", auth(["admin"]), asyncHandler(async (req, res) => {
+  const result = await rejectDevice(Number(req.params.id));
+  res.json(result);
+}));
 
 // Update device settings after auto-registration.
-router.put("/:id", auth(["admin"]), async (req, res) => {
-  try {
-    const device = await updateDeviceSettings(Number(req.params.id), req.body);
-    res.json(device);
-  } catch (err) {
-    res.status(err.statusCode || 400).json({ error: err.message });
-  }
-});
+router.put("/:id", auth(["admin"]), asyncHandler(async (req, res) => {
+  const device = await updateDeviceSettings(Number(req.params.id), req.body);
+  res.json(device);
+}));
 
 // Reset device to agent defaults.
-router.put("/:id/reset", auth(["admin"]), async (req, res) => {
-  try {
-    const device = await resetDevice(Number(req.params.id));
-    res.json({ message: "Device settings cleared. Waiting for next heartbeat to sync agent defaults.", device });
-  } catch (err) {
-    res.status(err.statusCode || 400).json({ error: err.message });
-  }
-});
+router.put("/:id/reset", auth(["admin"]), asyncHandler(async (req, res) => {
+  const device = await resetDevice(Number(req.params.id));
+  res.json({ message: "Device settings cleared. Waiting for next heartbeat to sync agent defaults.", device });
+}));
 
 // Remove device and clear ALL signage data from it.
-router.delete("/:id", auth(["admin"]), async (req, res) => {
-  try {
-    const result = await removeDevice(Number(req.params.id));
-    res.json(result);
-  } catch (err) {
-    res.status(err.statusCode || 400).json({ error: err.message });
-  }
-});
+router.delete("/:id", auth(["admin"]), asyncHandler(async (req, res) => {
+  const result = await removeDevice(Number(req.params.id));
+  res.json(result);
+}));
 
 module.exports = router;

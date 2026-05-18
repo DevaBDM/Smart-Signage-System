@@ -1,6 +1,7 @@
 const router = require("express").Router();
 const prisma = require("../db/prisma");
 const auth = require("../middleware/auth");
+const asyncHandler = require("../middleware/asyncHandler");
 
 router.get("/", auth(["admin", "creator"]), async (req, res) => {
   const where =
@@ -16,30 +17,26 @@ router.get("/", auth(["admin", "creator"]), async (req, res) => {
   res.json(playlists);
 });
 
-router.post("/", auth(["admin", "creator"]), async (req, res) => {
+router.post("/", auth(["admin", "creator"]), asyncHandler(async (req, res) => {
   const { name, group_id, postIds } = req.body;
   const g_id =
     req.user.role === "admin" ? Number(group_id) : req.user.group_id;
 
-  try {
-    const playlist = await prisma.playlist.create({
-      data: {
-        name,
-        group_id: g_id,
-        items: {
-          create: (postIds || []).map((id, index) => ({
-            post_id: Number(id),
-            order_index: index,
-          })),
-        },
+  const playlist = await prisma.playlist.create({
+    data: {
+      name,
+      group_id: g_id,
+      items: {
+        create: (postIds || []).map((id, index) => ({
+          post_id: Number(id),
+          order_index: index,
+        })),
       },
-      include: { items: true },
-    });
-    res.json(playlist);
-  } catch (e) {
-    res.status(400).json({ error: e.message });
-  }
-});
+    },
+    include: { items: true },
+  });
+  res.json(playlist);
+}));
 
 router.put("/:id", auth(["admin", "creator"]), async (req, res) => {
   const { name, items } = req.body; // items: [{post_id, duration_seconds, order_index}]

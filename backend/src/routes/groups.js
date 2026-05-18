@@ -1,6 +1,7 @@
 const router = require("express").Router();
 const prisma = require("../db/prisma");
 const auth = require("../middleware/auth");
+const asyncHandler = require("../middleware/asyncHandler");
 const { parseSignageState, STATE_LABELS } = require("../utils/signageStates");
 const { refreshGroupDevices } = require("../utils/refreshGroupDevices");
 
@@ -41,31 +42,30 @@ router.get("/", auth(["admin", "creator"]), async (req, res) => {
   );
 });
 
-router.post("/", auth(["admin"]), async (req, res) => {
+router.post("/", auth(["admin"]), asyncHandler(async (req, res) => {
   const { name, description, signage_state } = req.body;
   const parsedState = signage_state ? parseSignageState(signage_state) : "NORMAL";
   if (signage_state && !parsedState) {
     return res.status(400).json({ error: "Invalid signage_state" });
   }
   try {
-    res.json(
-      await prisma.group.create({
-        data: {
-          name,
-          description: description || null,
-          signage_state: parsedState || "NORMAL",
-        },
-      }),
-    );
+    const group = await prisma.group.create({
+      data: {
+        name,
+        description: description || null,
+        signage_state: parsedState || "NORMAL",
+      },
+    });
+    res.json(group);
   } catch (e) {
     if (e.code === "P2002") {
-      return res.status(400).json({ error: "Group name already exists." });
+      throw Object.assign(new Error("Group name already exists."), { statusCode: 400 });
     }
-    res.status(400).json({ error: e.message });
+    throw e;
   }
-});
+}));
 
-router.put("/:id", auth(["admin"]), async (req, res) => {
+router.put("/:id", auth(["admin"]), asyncHandler(async (req, res) => {
   const { name, description, signage_state } = req.body;
   const groupId = Number(req.params.id);
   const existing = await prisma.group.findUnique({ where: { id: groupId } });
@@ -94,22 +94,22 @@ router.put("/:id", auth(["admin"]), async (req, res) => {
     res.json(updated);
   } catch (e) {
     if (e.code === "P2002") {
-      return res.status(400).json({ error: "Group name already exists." });
+      throw Object.assign(new Error("Group name already exists."), { statusCode: 400 });
     }
-    res.status(400).json({ error: e.message });
+    throw e;
   }
-});
+}));
 
-router.delete("/:id", auth(["admin"]), async (req, res) => {
+router.delete("/:id", auth(["admin"]), asyncHandler(async (req, res) => {
   try {
     await prisma.group.delete({ where: { id: Number(req.params.id) } });
     res.json({ ok: true });
   } catch {
-    res.status(400).json({
-      error:
-        "Group is still used by users, displays, posts, or playlists.",
-    });
+    throw Object.assign(
+      new Error("Group is still used by users, displays, posts, or playlists."),
+      { statusCode: 400 },
+    );
   }
-});
+}));
 
 module.exports = router;

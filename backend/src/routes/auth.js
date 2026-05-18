@@ -1,6 +1,7 @@
 const router = require("express").Router();
 const prisma = require("../db/prisma");
 const auth = require("../middleware/auth");
+const asyncHandler = require("../middleware/asyncHandler");
 const {
   registerUser,
   authenticateUser,
@@ -14,14 +15,10 @@ const requireAdminAfterFirstUser = async (req, res, next) => {
   return auth(["admin"])(req, res, next);
 };
 
-router.post("/register", requireAdminAfterFirstUser, async (req, res) => {
-  try {
-    const payload = await registerUser(req.body);
-    res.json(payload);
-  } catch (err) {
-    res.status(err.statusCode || 400).json({ error: err.message });
-  }
-});
+router.post("/register", requireAdminAfterFirstUser, asyncHandler(async (req, res) => {
+  const payload = await registerUser(req.body);
+  res.json(payload);
+}));
 
 router.get("/me", auth(), async (req, res) => {
   const user = await prisma.user.findUnique({
@@ -32,14 +29,10 @@ router.get("/me", auth(), async (req, res) => {
   res.json(buildUserPayload(user));
 });
 
-router.post("/login", async (req, res) => {
-  try {
-    const payload = await authenticateUser(req.body.username, req.body.password);
-    const token = generateToken(payload);
-    res.json({ token, ...payload });
-  } catch (err) {
-    res.status(err.statusCode || 401).json({ error: err.message });
-  }
-});
+router.post("/login", asyncHandler(async (req, res) => {
+  const payload = await authenticateUser(req.body.username, req.body.password);
+  const token = generateToken(payload);
+  res.json({ token, ...payload });
+}));
 
 module.exports = router;

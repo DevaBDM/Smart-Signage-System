@@ -1,6 +1,7 @@
 const router = require("express").Router();
 const prisma = require("../db/prisma");
 const auth = require("../middleware/auth");
+const asyncHandler = require("../middleware/asyncHandler");
 
 const requireDeviceKeyIfConfigured = (req, res, next) => {
   if (!process.env.DEVICE_API_KEY) return next();
@@ -11,22 +12,18 @@ const requireDeviceKeyIfConfigured = (req, res, next) => {
 };
 
 // Log sensor data (called from Pi via REST as backup, main path is Socket.IO)
-router.post("/log", requireDeviceKeyIfConfigured, async (req, res) => {
+router.post("/log", requireDeviceKeyIfConfigured, asyncHandler(async (req, res) => {
   const { device_id, motion, brightness, rain } = req.body;
-  try {
-    const log = await prisma.sensorLog.create({
-      data: {
-        device_id: Number(device_id),
-        motion: Boolean(motion),
-        brightness: Number(brightness) || 0,
-        rain: Boolean(rain),
-      },
-    });
-    res.json(log);
-  } catch (e) {
-    res.status(400).json({ error: e.message });
-  }
-});
+  const log = await prisma.sensorLog.create({
+    data: {
+      device_id: Number(device_id),
+      motion: Boolean(motion),
+      brightness: Number(brightness) || 0,
+      rain: Boolean(rain),
+    },
+  });
+  res.json(log);
+}));
 
 // Get logs for a device
 router.get("/:device_id", auth(["admin"]), async (req, res) => {

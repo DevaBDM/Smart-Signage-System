@@ -2,6 +2,7 @@ const router = require("express").Router();
 const multer = require("multer");
 const path = require("path");
 const auth = require("../middleware/auth");
+const asyncHandler = require("../middleware/asyncHandler");
 const { parseMediaCrops } = require("../utils/parseMediaCrops");
 const {
   TEMP_DIR,
@@ -47,7 +48,7 @@ const uploadSingle = (req, res, next) => {
 };
 
 /** Probe duration/dimensions before crop UI (optional). */
-router.post("/probe", auth(["admin", "creator"]), uploadSingle, async (req, res) => {
+router.post("/probe", auth(["admin", "creator"]), uploadSingle, asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
   try {
     const mime = req.file.mimetype || "";
@@ -68,46 +69,36 @@ router.post("/probe", auth(["admin", "creator"]), uploadSingle, async (req, res)
       width: img.width,
       height: img.height,
     });
-  } catch (e) {
-    res.status(400).json({ error: e.message });
   } finally {
     const fs = require("fs");
     if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
   }
-});
+}));
 
 /** Crop/trim on server; returns paths ready to attach to a post. */
-router.post("/process", auth(["admin", "creator"]), uploadSingle, async (req, res) => {
+router.post("/process", auth(["admin", "creator"]), uploadSingle, asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-  try {
-    const crops = parseMediaCrops({ media_crops: req.body?.crop }, 1);
-    const processed = await processMediaFile(req.file, crops[0]);
-    res.json(processed);
-  } catch (e) {
-    res.status(400).json({ error: e.message || "Media processing failed" });
-  }
-});
+  const crops = parseMediaCrops({ media_crops: req.body?.crop }, 1);
+  const processed = await processMediaFile(req.file, crops[0]);
+  res.json(processed);
+}));
 
 /** Remove an orphan processed media file (one not yet attached to any post). */
-router.delete("/", auth(["admin", "creator"]), async (req, res) => {
+router.delete("/", auth(["admin", "creator"]), asyncHandler(async (req, res) => {
   const imagePath = req.body?.image_path || req.query?.image_path;
   if (!imagePath || typeof imagePath !== "string") {
     return res.status(400).json({ error: "image_path required" });
   }
-  try {
-    const inUse = await prisma.postImage.findFirst({
-      where: { image_path: imagePath },
-      select: { id: true },
-    });
-    if (inUse) {
-      // Attached to a post — let post update/delete clean it up.
-      return res.json({ deleted: false, reason: "in_use" });
-    }
-    deleteMediaFile(imagePath);
-    return res.json({ deleted: true });
-  } catch (e) {
-    return res.status(500).json({ error: e.message || "Delete failed" });
+  const inUse = await prisma.postImage.findFirst({
+    where: { image_path: imagePath },
+    select: { id: true },
+  });
+  if (inUse) {
+    // Attached to a post — let post update/delete clean it up.
+    return res.json({ deleted: false, reason: "in_use" });
   }
-});
+  deleteMediaFile(imagePath);
+  return res.json({ deleted: true });
+}));
 
 module.exports = router;

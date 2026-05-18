@@ -1,6 +1,7 @@
 const router = require("express").Router();
 const prisma = require("../db/prisma");
 const auth = require("../middleware/auth");
+const asyncHandler = require("../middleware/asyncHandler");
 const {
   syncSignageAssetList,
 } = require("../utils/signageAssets");
@@ -79,14 +80,10 @@ router.get("/device/:device_id/deployments", async (req, res) => {
 });
 
 // Publish a post to signage → notifies Pi via Socket.IO
-router.post("/publish", auth(["admin", "creator"]), async (req, res) => {
-  try {
-    const result = await publishPost(req.user, req.body);
-    res.status(result.statusCode).json(result);
-  } catch (err) {
-    res.status(err.statusCode || 400).json({ error: err.message });
-  }
-});
+router.post("/publish", auth(["admin", "creator"]), asyncHandler(async (req, res) => {
+  const result = await publishPost(req.user, req.body);
+  res.status(result.statusCode).json(result);
+}));
 
 // List assets currently known to Anthias on one display.
 router.get(
@@ -277,23 +274,19 @@ router.patch(
 router.delete(
   "/devices/:device_id/assets/:asset_id",
   auth(["admin", "creator"]),
-  async (req, res) => {
-    try {
-      const actor = await getActor(req.user);
-      const device = await getAllowedDevice(req, res);
-      if (!device) return;
+  asyncHandler(async (req, res) => {
+    const actor = await getActor(req.user);
+    const device = await getAllowedDevice(req, res);
+    if (!device) return;
 
-      const result = await deleteDeviceAsset(
-        actor,
-        device,
-        req.params.asset_id,
-        req.query.force === "true",
-      );
-      res.status(result.statusCode).json(result);
-    } catch (err) {
-      res.status(err.statusCode || 400).json({ error: err.message });
-    }
-  },
+    const result = await deleteDeviceAsset(
+      actor,
+      device,
+      req.params.asset_id,
+      req.query.force === "true",
+    );
+    res.status(result.statusCode).json(result);
+  }),
 );
 
 // Get signage playlists
