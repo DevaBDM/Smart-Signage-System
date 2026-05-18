@@ -12,9 +12,7 @@ process.env.PORT = "5001";
 require("./src/index");
 
 // Mock the socket bridge so signage routes don't fail in e2e tests.
-const app = require("./src/app");
-app.set(
-  "emitToDeviceAck",
+const piBridge = require("./src/services/piBridge");
+piBridge.setEmitter(
   () => Promise.resolve({ ok: true, asset: { asset_id: "mock-asset" } }),
 );
-app.set("emitToDevice", () => {});

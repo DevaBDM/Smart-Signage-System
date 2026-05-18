@@ -2,6 +2,7 @@ const router = require("express").Router();
 const prisma = require("../db/prisma");
 const auth = require("../middleware/auth");
 const { toBool, parseGroupIds } = require("../utils/parsers");
+const piBridge = require("../services/piBridge");
 
 // List devices. Admins see all; creators see displays in their group or all groups.
 router.get("/", auth(["admin", "creator"]), async (req, res) => {
@@ -214,9 +215,9 @@ router.delete("/:id", auth(["admin"]), async (req, res) => {
     if (!device) return res.status(404).json({ error: "Device not found" });
 
     // 1. Notify Pi to clear ALL Anthias assets (best effort if online)
-    const emitToDeviceAck = req.app.get("emitToDeviceAck");
-    if (emitToDeviceAck) {
-      await emitToDeviceAck(device_id, "signage_command", { action: "clear_all" }, 5000).catch(() => {});
+    const emitter = piBridge.getEmitter();
+    if (emitter) {
+      await emitter(device_id, "signage_command", { action: "clear_all" }, 5000).catch(() => {});
     }
 
     // 2. Cascade delete will handle related records in deployments, assets, logs, etc.

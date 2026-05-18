@@ -8,6 +8,7 @@ const { deployPostToDevices } = require("../services/deploymentService");
 const { getActor, canManagePost } = require("../utils/permissions");
 const { toBool, parseDeviceIds } = require("../utils/parsers");
 const { deleteMediaFile } = require("../utils/mediaProcessor");
+const piBridge = require("../services/piBridge");
 
 // GET all posts
 // Public listing is restricted to the feed channel; everything else requires auth and group scoping.
@@ -130,8 +131,7 @@ router.post("/", auth(["admin", "creator"]), uploadMedia, async (req, res) => {
 // PUT update post
 router.put("/:id", auth(["admin", "creator"]), uploadMedia, async (req, res) => {
   try {
-    const emitter = req.app.get("emitToDeviceAck");
-    const updated = await updatePost(req.user, Number(req.params.id), req.body, req.files, emitter);
+    const updated = await updatePost(req.user, Number(req.params.id), req.body, req.files, piBridge.getEmitter());
     res.json(updated);
   } catch (err) {
     res.status(err.statusCode || 400).json({ error: err.message });
@@ -141,8 +141,7 @@ router.put("/:id", auth(["admin", "creator"]), uploadMedia, async (req, res) => 
 // DELETE post
 router.delete("/:id", auth(["admin", "creator"]), async (req, res) => {
   try {
-    const emitter = req.app.get("emitToDeviceAck");
-    const result = await removePost(req.user, Number(req.params.id), emitter);
+    const result = await removePost(req.user, Number(req.params.id), piBridge.getEmitter());
     res.json(result);
   } catch (err) {
     res.status(err.statusCode || 400).json({ error: err.message });
@@ -171,21 +170,21 @@ router.post("/bulk-action", auth(["admin", "creator"]), async (req, res) => {
       return res.status(403).json({ error: "You do not have permission to perform this action on these posts." });
   }
 
-  const emitToDeviceAck = req.app.get("emitToDeviceAck");
+  const emitter = piBridge.getEmitter();
 
   try {
     if (action === "delete") {
       await prisma.playlistItem.deleteMany({ where: { post_id: { in: validIds } } });
       for (const p of posts) {
         if (!validIds.includes(p.id)) continue;
-        if (emitToDeviceAck) {
+        if (emitter) {
           const bulkDelOnline = await getOnlineDeviceIdSet(
             prisma,
             p.signage_deployments.map((d) => d.device_id),
           );
           for (const d of p.signage_deployments) {
             if (!bulkDelOnline.has(d.device_id)) continue;
-            await emitToDeviceAck(d.device_id, "signage_command", { action: "delete_post_assets", post_id: p.id }, 2000).catch(() => {});
+            await emitter(d.device_id, "signage_command", { action: "delete_post_assets", post_id: p.id }, 2000).catch(() => {});
           }
         }
         for (const img of p.images) {
@@ -195,7 +194,7 @@ router.post("/bulk-action", auth(["admin", "creator"]), async (req, res) => {
       await prisma.post.deleteMany({ where: { id: { in: validIds } } });
     } 
     else if (action === "remove-signage") {
-      if (emitToDeviceAck) {
+      if (emitter) {
         const deps = await prisma.signageDeployment.findMany({ where: { post_id: { in: validIds } } });
         const rsOnline = await getOnlineDeviceIdSet(
           prisma,
@@ -203,7 +202,7 @@ router.post("/bulk-action", auth(["admin", "creator"]), async (req, res) => {
         );
         for (const dep of deps) {
           if (!rsOnline.has(dep.device_id)) continue;
-          await emitToDeviceAck(dep.device_id, "signage_command", { action: "delete_post_assets", post_id: dep.post_id }, 2000).catch(() => {});
+          await emitter(dep.device_id, "signage_command", { action: "delete_post_assets", post_id: dep.post_id }, 2000).catch(() => {});
         }
       }
       await prisma.signageAsset.deleteMany({ where: { post_id: { in: validIds } } });
@@ -262,9 +261,8 @@ router.post("/bulk-action", auth(["admin", "creator"]), async (req, res) => {
         const targetIds = selectedDeviceIds.length > 0 ? selectedDeviceIds : p.signage_deployments.map(d => d.device_id);
         if (targetIds.length > 0) {
           const targetDevices = await prisma.device.findMany({ where: { id: { in: targetIds } } });
-          const emitter = req.app.get("emitToDeviceAck");
           await deployPostToDevices(
-            emitter,
+            piBridge.getEmitter(),
             updated,
             targetDevices,
             updated.signage_metadata || {},

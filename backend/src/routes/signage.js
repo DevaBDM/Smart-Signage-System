@@ -14,13 +14,7 @@ const {
 } = require("../utils/signageStates");
 const { getActor, canManagePost } = require("../utils/permissions");
 const { assertControlAllowed, applyControlLock } = require("../utils/controlLock");
-
-let _emitToDeviceAck; // injected from index.js
-
-router.use((req, _, next) => {
-  _emitToDeviceAck = req.app.get("emitToDeviceAck");
-  next();
-});
+const piBridge = require("../services/piBridge");
 
 const canUseDevice = (user, device) => {
   if (user.role === "admin") return true;
@@ -96,12 +90,8 @@ const assertCanManageAsset = async (actor, deviceId, assetId) => {
   return { ok: true, tracked, post };
 };
 
-const sendSignageCommand = async (device_id, payload) => {
-  if (!_emitToDeviceAck) {
-    return { ok: false, error: "Socket bridge is not ready" };
-  }
-  return _emitToDeviceAck(device_id, "signage_command", payload, 12000);
-};
+const sendSignageCommand = async (device_id, payload) =>
+  piBridge.emitToDeviceAck(device_id, "signage_command", payload, 12000);
 
 // Device pull endpoint used by the Pi's periodic sync.
 router.get("/device/:device_id/deployments", async (req, res) => {
