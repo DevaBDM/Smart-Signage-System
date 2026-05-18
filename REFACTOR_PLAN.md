@@ -360,7 +360,7 @@ A phase is done when:
 - [x] Phase E4: CreatorEditor reuses SignagePanel
 - [x] Phase F1: frontend api/ modules
 - [x] Phase F2: postsApi.listForGroups
-- [ ] Phase G1: design tokens
-- [ ] Phase G2: CSS modules per feature
-- [ ] Phase G3: components/ui kit
+- [x] Phase G1: design tokens
+- [x] Phase G2: CSS modules per feature
+- [x] Phase G3: components/ui kit
 - [ ] Phase H: TypeScript (optional)

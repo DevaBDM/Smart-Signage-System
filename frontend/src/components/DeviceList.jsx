@@ -1,5 +1,5 @@
+import { Card, Badge } from "./ui";
 import * as S from "../styles";
-import { statusBadge } from "../tokens";
 
 export default function DeviceList({
   devices,
@@ -9,7 +9,7 @@ export default function DeviceList({
   onSortChange,
 }) {
   return (
-    <div style={S.card}>
+    <Card>
       <div
         style={{
           display: "flex",
@@ -76,9 +76,7 @@ export default function DeviceList({
                 {d.location}
               </div>
             )}
-            <span style={statusBadge(d.status)}>
-              {d.status}
-            </span>
+            <Badge text={d.status} variant={d.status === "online" ? "success" : "error"} />
             {!d.is_approved && (
               <span
                 style={{
@@ -114,6 +112,6 @@ export default function DeviceList({
           </div>
         ))}
       </div>
-    </div>
+    </Card>
   );
 }

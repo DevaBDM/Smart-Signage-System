@@ -1,6 +1,6 @@
 import MultiSelect from "./MultiSelect";
+import { Card, Button, Message } from "./ui";
 import * as S from "../styles";
-import { messageStyle } from "../tokens";
 
 export default function DeviceRegisterForm({
   form,
@@ -12,13 +12,13 @@ export default function DeviceRegisterForm({
   const setField = (patch) => onChange({ ...form, ...patch });
 
   return (
-    <div style={S.card}>
+    <Card>
       <h2 style={{ fontWeight: 700, marginBottom: 14 }}>Register Device</h2>
       <form
         onSubmit={onSubmit}
         style={{ display: "flex", flexDirection: "column", gap: 10 }}
       >
-        {regMsg && <div style={messageStyle(regMsg)}>{regMsg}</div>}
+        {regMsg && <Message text={regMsg} />}
         <label style={S.label}>Device ID (from config.py)</label>
         <input
           style={S.input}
@@ -79,13 +79,10 @@ export default function DeviceRegisterForm({
             />
           </div>
         )}
-        <button
-          type="submit"
-          style={{ ...S.btn, background: "#2563eb", color: "#fff" }}
-        >
+        <Button type="submit" variant="primary">
           Register
-        </button>
+        </Button>
       </form>
-    </div>
+    </Card>
   );
 }

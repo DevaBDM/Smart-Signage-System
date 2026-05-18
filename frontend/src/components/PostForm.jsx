@@ -1,7 +1,7 @@
 import MediaUploadField from "./MediaUploadField";
 import SignagePanel from "./SignagePanel";
+import { Card, Message } from "./ui";
 import * as S from "../styles";
-import { messageStyle } from "../tokens";
 
 export default function PostForm({
   form,
@@ -24,14 +24,14 @@ export default function PostForm({
   const setField = (patch) => onChange({ ...form, ...patch });
 
   return (
-    <div style={S.card}>
+    <Card>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h2 style={{ fontWeight: 700 }}>{editingId ? "Edit Post" : "New Post"}</h2>
         {editingId && (
           <button onClick={onCancelEdit} style={{ ...S.btn, padding: '4px 8px', fontSize: 12 }}>Cancel Edit</button>
         )}
       </div>
-      {msg && <div style={messageStyle(msg)}>{msg}</div>}
+      {msg && <Message text={msg} />}
       <form
         onSubmit={onSubmit}
         style={{ display: "flex", flexDirection: "column", gap: 10 }}
@@ -153,6 +153,6 @@ export default function PostForm({
           {loading ? "Saving..." : editingId ? "Update Post" : "Save Post"}
         </button>
       </form>
-    </div>
+    </Card>
   );
 }
