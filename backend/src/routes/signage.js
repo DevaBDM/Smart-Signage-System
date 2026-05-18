@@ -14,81 +14,9 @@ const {
 } = require("../utils/signageStates");
 const { getActor, canManagePost } = require("../utils/permissions");
 const { assertControlAllowed, applyControlLock } = require("../utils/controlLock");
+const { canUseDevice, getAllowedDevice } = require("../utils/devicePermissions");
+const { assertCanManageAsset } = require("../utils/signagePermissions");
 const piBridge = require("../services/piBridge");
-
-const canUseDevice = (user, device) => {
-  if (user.role === "admin") return true;
-  if (device.all_groups) return true;
-  const allowedGroupIds = [
-    user.group_id,
-    ...(user.managed_group_ids || []),
-  ].filter(Boolean);
-  if (allowedGroupIds.includes(device.group_id)) return true;
-  if (device.groups?.some((m) => allowedGroupIds.includes(m.group_id))) return true;
-  return false;
-};
-
-const getAllowedDevice = async (req, res) => {
-  const actor = await getActor(req.user);
-  const device = await prisma.device.findUnique({
-    where: { id: Number(req.params.device_id || req.body.device_id) },
-    include: { groups: true }
-  });
-  if (!device) {
-    res.status(404).json({ error: "Device not found" });
-    return null;
-  }
-  if (!device.is_approved) {
-    res.status(403).json({ error: "This device is pending approval and cannot be controlled yet." });
-    return null;
-  }
-  if (!canUseDevice(actor, device)) {
-    res.status(403).json({ error: "Cannot control this device" });
-    return null;
-  }
-  if (device.status !== "online") {
-    res.status(400).json({
-      error: `Display "${device.device_name}" is offline. Operation cancelled.`,
-    });
-    return null;
-  }
-  return device;
-};
-
-const assertCanManageAsset = async (actor, deviceId, assetId) => {
-  const tracked = await prisma.signageAsset.findUnique({
-    where: {
-      device_id_asset_id: {
-        device_id: Number(deviceId),
-        asset_id: String(assetId),
-      },
-    },
-  });
-
-  if (actor.role === "admin") {
-    return { ok: true, tracked, post: null };
-  }
-
-  if (!tracked?.post_id) {
-    return {
-      ok: false,
-      error: "You can only control signage assets linked to your own posts.",
-    };
-  }
-
-  const post = await prisma.post.findUnique({
-    where: { id: tracked.post_id },
-    select: { id: true, created_by: true, group_id: true },
-  });
-  if (!post || !canManagePost(actor, post)) {
-    return {
-      ok: false,
-      error: "You cannot modify another creator's post on this display.",
-    };
-  }
-
-  return { ok: true, tracked, post };
-};
 
 const sendSignageCommand = async (device_id, payload) =>
   piBridge.emitToDeviceAck(device_id, "signage_command", payload, 12000);

@@ -1,11 +1,11 @@
 const request = require("supertest");
 const app = require("../src/app");
+const piBridge = require("../src/services/piBridge");
 const { createGroup, createUser, createPost, createPostImage, createDevice } = require("./helpers");
 
 /** Mock the socket bridge so signage routes don't fail in tests. */
 beforeAll(() => {
-  app.set(
-    "emitToDeviceAck",
+  piBridge.setEmitter(
     jest.fn(() => Promise.resolve({ ok: true, asset: { asset_id: "mock-asset" } })),
   );
 });

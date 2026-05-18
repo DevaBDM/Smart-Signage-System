@@ -344,7 +344,7 @@ A phase is done when:
 - [x] Phase A3: postRepo
 - [x] Phase A4: post validators
 - [x] Phase B1: piBridge
-- [ ] Phase B2: signage permissions to utils/
+- [x] Phase B2: signage permissions to utils/
 - [ ] Phase B3: signageService
 - [ ] Phase B4: signage validators
 - [ ] Phase C1: deviceService + repo
