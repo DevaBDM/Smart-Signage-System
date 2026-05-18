@@ -34,5 +34,6 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
+  await cleanDatabase();
   await prisma.$disconnect();
 });
