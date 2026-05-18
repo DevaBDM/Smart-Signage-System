@@ -3,6 +3,8 @@ import CreatorSidebar from "../../components/CreatorSidebar";
 import * as signageApi from "../../api/signage";
 import * as postsApi from "../../api/posts";
 import * as devicesApi from "../../api/devices";
+import SignagePublishForm from "../../components/SignagePublishForm";
+import SignageAssetList from "../../components/SignageAssetList";
 import useAuthStore from "../../store/useAuthStore";
 import * as S from "../../styles";
 import { assetOrigin } from "../../config/apiBase";
@@ -224,274 +226,28 @@ export default function CreatorSignage() {
         <div
           style={{ display: "grid", gridTemplateColumns: "420px 1fr", gap: 24 }}
         >
-          <div style={S.card}>
-            <h2 style={{ fontWeight: 700, marginBottom: 16 }}>
-              Signage Publish
-            </h2>
-            {msg && <div style={messageStyle(msg)}>{msg}</div>}
-            <form
-              onSubmit={publish}
-              style={{ display: "flex", flexDirection: "column", gap: 10 }}
-            >
-              <label style={S.label}>Post</label>
-              <select
-                style={S.input}
-                value={form.post_id}
-                onChange={(e) => onPostChange(e.target.value)}
-                required
-              >
-                <option value="">— Select post —</option>
-                {posts.map((p) => {
-                  const meta = postMediaMeta(p);
-                  return (
-                    <option key={p.id} value={p.id}>
-                      {p.title} — {p.group?.name || "—"} ({meta.label}
-                      {meta.isVideo ? `, ${meta.duration}s` : ""})
-                    </option>
-                  );
-                })}
-              </select>
+          <SignagePublishForm
+            form={form}
+            onChange={setForm}
+            onPostChange={onPostChange}
+            onSubmit={publish}
+            posts={posts}
+            devices={devices}
+            selectedMeta={selectedMeta}
+            msg={msg}
+            messageStyle={messageStyle}
+          />
 
-              <label style={S.label}>Target Display</label>
-              <select
-                style={S.input}
-                value={form.device_id}
-                onChange={(e) =>
-                  setForm({ ...form, device_id: e.target.value })
-                }
-                required
-              >
-                <option value="">— Select device —</option>
-                {devices.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.device_name} ({d.status})
-                  </option>
-                ))}
-              </select>
-
-              {selectedMeta.isVideo ? (
-                <p style={{ fontSize: 12, color: "#6b7280", margin: 0 }}>
-                  Video length is set by the trimmed file (
-                  {selectedMeta.duration}s). Anthias plays the full clip.
-                </p>
-              ) : (
-                <>
-                  <label style={S.label}>Slide duration (seconds)</label>
-                  <input
-                    style={S.input}
-                    type="number"
-                    min={1}
-                    max={300}
-                    value={form.duration_seconds}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        duration_seconds: Number(e.target.value),
-                      })
-                    }
-                  />
-                </>
-              )}
-
-              <label style={S.label}>Priority (1 = highest)</label>
-              <input
-                style={S.input}
-                type="number"
-                min={1}
-                max={10}
-                value={form.priority}
-                onChange={(e) =>
-                  setForm({ ...form, priority: Number(e.target.value) })
-                }
-              />
-
-              <label style={S.label}>Start Date (optional)</label>
-              <input
-                style={S.input}
-                type="datetime-local"
-                value={form.start_date}
-                onChange={(e) =>
-                  setForm({ ...form, start_date: e.target.value })
-                }
-              />
-
-              <label style={S.label}>End Date (optional)</label>
-              <input
-                style={S.input}
-                type="datetime-local"
-                value={form.end_date}
-                onChange={(e) => setForm({ ...form, end_date: e.target.value })}
-              />
-
-              <button
-                type="submit"
-                style={{
-                  ...S.btn,
-                  background: "#7c3aed",
-                  color: "#fff",
-                  marginTop: 4,
-                }}
-              >
-                Publish to Display
-              </button>
-            </form>
-          </div>
-
-          <div style={S.card}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 12,
-                alignItems: "center",
-                marginBottom: 14,
-              }}
-            >
-              <h2 style={{ fontWeight: 700 }}>Display Assets</h2>
-              <button
-                type="button"
-                onClick={() => loadAssets()}
-                disabled={!selectedDeviceId || assetLoading}
-                style={{ ...S.btn, padding: "6px 10px" }}
-              >
-                {assetLoading ? "Loading..." : "Refresh"}
-              </button>
-            </div>
-
-            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-              <button
-                type="button"
-                onClick={() => runControl("previous")}
-                disabled={!selectedDeviceId}
-                style={{ ...S.btn, padding: "6px 10px" }}
-              >
-                Previous
-              </button>
-              <button
-                type="button"
-                onClick={() => runControl("next")}
-                disabled={!selectedDeviceId}
-                style={{ ...S.btn, padding: "6px 10px" }}
-              >
-                Next
-              </button>
-            </div>
-
-            {!selectedDeviceId && (
-              <p style={{ color: "#9ca3af", textAlign: "center", padding: 32 }}>
-                Select a display to see its assets.
-              </p>
-            )}
-
-            {selectedDeviceId && assets.length === 0 && !assetLoading && (
-              <p style={{ color: "#9ca3af", textAlign: "center", padding: 32 }}>
-                No assets on this display yet.
-              </p>
-            )}
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {assets.map((asset) => (
-                <div
-                  key={asset.asset_id}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "72px 1fr",
-                    gap: 12,
-                    padding: 12,
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 8,
-                  }}
-                >
-                  {asset.preview_url && asset.is_video ? (
-                    <video
-                      src={asset.preview_url}
-                      muted
-                      playsInline
-                      preload="metadata"
-                      style={{
-                        width: 72,
-                        height: 72,
-                        objectFit: "cover",
-                        borderRadius: 6,
-                        background: "#111",
-                      }}
-                    />
-                  ) : asset.preview_url ? (
-                    <img
-                      src={asset.preview_url}
-                      alt=""
-                      style={{
-                        width: 72,
-                        height: 72,
-                        objectFit: "cover",
-                        borderRadius: 6,
-                        background: "#f3f4f6",
-                      }}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        width: 72,
-                        height: 72,
-                        borderRadius: 6,
-                        background: "#f3f4f6",
-                      }}
-                    />
-                  )}
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14 }}>
-                      {asset.name || "Untitled asset"}
-                    </div>
-                    <div style={{ fontSize: 12, color: "#6b7280", marginTop: 3 }}>
-                      {asset.is_video ? "Video" : "Image"} ·{" "}
-                      {asset.is_enabled ? "Visible" : "Hidden"} ·{" "}
-                      {formatAssetDuration(asset)}
-                      {!asset.can_manage ? " · view only" : ""}
-                    </div>
-                    {asset.can_manage ? (
-                      <div
-                        style={{
-                          display: "flex",
-                          flexWrap: "wrap",
-                          gap: 8,
-                          marginTop: 10,
-                        }}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => runControl("start", asset.asset_id)}
-                          style={{ ...S.btn, padding: "5px 9px" }}
-                        >
-                          Start
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setAssetEnabled(asset, !asset.is_enabled)
-                          }
-                          style={{ ...S.btn, padding: "5px 9px" }}
-                        >
-                          {asset.is_enabled ? "Hide" : "Show"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => deleteAsset(asset)}
-                          style={{
-                            ...S.btn,
-                            background: "#fee2e2",
-                            color: "#b91c1c",
-                            padding: "5px 9px",
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <SignageAssetList
+            assets={assets}
+            selectedDeviceId={selectedDeviceId}
+            assetLoading={assetLoading}
+            onRefresh={() => loadAssets()}
+            onControl={runControl}
+            onToggleEnabled={setAssetEnabled}
+            onDelete={deleteAsset}
+            formatDuration={formatAssetDuration}
+          />
         </div>
       </main>
     </div>
