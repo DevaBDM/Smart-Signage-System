@@ -37,6 +37,7 @@ const useAuthStore = create((set) => ({
   can_manage_other_posts: Boolean(storedUser.can_manage_other_posts),
   creator_priority: storedUser.creator_priority || 1,
   control_lock_minutes: storedUser.control_lock_minutes || 120,
+  auto_approve: Boolean(storedUser.auto_approve),
   max_signage_state:
     localStorage.getItem("max_signage_state") ||
     storedUser.max_signage_state ||
@@ -50,6 +51,17 @@ const useAuthStore = create((set) => ({
     const max_signage_state =
       profile.max_signage_state || user.max_signage_state || "NORMAL";
     const mgIds = managedGroupIds({ managed_group_ids: profile.managed_group_ids ?? user.managed_group_ids });
+    // Prefer fresh profile fields (from /auth/me or /auth/login) over the
+    // potentially stale values baked into the JWT at login time.
+    const can_manage_other_posts = Boolean(
+      profile.can_manage_other_posts ?? user.can_manage_other_posts,
+    );
+    const creator_priority =
+      profile.creator_priority ?? user.creator_priority ?? 1;
+    const control_lock_minutes =
+      profile.control_lock_minutes ?? user.control_lock_minutes ?? 120;
+    const auto_approve =
+      profile.auto_approve ?? user.auto_approve ?? false;
     localStorage.setItem("token", token);
     localStorage.setItem("role", role);
     localStorage.setItem("group_id", group_id ?? "");
@@ -58,9 +70,10 @@ const useAuthStore = create((set) => ({
     set({
       token,
       id: user.id || null,
-      can_manage_other_posts: Boolean(user.can_manage_other_posts),
-      creator_priority: user.creator_priority || 1,
-      control_lock_minutes: user.control_lock_minutes || 120,
+      can_manage_other_posts,
+      creator_priority,
+      control_lock_minutes,
+      auto_approve,
       max_signage_state,
       role,
       group_id,
@@ -80,6 +93,7 @@ const useAuthStore = create((set) => ({
       can_manage_other_posts: false,
       creator_priority: 1,
       control_lock_minutes: 120,
+      auto_approve: false,
       max_signage_state: "NORMAL",
       role: null,
       group_id: null,

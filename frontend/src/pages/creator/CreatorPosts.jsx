@@ -64,6 +64,7 @@ export default function CreatorPosts() {
       channel: "all",
       device_id: "",
       creator_id: "",
+      group_id: group_id || "",
     },
   );
   const [mediaItems, setMediaItems, clearMediaItems] = usePersistentState(
@@ -75,8 +76,7 @@ export default function CreatorPosts() {
 
   const load = () => {
     const params = new URLSearchParams();
-    const selectedGroup = Number(form?.group_ids?.[0] || group_id);
-    if (selectedGroup) params.set("group_id", selectedGroup);
+    if (filters.group_id) params.set("group_id", Number(filters.group_id));
     if (filters.channel !== "all") params.set("channel", filters.channel);
     if (filters.device_id) params.set("device_id", filters.device_id);
     if (filters.creator_id) params.set("creator_id", filters.creator_id);
@@ -96,18 +96,19 @@ export default function CreatorPosts() {
       .get("/groups")
       .then((r) => setGroups(r.data))
       .catch(() => {});
-  }, [group_id, form.group_ids, filters.channel, filters.creator_id, filters.device_id]);
+  }, [group_id, filters.group_id, filters.channel, filters.creator_id, filters.device_id]);
 
   useEffect(() => {
-    if (!group_id) {
+    const queryGroupId = filters.group_id || group_id;
+    if (!queryGroupId) {
       setGroupCreators([]);
       return;
     }
     api
-      .get(`/posts/meta/group-creators?group_id=${group_id}`)
+      .get(`/posts/meta/group-creators?group_id=${queryGroupId}`)
       .then((r) => setGroupCreators(r.data))
       .catch(() => setGroupCreators([]));
-  }, [group_id]);
+  }, [filters.group_id, group_id]);
 
   const lastGroupIds = useRef("");
   const lastDeviceIds = useRef("");
@@ -156,15 +157,22 @@ export default function CreatorPosts() {
     ];
     const nextGroupIds = [];
     for (const gid of availableGroupIds) {
-      const groupDevices = devices.filter((d) => {
-        if (d.all_groups) return true;
+      const groupSpecificDevices = devices.filter((d) => {
+        if (d.all_groups) return false;
         if (Number(d.group_id) === Number(gid)) return true;
         if (d.groups?.some((dg) => Number(dg.group_id) === Number(gid))) return true;
         return false;
       });
-      if (groupDevices.length === 0) continue;
-      const allSelected = groupDevices.every((d) => selectedDeviceIds.has(d.id));
-      const noneSelected = groupDevices.every((d) => !selectedDeviceIds.has(d.id));
+      if (groupSpecificDevices.length === 0) {
+        // Group only has all_groups devices; keep if any all_groups device is selected
+        const anyAllGroupsSelected = devices
+          .filter((d) => d.all_groups)
+          .some((d) => selectedDeviceIds.has(d.id));
+        if (anyAllGroupsSelected) nextGroupIds.push(gid);
+        continue;
+      }
+      const allSelected = groupSpecificDevices.every((d) => selectedDeviceIds.has(d.id));
+      const noneSelected = groupSpecificDevices.every((d) => !selectedDeviceIds.has(d.id));
       if (allSelected) nextGroupIds.push(gid);
       else if (!noneSelected) {
         if ((form.group_ids || []).includes(gid)) nextGroupIds.push(gid);
@@ -188,8 +196,17 @@ export default function CreatorPosts() {
     }));
   };
 
-  const canManagePost = (post) =>
-    post.author?.id === userId || Boolean(can_manage_other_posts);
+  const canManagePost = (post) => {
+    if (userRole === "admin") return true;
+    if (post.author?.id === userId) return true;
+    if (!can_manage_other_posts) return false;
+    const postGroup = String(post.group_id);
+    const allowedGroups = [
+      String(group_id),
+      ...(managed_group_ids || []).map(String),
+    ];
+    return allowedGroups.includes(postGroup);
+  };
 
   const manageablePosts = posts.filter(canManagePost);
 
@@ -275,6 +292,7 @@ export default function CreatorPosts() {
           ),
         );
       }
+      delete payload.group_ids;
       Object.entries(payload).forEach(([k, v]) =>
         fd.append(k, Array.isArray(v) ? JSON.stringify(v) : v),
       );
@@ -337,7 +355,7 @@ export default function CreatorPosts() {
       await api.post("/posts/bulk-action", { 
         ids: selectedIds, 
         action,
-        device_ids: bulkDeviceIds 
+        device_ids: bulkDeviceIds,
       });
       setSelectedIds([]);
       setBulkDeviceIds([]);
@@ -396,31 +414,12 @@ export default function CreatorPosts() {
               onSubmit={submit}
               style={{ display: "flex", flexDirection: "column", gap: 10 }}
             >
-              {userRole === "admin" || group_id ? (
+              {editingId && (userRole === "admin" || group_id) ? (
                 <>
-                  <label style={S.label}>Group{editingId ? "" : "s"}</label>
+                  <label style={S.label}>Group</label>
                   {(() => {
-                    const available = userRole === "admin"
-                      ? groups
-                      : [
-                          ...(group_id ? [{ id: group_id, name: groups.find((g) => String(g.id) === String(group_id))?.name || "Primary" }] : []),
-                          ...(managed_group_ids || []).map((gid) => {
-                            const g = groups.find((x) => String(x.id) === String(gid));
-                            return g ? { id: g.id, name: g.name } : null;
-                          }).filter(Boolean),
-                        ];
-                    if (editingId) {
-                      const current = groups.find((g) => String(g.id) === String(form.group_ids?.[0]));
-                      return <input style={{ ...S.input, background: "#f3f4f6" }} value={current?.name || "—"} disabled />;
-                    }
-                    return (
-                      <MultiSelect
-                        options={available}
-                        value={form.group_ids || []}
-                        onChange={(ids) => setForm({ ...form, group_ids: ids })}
-                        placeholder="Select groups..."
-                      />
-                    );
+                    const current = groups.find((g) => String(g.id) === String(form.group_ids?.[0]));
+                    return <input style={{ ...S.input, background: "#f3f4f6" }} value={current?.name || "—"} disabled />;
                   })()}
                 </>
               ) : null}
@@ -511,6 +510,33 @@ export default function CreatorPosts() {
                     background: "#f9fafb",
                   }}
                 >
+                  {userRole === "admin" || group_id ? (
+                    <>
+                      <label style={S.label}>Groups</label>
+                      {(() => {
+                        const available = userRole === "admin"
+                          ? groups
+                          : [
+                              ...(group_id ? [{ id: group_id, name: groups.find((g) => String(g.id) === String(group_id))?.name || "Primary" }] : []),
+                              ...(managed_group_ids || []).map((gid) => {
+                                const g = groups.find((x) => String(x.id) === String(gid));
+                                return g ? { id: g.id, name: g.name } : null;
+                              }).filter(Boolean),
+                            ];
+                        return available.length <= 1 ? (
+                          <input style={{ ...S.input, background: "#f3f4f6" }} value={available[0]?.name || ""} disabled />
+                        ) : (
+                          <MultiSelect
+                            options={available}
+                            value={form.group_ids || []}
+                            onChange={(ids) => setForm({ ...form, group_ids: ids })}
+                            placeholder="Select groups..."
+                          />
+                        );
+                      })()}
+                    </>
+                  ) : null}
+
                   <label style={S.label}>Target Displays</label>
                   <MultiSelect
                     options={devices}
@@ -682,6 +708,35 @@ export default function CreatorPosts() {
               }}
             >
               <label style={{ ...S.label, marginBottom: 0 }}>
+                Group
+                <select
+                  style={{ ...S.input, marginTop: 4 }}
+                  value={filters.group_id}
+                  onChange={(e) =>
+                    setFilters({ ...filters, group_id: e.target.value })
+                  }
+                >
+                  <option value="">All groups</option>
+                  {userRole === "admin"
+                    ? groups.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.name}
+                        </option>
+                      ))
+                    : [
+                        ...(group_id ? [{ id: group_id, name: groups.find((g) => String(g.id) === String(group_id))?.name || "Primary" }] : []),
+                        ...(managed_group_ids || []).map((gid) => {
+                          const g = groups.find((x) => String(x.id) === String(gid));
+                          return g ? { id: g.id, name: g.name } : null;
+                        }).filter(Boolean),
+                      ].map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.name}
+                        </option>
+                      ))}
+                </select>
+              </label>
+              <label style={{ ...S.label, marginBottom: 0 }}>
                 Type
                 <select
                   style={{ ...S.input, marginTop: 4 }}
@@ -835,6 +890,7 @@ export default function CreatorPosts() {
                     <div
                       style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}
                     >
+                      {p.group?.name ? `🏢 ${p.group.name} · ` : ""}
                       {p.allowed_on_feed ? "📰 Feed " : ""}
                       {p.allowed_on_signage ? `🖥 Signage (${p.signage_deployments?.length || 0})` : ""}
                       {p.signage_state ? ` · ${SIGNAGE_STATE_LABELS[p.signage_state] || p.signage_state}` : ""}

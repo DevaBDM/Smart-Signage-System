@@ -112,6 +112,7 @@ router.get("/me", auth(), async (req, res) => {
     username: user.username,
     role: user.role,
     group_id: user.group_id,
+    auto_approve: user.auto_approve,
     can_manage_other_posts: user.can_manage_other_posts,
     creator_priority: user.creator_priority,
     control_lock_minutes: user.control_lock_minutes,

@@ -12,16 +12,49 @@ export const AuthProvider = ({ children }) => {
     api
       .get("/auth/me")
       .then((res) => {
-        const { role, group_id, max_signage_state, managed_group_ids } = res.data;
-        auth.setAuth(auth.token, role, group_id, { max_signage_state, managed_group_ids });
+        const {
+          role,
+          group_id,
+          max_signage_state,
+          managed_group_ids,
+          can_manage_other_posts,
+          creator_priority,
+          control_lock_minutes,
+          auto_approve,
+        } = res.data;
+        auth.setAuth(auth.token, role, group_id, {
+          max_signage_state,
+          managed_group_ids,
+          can_manage_other_posts,
+          creator_priority,
+          control_lock_minutes,
+          auto_approve,
+        });
       })
       .catch(() => {});
   }, []);
 
   const login = async (username, password) => {
     const res = await api.post("/auth/login", { username, password });
-    const { token, role, group_id, max_signage_state, managed_group_ids } = res.data;
-    auth.setAuth(token, role, group_id, { max_signage_state, managed_group_ids });
+    const {
+      token,
+      role,
+      group_id,
+      max_signage_state,
+      managed_group_ids,
+      can_manage_other_posts,
+      creator_priority,
+      control_lock_minutes,
+      auto_approve,
+    } = res.data;
+    auth.setAuth(token, role, group_id, {
+      max_signage_state,
+      managed_group_ids,
+      can_manage_other_posts,
+      creator_priority,
+      control_lock_minutes,
+      auto_approve,
+    });
     return res.data;
   };
 

@@ -20,11 +20,17 @@ router.use((req, _, next) => {
   next();
 });
 
-const canUseDevice = (user, device) =>
-  user.role === "admin" || 
-  device.all_groups || 
-  device.group_id === user.group_id || 
-  device.groups?.some(m => m.group_id === user.group_id);
+const canUseDevice = (user, device) => {
+  if (user.role === "admin") return true;
+  if (device.all_groups) return true;
+  const allowedGroupIds = [
+    user.group_id,
+    ...(user.managed_group_ids || []),
+  ].filter(Boolean);
+  if (allowedGroupIds.includes(device.group_id)) return true;
+  if (device.groups?.some((m) => allowedGroupIds.includes(m.group_id))) return true;
+  return false;
+};
 
 const getActor = async (user) => {
   if (user.role === "admin") return user;
@@ -38,9 +44,14 @@ const getActor = async (user) => {
       creator_priority: true,
       control_lock_minutes: true,
       max_signage_state: true,
+      managed_groups: { select: { group_id: true } },
     },
   });
-  return dbUser || user;
+  if (!dbUser) return user;
+  return {
+    ...dbUser,
+    managed_group_ids: (dbUser.managed_groups || []).map((g) => g.group_id),
+  };
 };
 
 const assertControlAllowed = (user, device) => {
@@ -107,10 +118,16 @@ const getAllowedDevice = async (req, res) => {
   return device;
 };
 
-const canManagePost = (user, post) =>
-  user.role === "admin" ||
-  post.created_by === user.id ||
-  (user.can_manage_other_posts && user.group_id === post.group_id);
+const canManagePost = (user, post) => {
+  if (user.role === "admin") return true;
+  if (post.created_by === user.id) return true;
+  if (!user.can_manage_other_posts) return false;
+  const allowedGroupIds = [
+    user.group_id,
+    ...(user.managed_group_ids || []),
+  ].filter(Boolean);
+  return allowedGroupIds.includes(post.group_id);
+};
 
 const assertCanManageAsset = async (actor, deviceId, assetId) => {
   const tracked = await prisma.signageAsset.findUnique({
@@ -455,6 +472,8 @@ router.get(
           select: {
             title: true,
             id: true,
+            created_by: true,
+            group_id: true,
             images: { orderBy: { order_index: "asc" }, take: 1 },
           },
         },
@@ -462,8 +481,24 @@ router.get(
       orderBy: { updated_at: "desc" },
     });
 
+    // For non-admin creators, restrict tracked rows to assets linked to posts in
+    // groups they can access (own group + managed groups). Unlinked assets stay
+    // visible (admins curate them) but creators cannot manage them downstream.
+    const allowedGroupIds =
+      req.user.role === "admin"
+        ? null
+        : [req.user.group_id, ...(req.user.managed_group_ids || [])].filter(Boolean);
+    const visibleTracked = (rows) =>
+      allowedGroupIds === null
+        ? rows
+        : rows.filter((asset) => {
+            const gid = asset.post?.group_id;
+            if (gid == null) return false; // hide cross-group / unlinked rows from creators
+            return allowedGroupIds.includes(gid);
+          });
+
     const mapTracked = (rows) =>
-      rows.map((asset) => {
+      visibleTracked(rows).map((asset) => {
         const media = asset.post?.images?.[0];
         return {
           asset_id: asset.asset_id,
@@ -473,8 +508,16 @@ router.get(
           media_type: media?.media_type || null,
           clip_duration_seconds: media?.duration_seconds ?? null,
           created_by: asset.post?.created_by ?? null,
+          group_id: asset.post?.group_id ?? null,
         };
       });
+    const filterPiAssets = (piAssets, trackedRows) => {
+      if (allowedGroupIds === null) return piAssets;
+      const visibleIds = new Set(
+        visibleTracked(trackedRows).map((t) => t.asset_id),
+      );
+      return (piAssets || []).filter((a) => visibleIds.has(a.asset_id));
+    };
     const result = await sendSignageCommand(device.id, { action: "list" });
     if (result.ok) {
       await syncSignageAssetList(prisma, device.id, result.assets);
@@ -486,6 +529,7 @@ router.get(
               title: true,
               id: true,
               created_by: true,
+              group_id: true,
               images: { orderBy: { order_index: "asc" }, take: 1 },
             },
           },
@@ -494,14 +538,21 @@ router.get(
       });
       return res.json({
         ...result,
+        assets: filterPiAssets(result.assets, trackedRows),
         tracked_assets: mapTracked(trackedRows),
       });
     }
+    const visibleStale =
+      allowedGroupIds === null
+        ? trackedAssets
+        : trackedAssets.filter((a) =>
+            a.post?.group_id != null && allowedGroupIds.includes(a.post.group_id),
+          );
     res.json({
       ...result,
       stale: true,
       tracked_assets: mapTracked(trackedAssets),
-      assets: trackedAssets.map((asset) => ({
+      assets: visibleStale.map((asset) => ({
         asset_id: asset.asset_id,
         name: asset.asset_name || asset.post?.title,
         uri: asset.image_url,

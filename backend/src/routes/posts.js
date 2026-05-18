@@ -316,7 +316,11 @@ const deployToSignage = async (req, post, targetDevices, signageData) => {
 };
 
 // GET all posts
-router.get("/", async (req, res) => {
+// Public listing is restricted to the feed channel; everything else requires auth and group scoping.
+router.get("/", async (req, res, next) => {
+  if (toBool(req.query.feed)) return next();
+  return auth(["admin", "creator"])(req, res, next);
+}, async (req, res) => {
   const { feed, group_id, status, channel, device_id, creator_id } = req.query;
   const where = {};
   if (toBool(feed)) {
@@ -334,7 +338,22 @@ router.get("/", async (req, res) => {
     where.allowed_on_feed = false;
   }
 
-  if (group_id && !isNaN(Number(group_id))) {
+  // Scope non-admins to their primary + managed groups (unless they explicitly filter to one of those).
+  if (req.user && req.user.role !== "admin") {
+    const allowedGroupIds = [
+      req.user.group_id,
+      ...(req.user.managed_group_ids || []),
+    ].filter(Boolean);
+    if (group_id && !isNaN(Number(group_id))) {
+      const requested = Number(group_id);
+      if (!allowedGroupIds.includes(requested)) {
+        return res.json([]);
+      }
+      where.group_id = requested;
+    } else {
+      where.group_id = { in: allowedGroupIds.length ? allowedGroupIds : [-1] };
+    }
+  } else if (group_id && !isNaN(Number(group_id))) {
     where.group_id = Number(group_id);
   }
   if (creator_id && !isNaN(Number(creator_id))) {
@@ -361,13 +380,24 @@ router.get("/", async (req, res) => {
 
 // Creators in the current group (for filters; not affected by post list filters).
 router.get("/meta/group-creators", auth(["admin", "creator"]), async (req, res) => {
-  const groupId =
-    req.user.role === "admin" && req.query.group_id
-      ? Number(req.query.group_id)
+  const requestedGroupId = req.query.group_id ? Number(req.query.group_id) : null;
+  const allowedGroupIds = req.user.role === "admin"
+    ? null
+    : [req.user.group_id, ...(req.user.managed_group_ids || [])].filter(Boolean);
+  const groupId = req.user.role === "admin"
+    ? requestedGroupId
+    : allowedGroupIds?.includes(requestedGroupId)
+      ? requestedGroupId
       : req.user.group_id;
   if (!groupId) return res.json([]);
   const users = await prisma.user.findMany({
-    where: { group_id: Number(groupId), role: "creator" },
+    where: {
+      role: "creator",
+      OR: [
+        { group_id: Number(groupId) },
+        { managed_groups: { some: { group_id: Number(groupId) } } },
+      ],
+    },
     select: { id: true, username: true },
     orderBy: { username: "asc" },
   });
@@ -375,12 +405,21 @@ router.get("/meta/group-creators", auth(["admin", "creator"]), async (req, res) 
 });
 
 // GET single post
-router.get("/:id", async (req, res) => {
+router.get("/:id", auth(["admin", "creator"]), async (req, res) => {
   const post = await prisma.post.findUnique({
     where: { id: Number(req.params.id) },
     include: { author: true, images: true, signage_metadata: true, signage_deployments: true },
   });
   if (!post) return res.status(404).json({ error: "Not found" });
+  if (req.user.role !== "admin") {
+    const allowedGroupIds = [
+      req.user.group_id,
+      ...(req.user.managed_group_ids || []),
+    ].filter(Boolean);
+    if (!allowedGroupIds.includes(post.group_id)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+  }
   res.json(post);
 });
 
@@ -405,7 +444,7 @@ router.post("/", auth(["admin", "creator"]), uploadMedia, async (req, res) => {
     ? [group_id]
     : [];
   const targetGroupIds = Array.isArray(rawGroupIds)
-    ? rawGroupIds.map(Number).filter((n) => Number.isFinite(n) && n > 0)
+    ? [...new Set(rawGroupIds.map(Number).filter((n) => Number.isFinite(n) && n > 0))]
     : [];
 
   if (targetGroupIds.length === 0) {
@@ -750,8 +789,13 @@ router.post("/bulk-action", auth(["admin", "creator"]), async (req, res) => {
   if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "No IDs provided" });
   const selectedDeviceIds = parseDeviceIds(device_ids);
   
+  const where = { id: { in: ids.map(Number) } };
+  if (actor.role !== "admin") {
+    const allowedGroupIds = [actor.group_id, ...(actor.managed_group_ids || [])].filter(Boolean);
+    where.group_id = { in: allowedGroupIds };
+  }
   const posts = await prisma.post.findMany({
-    where: { id: { in: ids.map(Number) }, ...(actor.role !== "admin" && { group_id: actor.group_id }) },
+    where,
     include: { images: true, signage_metadata: true, signage_deployments: true, author: true }
   });
 

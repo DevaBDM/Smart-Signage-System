@@ -39,7 +39,7 @@ function postMediaMeta(post) {
 }
 
 export default function CreatorSignage() {
-  const { group_id, id: userId, can_manage_other_posts, role } = useAuthStore();
+  const { group_id, managed_group_ids, id: userId, can_manage_other_posts, role } = useAuthStore();
   const [posts, setPosts] = useState([]);
   const [devices, setDevices] = useState([]);
   const [assets, setAssets] = useState([]);
@@ -67,16 +67,34 @@ export default function CreatorSignage() {
     [selectedPost],
   );
 
+  // Fetch posts from all allowed groups
   useEffect(() => {
-    api
-      .get(`/posts?group_id=${group_id}`)
-      .then((r) => setPosts(r.data.filter((p) => p.images?.length > 0)))
-      .catch(() => {});
+    const allowedGroupIds = [group_id, ...(managed_group_ids || [])].filter(Boolean);
+    const loadAll = async () => {
+      const allPosts = [];
+      for (const gid of allowedGroupIds) {
+        try {
+          const r = await api.get(`/posts?group_id=${gid}`);
+          allPosts.push(...(r.data || []));
+        } catch {}
+      }
+      // Deduplicate by post id
+      const unique = [];
+      const seen = new Set();
+      for (const p of allPosts) {
+        if (!seen.has(p.id)) {
+          seen.add(p.id);
+          unique.push(p);
+        }
+      }
+      setPosts(unique.filter((p) => p.images?.length > 0));
+    };
+    loadAll();
     api
       .get("/devices")
       .then((r) => setDevices(r.data))
       .catch(() => {});
-  }, [group_id]);
+  }, [group_id, managed_group_ids?.join(",")]);
 
   const loadAssets = async (deviceId = selectedDeviceId) => {
     if (!deviceId) {
@@ -95,11 +113,14 @@ export default function CreatorSignage() {
           piAsset.mimetype === "video" ||
           String(piAsset.mimetype || "").startsWith("video") ||
           String(serverPath || "").includes("/videos/");
+        const allowedGroups = [String(group_id), ...(managed_group_ids || []).map(String)];
+        const assetGroup = t?.group_id ? String(t.group_id) : null;
+        const isOwnPost = t?.created_by === userId;
+        const isManagedGroup = assetGroup && allowedGroups.includes(assetGroup);
         const canManage =
           role === "admin" ||
-          !t?.created_by ||
-          t.created_by === userId ||
-          Boolean(can_manage_other_posts);
+          isOwnPost ||
+          (Boolean(can_manage_other_posts) && isManagedGroup);
         return {
           ...piAsset,
           is_video: isVideo,
@@ -237,7 +258,7 @@ export default function CreatorSignage() {
                   const meta = postMediaMeta(p);
                   return (
                     <option key={p.id} value={p.id}>
-                      {p.title} ({meta.label}
+                      {p.title} — {p.group?.name || "—"} ({meta.label}
                       {meta.isVideo ? `, ${meta.duration}s` : ""})
                     </option>
                   );

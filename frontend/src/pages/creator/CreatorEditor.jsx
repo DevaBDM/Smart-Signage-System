@@ -104,15 +104,21 @@ export default function CreatorEditor() {
     ];
     const nextGroupIds = [];
     for (const gid of availableGroupIds) {
-      const groupDevices = devices.filter((d) => {
-        if (d.all_groups) return true;
+      const groupSpecificDevices = devices.filter((d) => {
+        if (d.all_groups) return false;
         if (Number(d.group_id) === Number(gid)) return true;
         if (d.groups?.some((dg) => Number(dg.group_id) === Number(gid))) return true;
         return false;
       });
-      if (groupDevices.length === 0) continue;
-      const allSelected = groupDevices.every((d) => selectedDeviceIds.has(d.id));
-      const noneSelected = groupDevices.every((d) => !selectedDeviceIds.has(d.id));
+      if (groupSpecificDevices.length === 0) {
+        const anyAllGroupsSelected = devices
+          .filter((d) => d.all_groups)
+          .some((d) => selectedDeviceIds.has(d.id));
+        if (anyAllGroupsSelected) nextGroupIds.push(gid);
+        continue;
+      }
+      const allSelected = groupSpecificDevices.every((d) => selectedDeviceIds.has(d.id));
+      const noneSelected = groupSpecificDevices.every((d) => !selectedDeviceIds.has(d.id));
       if (allSelected) nextGroupIds.push(gid);
       else if (!noneSelected) {
         if ((form.group_ids || []).includes(gid)) nextGroupIds.push(gid);

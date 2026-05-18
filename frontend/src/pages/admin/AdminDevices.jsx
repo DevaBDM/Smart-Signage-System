@@ -349,9 +349,15 @@ export default function AdminDevices() {
                     {d.ip_address} ·{" "}
                     {d.all_groups
                       ? "All groups"
-                      : d.groups?.length
-                        ? d.groups.map((g) => g.group?.name).join(", ")
-                        : d.group?.name ?? "—"}
+                      : (() => {
+                          const names = [];
+                          if (d.group?.name) names.push(d.group.name);
+                          (d.groups || []).forEach((g) => {
+                            const n = g.group?.name;
+                            if (n && !names.includes(n)) names.push(n);
+                          });
+                          return names.length ? names.join(", ") : "—";
+                        })()}
                   </div>
                   {d.location && (
                     <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
