@@ -45,7 +45,7 @@ export const AuthProvider = ({ children }) => {
       creator_priority,
       control_lock_minutes,
       auto_approve,
-    } = res.data;
+    } = res;
     auth.setAuth(token, role, group_id, {
       max_signage_state,
       managed_group_ids,
@@ -54,7 +54,7 @@ export const AuthProvider = ({ children }) => {
       control_lock_minutes,
       auto_approve,
     });
-    return res.data;
+    return res;
   };
 
   const logout = () => {
