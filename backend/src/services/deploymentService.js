@@ -1,21 +1,9 @@
 const prisma = require("../db/prisma");
 const { getActor } = require("../utils/permissions");
 const { assertControlAllowed, applyControlLock } = require("../utils/controlLock");
-const { toBool } = require("../utils/parsers");
 const { mediaFileExists } = require("../utils/mediaProcessor");
 const { upsertSignageAsset } = require("../utils/signageAssets");
-
-const deploymentSchedule = (raw) => ({
-  duration_seconds: Number(raw?.duration_seconds) || 10,
-  start_date: raw?.start_date ? new Date(raw.start_date) : null,
-  end_date: raw?.end_date ? new Date(raw.end_date) : null,
-  priority: Number(raw?.priority) || 1,
-  display_group: raw?.display_group ?? null,
-  is_enabled: toBool(raw?.is_enabled),
-  play_order: Number(raw?.play_order) || 0,
-  nocache: toBool(raw?.nocache),
-  skip_asset_check: toBool(raw?.skip_asset_check),
-});
+const { buildSignageMeta } = require("../validators/postValidator");
 
 /**
  * Upsert SignageDeployment rows and push to Pi only when
@@ -43,7 +31,7 @@ const deployPostToDevices = async (emitter, post, targetDevices, signageData) =>
   }
 
   const actor = await getActor({ id: post.created_by, role: "creator" });
-  const sched = deploymentSchedule(signageData);
+  const sched = buildSignageMeta(signageData, Number(signageData?.duration_seconds) || 10);
   const mediaDuration = image?.duration_seconds || sched.duration_seconds;
   const schedWithMedia = { ...sched, duration_seconds: mediaDuration };
   const results = [];
@@ -144,4 +132,4 @@ const deployPostToDevices = async (emitter, post, targetDevices, signageData) =>
   return results;
 };
 
-module.exports = { deploymentSchedule, deployPostToDevices };
+module.exports = { deployPostToDevices };

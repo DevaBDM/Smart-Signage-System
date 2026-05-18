@@ -3,11 +3,12 @@ const postRepo = require("../repositories/postRepo");
 const { canManage, canManagePost, getActor } = require("../utils/permissions");
 const { parseDeviceIds, toBool } = require("../utils/parsers");
 const { ensureDevicesOnline, getOnlineDeviceIdSet } = require("../utils/devices");
-const {
-  parseSignageState,
-  canCreatorAssignState,
-} = require("../utils/signageStates");
 const { parseMediaCrops } = require("../utils/parseMediaCrops");
+const {
+  extractGroupIds,
+  validateSignageState,
+  buildSignageMeta,
+} = require("../validators/postValidator");
 const {
   processMediaFiles,
   deleteMediaFile,
@@ -41,38 +42,11 @@ const slugify = (text) =>
   "-" +
   Date.now();
 
-const resolvePostSignageState = (actor, rawState) => {
-  const parsed = parseSignageState(rawState) || "NORMAL";
-  if (actor.role === "admin") return parsed;
-  if (!canCreatorAssignState(actor.max_signage_state, parsed)) {
-    return {
-      error: `You may only create signage posts up to ${actor.max_signage_state || "NORMAL"} level.`,
-    };
-  }
-  return parsed;
-};
-
-/**
- * Build signage_metadata create payload from body.
- */
-const buildSignageMeta = (body, duration) => ({
-  duration_seconds: duration,
-  start_date: body.start_date ? new Date(body.start_date) : null,
-  end_date: body.end_date ? new Date(body.end_date) : null,
-  priority: Number(body.priority) || 1,
-  display_group: body.display_group || null,
-  is_enabled: toBool(body.is_enabled),
-  play_order: Number(body.play_order) || 0,
-  nocache: toBool(body.nocache),
-  skip_asset_check: toBool(body.skip_asset_check),
-});
 
 async function createPost(user, body, files) {
   const {
     title,
     description_markdown,
-    group_id,
-    group_ids,
     allowed_on_feed,
     allowed_on_signage,
     publish_to_feed,
@@ -81,18 +55,7 @@ async function createPost(user, body, files) {
     device_ids,
   } = body;
 
-  const rawGroupIds = group_ids !== undefined
-    ? (typeof group_ids === "string" ? JSON.parse(group_ids) : group_ids)
-    : group_id !== undefined
-    ? [group_id]
-    : [];
-  const targetGroupIds = Array.isArray(rawGroupIds)
-    ? [...new Set(rawGroupIds.map(Number).filter((n) => Number.isFinite(n) && n > 0))]
-    : [];
-
-  if (targetGroupIds.length === 0) {
-    throw Object.assign(new Error("At least one group is required"), { statusCode: 400 });
-  }
+  const targetGroupIds = extractGroupIds(body);
   for (const gid of targetGroupIds) {
     if (!canManage(user, gid)) {
       throw Object.assign(new Error(`Invalid group access for group ${gid}`), { statusCode: 403 });
@@ -113,10 +76,7 @@ async function createPost(user, body, files) {
   }
 
   const actor = await getActor(user);
-  const signageState = resolvePostSignageState(actor, body.signage_state);
-  if (signageState?.error) {
-    throw Object.assign(new Error(signageState.error), { statusCode: 403 });
-  }
+  const signageState = validateSignageState(actor, body.signage_state);
 
   let mediaRows = parseProcessedMedia(body);
   if (!mediaRows?.length && files?.length) {
@@ -261,11 +221,7 @@ async function updatePost(user, postId, body, files, emitter) {
   }
 
   if (body.signage_state !== undefined) {
-    const signageState = resolvePostSignageState(actor, body.signage_state);
-    if (signageState?.error) {
-      throw Object.assign(new Error(signageState.error), { statusCode: 403 });
-    }
-    data.signage_state = signageState;
+    data.signage_state = validateSignageState(actor, body.signage_state);
   }
 
   const updated = await postRepo.updatePost(postId, data);

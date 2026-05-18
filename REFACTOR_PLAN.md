@@ -342,7 +342,7 @@ A phase is done when:
 - [x] Phase A1: extract posts.js helpers to utils/
 - [x] Phase A2: postService
 - [x] Phase A3: postRepo
-- [ ] Phase A4: post validators
+- [x] Phase A4: post validators
 - [ ] Phase B1: piBridge
 - [ ] Phase B2: signage permissions to utils/
 - [ ] Phase B3: signageService
