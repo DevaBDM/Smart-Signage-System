@@ -51,7 +51,7 @@ sudo apt install nodejs npm postgresql postgresql-contrib
 ## Project Structure
 
 ```
-WebServer/
+WebServerSignage/
 ├── arduino/
 │   └── sensors.ino              ← Arduino firmware for sensors
 ├── backend/
@@ -123,6 +123,12 @@ WebServer/
 sudo -u postgres initdb --locale en_US.UTF-8 -D /var/lib/postgres/data
 ```
 
+**On Windows** (run once, first time only):
+
+```cmd
+initdb -D "D:\scoop\persist\postgresql\data" --username=postgres
+```
+
 **On Ubuntu/Debian** (PostgreSQL initializes automatically on install).
 
 ### Step 2 — Start PostgreSQL
@@ -145,21 +151,32 @@ pg_ctl -D "D:\scoop\persist\postgresql\data" stop
 ### Step 3 — Create Database and User
 
 ```bash
+# Linux
 sudo -u postgres psql
+
+# Windows
+psql -U postgres
+
 ```
 
 Inside the `psql` shell:
 
 ```sql
+-- Create a dedicated user (role) with login
 CREATE USER signage_admin WITH PASSWORD 'yourpassword';
+
+-- Create the project database owned by that user
 CREATE DATABASE signage_db OWNER signage_admin;
-GRANT ALL PRIVILEGES ON DATABASE signage_db TO signage_admin;
--- Ensure permissions on public schema
+
+-- Connect to the new database
 \c signage_db
-GRANT ALL ON SCHEMA public TO signage_admin;
+
+-- Ensure the owner has full rights on the public schema
+ALTER SCHEMA public OWNER TO signage_admin;
+
+-- (Optional) If you want to guarantee privileges on existing objects:
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO signage_admin;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO signage_admin;
-\q
 ```
 
 > **Note:** Replace `yourpassword` with a strong password. You will use this in the backend `.env` file.
@@ -171,7 +188,7 @@ GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO signage_admin;
 ### Step 1 — Navigate to Backend
 
 ```bash
-cd WebServer/backend
+cd WebServerSignage/backend
 ```
 
 ### Step 2 — Install Dependencies
@@ -182,7 +199,7 @@ npm install
 
 ### Step 3 — Create Environment File
 
-Create a file called `.env` in `WebServer/backend/`:
+Create a file called `.env` in `WebServerSignage/backend/`:
 
 ```env
 PORT=5000
@@ -204,7 +221,7 @@ cd backend
 npx prisma migrate reset
 npx prisma db push
 npx prisma migrate deploy
-npm prisma generate
+npx prisma generate
 # you can delete the backend/uploads/images/*
 ```
 
@@ -215,7 +232,7 @@ npm prisma generate
 ### Step 1 — Navigate to Frontend
 
 ```bash
-cd WebServer/frontend
+cd WebServerSignage/frontend
 ```
 
 ### Step 2 — Install Dependencies
@@ -229,7 +246,7 @@ npm install fabric@5.3.0 --save-exact
 
 ### Step 3 — Create Environment File
 
-Create a file called `.env` in `WebServer/frontend/`:
+Create a file called `.env` in `WebServerSignage/frontend/`:
 
 ```env
 VITE_API_URL=http://localhost:5000/api
@@ -242,14 +259,14 @@ VITE_API_URL=http://localhost:5000/api
 **Terminal 1 — Backend:**
 
 ```bash
-cd WebServer/backend
+cd WebServerSignage/backend
 npm run dev
 ```
 
 **Terminal 2 — Frontend:**
 
 ```bash
-cd WebServer/frontend
+cd WebServerSignage/frontend
 npm run dev
 ```
 
