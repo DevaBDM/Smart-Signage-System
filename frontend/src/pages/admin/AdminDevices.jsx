@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import AdminSidebar from "../../components/AdminSidebar";
 import MultiSelect from "../../components/MultiSelect";
+import DeviceRegisterForm from "../../components/DeviceRegisterForm";
+import DeviceList from "../../components/DeviceList";
 import * as devicesApi from "../../api/devices";
 import * as groupsApi from "../../api/groups";
 import * as S from "../../styles";
@@ -194,225 +196,21 @@ export default function AdminDevices() {
             gap: 20,
           }}
         >
-          {/* Register */}
-          <div style={S.card}>
-            <h2 style={{ fontWeight: 700, marginBottom: 14 }}>
-              Register Device
-            </h2>
-            <form
-              onSubmit={register}
-              style={{ display: "flex", flexDirection: "column", gap: 10 }}
-            >
-              {regMsg && (
-                <div
-                  style={{
-                    padding: "8px 12px",
-                    borderRadius: 8,
-                    fontSize: 13,
-                    background: regMsg.startsWith("✅") ? "#dcfce7" : "#fee2e2",
-                    color: regMsg.startsWith("✅") ? "#166534" : "#b91c1c",
-                  }}
-                >
-                  {regMsg}
-                </div>
-              )}
-              <label style={S.label}>Device ID (from config.py)</label>
-              <input
-                style={S.input}
-                type="number"
-                value={form.id}
-                onChange={(e) => setForm({ ...form, id: e.target.value })}
-                placeholder="e.g. 1, 2, 3"
-              />
-              <label style={S.label}>Device Name</label>
-              <input
-                style={S.input}
-                value={form.device_name}
-                onChange={(e) =>
-                  setForm({ ...form, device_name: e.target.value })
-                }
-                required
-              />
-              <label style={S.label}>IP Address</label>
-              <input
-                style={S.input}
-                value={form.ip_address}
-                onChange={(e) =>
-                  setForm({ ...form, ip_address: e.target.value })
-                }
-                required
-              />
-              <label style={S.label}>Location</label>
-              <input
-                style={S.input}
-                value={form.location}
-                onChange={(e) =>
-                  setForm({ ...form, location: e.target.value })
-                }
-              />
-              <label style={S.label}>Primary Group</label>
-              <select
-                style={S.input}
-                value={form.group_id}
-                onChange={(e) =>
-                  setForm({ ...form, group_id: e.target.value })
-                }
-              >
-                <option value="">— None —</option>
-                {groups.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
-              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
-                <input
-                  type="checkbox"
-                  checked={form.all_groups}
-                  onChange={(e) =>
-                    setForm({ ...form, all_groups: e.target.checked })
-                  }
-                />
-                Belongs to all groups
-              </label>
-              {!form.all_groups && (
-                <div>
-                  <label style={S.label}>Additional Groups</label>
-                  <MultiSelect
-                    options={groups.filter((g) => String(g.id) !== String(form.group_id))}
-                    value={form.group_ids.filter((id) => String(id) !== String(form.group_id))}
-                    onChange={(ids) => setForm({ ...form, group_ids: ids })}
-                    placeholder="Search departments..."
-                  />
-                </div>
-              )}
-              <button
-                type="submit"
-                style={{ ...S.btn, background: "#2563eb", color: "#fff" }}
-              >
-                Register
-              </button>
-            </form>
-          </div>
+          <DeviceRegisterForm
+            form={form}
+            onChange={setForm}
+            onSubmit={register}
+            groups={groups}
+            regMsg={regMsg}
+          />
 
-          {/* Device list */}
-          <div style={S.card}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 14,
-              }}
-            >
-              <h2 style={{ fontWeight: 700 }}>All Devices</h2>
-              <div style={{ display: "flex", gap: 6 }}>
-                <select
-                  style={{ ...S.input, width: "auto", padding: "4px 8px" }}
-                  value={sort.by}
-                  onChange={(e) => setSort({ ...sort, by: e.target.value })}
-                >
-                  <option value="id">Sort by ID</option>
-                  <option value="last_seen">Sort by Active</option>
-                  <option value="device_name">Sort by Name</option>
-                  <option value="status">Sort by Status</option>
-                </select>
-                <button
-                  style={{ ...S.btn, padding: "4px 8px" }}
-                  onClick={() =>
-                    setSort({
-                      ...sort,
-                      order: sort.order === "asc" ? "desc" : "asc",
-                    })
-                  }
-                >
-                  {sort.order === "asc" ? "↑" : "↓"}
-                </button>
-              </div>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {devices.map((d) => (
-                <div
-                  key={d.id}
-                  onClick={() => select(d)}
-                  style={{
-                    padding: 12,
-                    borderRadius: 10,
-                    border: `1.5px solid ${sel?.id === d.id ? "#2563eb" : "#e5e7eb"}`,
-                    background: sel?.id === d.id ? "#eff6ff" : "#fff",
-                    cursor: "pointer",
-                  }}
-                >
-                  <div style={{ fontWeight: 600 }}>{d.device_name}</div>
-                  <div style={{ fontSize: 12, color: "#9ca3af" }}>
-                    {d.ip_address} ·{" "}
-                    {d.all_groups
-                      ? "All groups"
-                      : (() => {
-                          const names = [];
-                          if (d.group?.name) names.push(d.group.name);
-                          (d.groups || []).forEach((g) => {
-                            const n = g.group?.name;
-                            if (n && !names.includes(n)) names.push(n);
-                          });
-                          return names.length ? names.join(", ") : "—";
-                        })()}
-                  </div>
-                  {d.location && (
-                    <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
-                      {d.location}
-                    </div>
-                  )}
-                  <span
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 600,
-                      padding: "2px 8px",
-                      borderRadius: 99,
-                      marginTop: 4,
-                      display: "inline-block",
-                      background: d.status === "online" ? "#dcfce7" : "#fee2e2",
-                      color: d.status === "online" ? "#16a34a" : "#dc2626",
-                    }}
-                  >
-                    {d.status}
-                  </span>
-                  {!d.is_approved && (
-                    <span
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        padding: "2px 6px",
-                        borderRadius: 99,
-                        marginLeft: 6,
-                        background: "#fef3c7",
-                        color: "#92400e",
-                        border: "1px solid #fcd34d",
-                      }}
-                    >
-                      NEW
-                    </span>
-                  )}
-                  {(d.pending_name || d.pending_ip || d.pending_location) && (
-                    <span
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        padding: "2px 6px",
-                        borderRadius: 99,
-                        marginLeft: 6,
-                        background: "#dbeafe",
-                        color: "#1e40af",
-                        border: "1px solid #93c5fd",
-                      }}
-                    >
-                      CHANGED
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+          <DeviceList
+            devices={devices}
+            selectedId={sel?.id}
+            onSelect={select}
+            sort={sort}
+            onSortChange={setSort}
+          />
 
           {/* Sensor logs */}
           <div style={S.card}>
