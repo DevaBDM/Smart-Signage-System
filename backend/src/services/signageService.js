@@ -3,11 +3,8 @@ const { getActor, canManagePost } = require("../utils/permissions");
 const { assertControlAllowed, applyControlLock } = require("../utils/controlLock");
 const { canUseDevice } = require("../utils/devicePermissions");
 const { assertCanManageAsset } = require("../utils/signagePermissions");
-const {
-  parseSignageState,
-  canCreatorAssignState,
-} = require("../utils/signageStates");
 const { mediaFileExists } = require("../utils/mediaProcessor");
+const { validateSignageStateForPublish } = require("../validators/signageValidator");
 const { upsertSignageAsset } = require("../utils/signageAssets");
 const piBridge = require("./piBridge");
 
@@ -40,35 +37,13 @@ async function publishPost(user, body) {
   }
 
   // Validate signage_state
+  const validatedState = validateSignageStateForPublish(actor, post, body);
   if (body.signage_state !== undefined) {
-    const parsed = parseSignageState(body.signage_state);
-    if (!parsed) throw Object.assign(new Error("Invalid signage_state"), { statusCode: 400 });
-    if (
-      actor.role !== "admin" &&
-      !canCreatorAssignState(actor.max_signage_state, parsed)
-    ) {
-      throw Object.assign(
-        new Error(
-          `You may only publish signage posts up to ${actor.max_signage_state || "NORMAL"} level.`,
-        ),
-        { statusCode: 403 },
-      );
-    }
     await prisma.post.update({
       where: { id: post.id },
-      data: { signage_state: parsed },
+      data: { signage_state: validatedState },
     });
-    post.signage_state = parsed;
-  } else if (
-    actor.role !== "admin" &&
-    !canCreatorAssignState(actor.max_signage_state, post.signage_state)
-  ) {
-    throw Object.assign(
-      new Error(
-        `This post's signage level exceeds your allowed maximum (${actor.max_signage_state || "NORMAL"}).`,
-      ),
-      { statusCode: 403 },
-    );
+    post.signage_state = validatedState;
   }
 
   const image = post.images[0];
