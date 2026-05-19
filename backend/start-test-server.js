@@ -21,6 +21,48 @@ app.post("/api/test/bridge-calls/clear", (_req, res) => {
   res.json({ ok: true });
 });
 
+// Deep reset endpoint — wipes DB and re-seeds base accounts (test only).
+const prisma = require("./src/db/prisma");
+const bcrypt = require("bcryptjs");
+
+async function cleanDatabase() {
+  await prisma.playlistItem.deleteMany({});
+  await prisma.playlist.deleteMany({});
+  await prisma.signageDeployment.deleteMany({});
+  await prisma.signageAsset.deleteMany({});
+  await prisma.signageMetadata.deleteMany({});
+  await prisma.postImage.deleteMany({});
+  await prisma.post.deleteMany({});
+  await prisma.errorLog.deleteMany({});
+  await prisma.sensorLog.deleteMany({});
+  await prisma.deviceGroup.deleteMany({});
+  await prisma.device.deleteMany({});
+  await prisma.userGroup.deleteMany({});
+  await prisma.user.deleteMany({});
+  await prisma.group.deleteMany({});
+}
+
+async function seedUsers() {
+  const hash = await bcrypt.hash("TestPass123!", 10);
+  await prisma.user.create({
+    data: { username: "test-admin", password_hash: hash, role: "admin", auto_approve: true },
+  });
+  await prisma.user.create({
+    data: { username: "test-creator", password_hash: hash, role: "creator", auto_approve: true },
+  });
+}
+
+app.post("/api/test/reset", async (_req, res) => {
+  try {
+    await cleanDatabase();
+    await seedUsers();
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[test reset]", err);
+    res.status(500).json({ error: "Reset failed" });
+  }
+});
+
 require("./src/index");
 
 // Override emitToDevice so refreshGroupDevices calls are visible to tests.

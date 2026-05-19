@@ -39,12 +39,18 @@ async function loginTestAdmin(request) {
   return json.token;
 }
 
+async function resetState(request) {
+  const res = await request.post(`${API_URL}/test/reset`);
+  expect(res.ok(), "Reset endpoint should succeed").toBeTruthy();
+}
+
 test.describe.configure({ mode: "serial" });
 
 test.describe("happy path smoke tests", () => {
   let token;
 
-  test.beforeAll(async ({ request }) => {
+  test.beforeEach(async ({ request }) => {
+    await resetState(request);
     token = await loginTestAdmin(request);
   });
 
@@ -143,6 +149,10 @@ test.describe("happy path smoke tests", () => {
 });
 
 test.describe("UI smoke tests", () => {
+  test.beforeEach(async ({ request }) => {
+    await resetState(request);
+  });
+
   test("login via frontend form succeeds", async ({ page }) => {
     const username = "test-admin";
     const password = "TestPass123!";
@@ -377,11 +387,6 @@ test.describe("UI smoke tests", () => {
     expect(listRes.ok()).toBeTruthy();
     const posts = await listRes.json();
     expect(posts.some((p) => p.id === postId)).toBe(false);
-
-    // Clean up group
-    await request.delete(`${API_URL}/groups/${group.id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
   });
 });
 
@@ -391,7 +396,8 @@ test.describe("Device lifecycle API tests", () => {
   let group;
   let deviceId;
 
-  test.beforeAll(async ({ request }) => {
+  test.beforeEach(async ({ request }) => {
+    await resetState(request);
     adminToken = await loginTestAdmin(request);
 
     // Login as test-creator
@@ -444,7 +450,20 @@ test.describe("Device lifecycle API tests", () => {
   });
 
   test("2. Configuration flow — edit metadata", async ({ request }) => {
-    const updateRes = await request.put(`${API_URL}/devices/${deviceId}`, {
+    // Register and approve a fresh device
+    const regRes = await request.post(`${API_URL}/devices/register`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { device_name: "Config Pi", ip_address: "192.168.1.11", group_id: group.id },
+    });
+    expect(regRes.ok()).toBeTruthy();
+    const dev = await regRes.json();
+
+    await request.post(`${API_URL}/devices/${dev.id}/approve`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { group_id: group.id },
+    });
+
+    const updateRes = await request.put(`${API_URL}/devices/${dev.id}`, {
       headers: { Authorization: `Bearer ${adminToken}` },
       data: { location: "Science Wing, Room 302", all_groups: true },
     });
@@ -454,7 +473,7 @@ test.describe("Device lifecycle API tests", () => {
     expect(updated.all_groups).toBe(true);
 
     // Verify DB reflects changes via GET
-    const getRes = await request.get(`${API_URL}/devices/${deviceId}`, {
+    const getRes = await request.get(`${API_URL}/devices/${dev.id}`, {
       headers: { Authorization: `Bearer ${adminToken}` },
     });
     expect(getRes.ok()).toBeTruthy();
@@ -464,15 +483,27 @@ test.describe("Device lifecycle API tests", () => {
   });
 
   test("3. Cleanup flow — secure deletion with clear_all", async ({ request }) => {
-    // Mark device as online so the delete path triggers the socket emit
-    const statusRes = await request.put(`${API_URL}/devices/${deviceId}`, {
+    // Register, approve and set a device online
+    const regRes = await request.post(`${API_URL}/devices/register`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { device_name: "Cleanup Pi", ip_address: "192.168.1.12", group_id: group.id },
+    });
+    expect(regRes.ok()).toBeTruthy();
+    const dev = await regRes.json();
+
+    await request.post(`${API_URL}/devices/${dev.id}/approve`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { group_id: group.id },
+    });
+
+    const statusRes = await request.put(`${API_URL}/devices/${dev.id}`, {
       headers: { Authorization: `Bearer ${adminToken}` },
       data: { status: "online" },
     });
     expect(statusRes.ok()).toBeTruthy();
 
     // Delete the device
-    const deleteRes = await request.delete(`${API_URL}/devices/${deviceId}`, {
+    const deleteRes = await request.delete(`${API_URL}/devices/${dev.id}`, {
       headers: { Authorization: `Bearer ${adminToken}` },
     });
     expect(deleteRes.ok()).toBeTruthy();
@@ -485,14 +516,14 @@ test.describe("Device lifecycle API tests", () => {
     const calls = await bridgeRes.json();
     const clearAllCall = calls.find(
       (c) =>
-        c.device_id === deviceId &&
+        c.device_id === dev.id &&
         c.event === "signage_command" &&
         c.data?.action === "clear_all",
     );
     expect(clearAllCall, "clear_all command should have been emitted to the device").toBeDefined();
 
     // Verify the device no longer exists in the DB
-    const getRes = await request.get(`${API_URL}/devices/${deviceId}`, {
+    const getRes = await request.get(`${API_URL}/devices/${dev.id}`, {
       headers: { Authorization: `Bearer ${adminToken}` },
     });
     expect(getRes.status()).toBe(404);
@@ -517,12 +548,6 @@ test.describe("Device lifecycle API tests", () => {
       headers: { Authorization: `Bearer ${creatorToken}` },
     });
     expect(deleteRes.status()).toBe(403);
-
-    // Clean up as admin
-    const adminDel = await request.delete(`${API_URL}/devices/${rbacDeviceId}`, {
-      headers: { Authorization: `Bearer ${adminToken}` },
-    });
-    expect(adminDel.ok()).toBeTruthy();
   });
 
   test("5. Reset flow — factory reset simulation", async ({ request }) => {
@@ -548,11 +573,6 @@ test.describe("Device lifecycle API tests", () => {
     expect(resetBody.device.device_name).toBe(`Pi Display ${device.id}`);
     expect(resetBody.device.location).toBeNull();
     expect(resetBody.device.ip_address).toBe("");
-
-    // Clean up
-    await request.delete(`${API_URL}/devices/${device.id}`, {
-      headers: { Authorization: `Bearer ${adminToken}` },
-    });
   });
 
   test("6. Device logs — sensor logs are created and retrievable", async ({ request }) => {
@@ -605,18 +625,14 @@ test.describe("Device lifecycle API tests", () => {
     const sensorLogs = await sensorRes.json();
     expect(sensorLogs).toBeInstanceOf(Array);
     expect(sensorLogs.length).toBeGreaterThan(0);
-
-    // Clean up
-    await request.delete(`${API_URL}/devices/${device.id}`, {
-      headers: { Authorization: `Bearer ${adminToken}` },
-    });
   });
 });
 
 test.describe("Group API hardening tests", () => {
   let adminToken;
 
-  test.beforeAll(async ({ request }) => {
+  test.beforeEach(async ({ request }) => {
+    await resetState(request);
     adminToken = await loginTestAdmin(request);
   });
 
@@ -670,14 +686,6 @@ test.describe("Group API hardening tests", () => {
         c.data?.reason === "group_signage_state",
     );
     expect(refreshCall, "refresh_display should have been emitted after group state change").toBeDefined();
-
-    // Clean up
-    await request.delete(`${API_URL}/devices/${dev.id}`, {
-      headers: { Authorization: `Bearer ${adminToken}` },
-    });
-    await request.delete(`${API_URL}/groups/${grp.id}`, {
-      headers: { Authorization: `Bearer ${adminToken}` },
-    });
   });
 
   test("Managed groups visibility — creator only sees assigned groups", async ({ request }) => {
@@ -737,11 +745,6 @@ test.describe("Group API hardening tests", () => {
     expect(names).toContain(`Group-A-${ts}`);
     expect(names).toContain(`Group-B-${ts}`);
     expect(names).not.toContain(`Group-C-${ts}`);
-
-    // Clean up groups
-    await request.delete(`${API_URL}/groups/${groupA.id}`, { headers: { Authorization: `Bearer ${adminToken}` } });
-    await request.delete(`${API_URL}/groups/${groupB.id}`, { headers: { Authorization: `Bearer ${adminToken}` } });
-    await request.delete(`${API_URL}/groups/${groupC.id}`, { headers: { Authorization: `Bearer ${adminToken}` } });
   });
 
   test("Delete protection — cannot delete a group that has an active post", async ({ request }) => {
@@ -791,7 +794,8 @@ test.describe("User lifecycle API tests", () => {
   let groupA;
   let groupB;
 
-  test.beforeAll(async ({ request }) => {
+  test.beforeEach(async ({ request }) => {
+    await resetState(request);
     adminToken = await loginTestAdmin(request);
 
     // Login as test-creator
@@ -903,11 +907,6 @@ test.describe("User lifecycle API tests", () => {
     expect(updated.can_manage_other_posts).toBe(false);
     expect(updated.control_lock_minutes).toBe(30);
     expect(updated.max_signage_state).toBe("NORMAL");
-
-    // Clean up
-    await request.delete(`${API_URL}/users/${created.id}`, {
-      headers: { Authorization: `Bearer ${adminToken}` },
-    });
   });
 
   test("3. RBAC enforcement — creator cannot access user management", async ({ request }) => {
@@ -945,11 +944,6 @@ test.describe("User lifecycle API tests", () => {
       data: { username: `rbac-new-${ts}`, password: "TestPass123!", role: "creator" },
     });
     expect(reg2.status()).toBe(403);
-
-    // Clean up
-    await request.delete(`${API_URL}/users/${target.id}`, {
-      headers: { Authorization: `Bearer ${adminToken}` },
-    });
   });
 
   test("4. Admin cannot delete their own account", async ({ request }) => {
@@ -1034,14 +1028,6 @@ test.describe("User lifecycle API tests", () => {
     const users = await listRes.json();
     const afterA = users.find((u) => u.id === userA.id);
     expect(afterA.creator_priority).toBe(prioB);
-
-    // Clean up
-    await request.delete(`${API_URL}/users/${userA.id}`, {
-      headers: { Authorization: `Bearer ${adminToken}` },
-    });
-    await request.delete(`${API_URL}/users/${userB.id}`, {
-      headers: { Authorization: `Bearer ${adminToken}` },
-    });
   });
 
   test("7. Managed groups drill-down — reflected in GET /auth/me", async ({ request }) => {
@@ -1081,11 +1067,6 @@ test.describe("User lifecycle API tests", () => {
     expect(me.managed_group_ids).toContain(groupA.id);
     expect(me.managed_group_ids).toContain(groupB.id);
     expect(me.managed_group_ids).toHaveLength(2);
-
-    // Clean up
-    await request.delete(`${API_URL}/users/${created.id}`, {
-      headers: { Authorization: `Bearer ${adminToken}` },
-    });
   });
 });
 
@@ -1093,7 +1074,8 @@ test.describe("Post API tests", () => {
   let adminToken;
   let creatorToken;
 
-  test.beforeAll(async ({ request }) => {
+  test.beforeEach(async ({ request }) => {
+    await resetState(request);
     adminToken = await loginTestAdmin(request);
 
     // Login as test-creator
@@ -1153,10 +1135,6 @@ test.describe("Post API tests", () => {
     const titles = posts.map((p) => p.title);
     expect(titles).toContain(`Post-A-${ts}`);
     expect(titles).toContain(`Post-B-${ts}`);
-
-    // Clean up
-    await request.delete(`${API_URL}/groups/${groupA.id}`, { headers: { Authorization: `Bearer ${adminToken}` } });
-    await request.delete(`${API_URL}/groups/${groupB.id}`, { headers: { Authorization: `Bearer ${adminToken}` } });
   });
 
   test("2. Pending approval toggle — admin approves creator's feed request", async ({ request }) => {
@@ -1238,9 +1216,6 @@ test.describe("Post API tests", () => {
     const after = await afterRes.json();
     expect(after.allowed_on_feed).toBe(true);
     expect(after.requested_feed).toBe(true);
-
-    // Clean up
-    await request.delete(`${API_URL}/groups/${group.id}`, { headers: { Authorization: `Bearer ${adminToken}` } });
   });
 
   test("3. Cross-group bulk deletion — admin deletes posts from multiple groups at once", async ({ request }) => {
@@ -1303,11 +1278,6 @@ test.describe("Post API tests", () => {
     for (const pid of posts) {
       expect(remainingIds).not.toContain(pid);
     }
-
-    // Clean up groups
-    await request.delete(`${API_URL}/groups/${group1.id}`, { headers: { Authorization: `Bearer ${adminToken}` } });
-    await request.delete(`${API_URL}/groups/${group2.id}`, { headers: { Authorization: `Bearer ${adminToken}` } });
-    await request.delete(`${API_URL}/groups/${group3.id}`, { headers: { Authorization: `Bearer ${adminToken}` } });
   });
 
   test("4. Forced signage removal — delete_post_assets command emitted on delete", async ({ request }) => {
@@ -1383,13 +1353,5 @@ test.describe("Post API tests", () => {
         c.data?.post_id === postId,
     );
     expect(deleteCall, "delete_post_assets should have been emitted after post deletion").toBeDefined();
-
-    // Clean up
-    await request.delete(`${API_URL}/devices/${device.id}`, {
-      headers: { Authorization: `Bearer ${adminToken}` },
-    });
-    await request.delete(`${API_URL}/groups/${group.id}`, {
-      headers: { Authorization: `Bearer ${adminToken}` },
-    });
   });
 });
