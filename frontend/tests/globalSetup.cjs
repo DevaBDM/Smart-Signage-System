@@ -14,21 +14,29 @@ if (!TEST_DB_URL) {
   throw new Error("TEST_DATABASE_URL is not set. Check your backend/.env file.");
 }
 
+async function safeDelete(prisma, model) {
+  try {
+    await prisma[model].deleteMany({});
+  } catch (e) {
+    if (e.code !== "P2021") throw e; // ignore "table does not exist"
+  }
+}
+
 async function cleanDatabase(prisma) {
-  await prisma.playlistItem.deleteMany({});
-  await prisma.playlist.deleteMany({});
-  await prisma.signageDeployment.deleteMany({});
-  await prisma.signageAsset.deleteMany({});
-  await prisma.signageMetadata.deleteMany({});
-  await prisma.postImage.deleteMany({});
-  await prisma.post.deleteMany({});
-  await prisma.errorLog.deleteMany({});
-  await prisma.sensorLog.deleteMany({});
-  await prisma.deviceGroup.deleteMany({});
-  await prisma.device.deleteMany({});
-  await prisma.userGroup.deleteMany({});
-  await prisma.user.deleteMany({});
-  await prisma.group.deleteMany({});
+  await safeDelete(prisma, "playlistItem");
+  await safeDelete(prisma, "playlist");
+  await safeDelete(prisma, "signageDeployment");
+  await safeDelete(prisma, "signageAsset");
+  await safeDelete(prisma, "signageMetadata");
+  await safeDelete(prisma, "postImage");
+  await safeDelete(prisma, "post");
+  await safeDelete(prisma, "errorLog");
+  await safeDelete(prisma, "sensorLog");
+  await safeDelete(prisma, "deviceGroup");
+  await safeDelete(prisma, "device");
+  await safeDelete(prisma, "userGroup");
+  await safeDelete(prisma, "user");
+  await safeDelete(prisma, "group");
 }
 
 async function seedUsers(prisma) {
