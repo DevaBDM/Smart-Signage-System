@@ -1,6 +1,6 @@
 const prisma = require("../db/prisma");
 const postRepo = require("../repositories/postRepo");
-const { canManage, canManagePost, getActor } = require("../utils/permissions");
+const { canManage, canManagePost, getActor, getActorGroupIds } = require("../utils/permissions");
 const { parseDeviceIds, toBool } = require("../utils/parsers");
 const { ensureDevicesOnline, getOnlineDeviceIdSet } = require("../utils/devices");
 const { parseMediaCrops } = require("../utils/parseMediaCrops");
@@ -338,4 +338,112 @@ async function removePost(user, postId, emitter) {
   return { ok: true };
 }
 
-module.exports = { createPost, updatePost, removePost };
+async function bulkAction(actor, body, emitter) {
+  const { ids, action, device_ids } = body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    throw Object.assign(new Error("No IDs provided"), { statusCode: 400 });
+  }
+  const selectedDeviceIds = parseDeviceIds(device_ids);
+
+  const where = { id: { in: ids.map(Number) } };
+  if (actor.role !== "admin") {
+    const allowedGroupIds = getActorGroupIds(actor);
+    where.group_id = { in: allowedGroupIds };
+  }
+  const posts = await prisma.post.findMany({
+    where,
+    include: { images: true, signage_metadata: true, signage_deployments: true, author: true },
+  });
+
+  const validIds = posts.filter((p) => canManagePost(actor, p)).map((p) => p.id);
+  if (validIds.length === 0 && posts.length > 0) {
+    throw Object.assign(
+      new Error("You do not have permission to perform this action on these posts."),
+      { statusCode: 403 },
+    );
+  }
+
+  if (action === "delete") {
+    await prisma.playlistItem.deleteMany({ where: { post_id: { in: validIds } } });
+    for (const p of posts) {
+      if (!validIds.includes(p.id)) continue;
+      if (emitter) {
+        const bulkDelOnline = await getOnlineDeviceIdSet(
+          prisma,
+          p.signage_deployments.map((d) => d.device_id),
+        );
+        for (const d of p.signage_deployments) {
+          if (!bulkDelOnline.has(d.device_id)) continue;
+          await emitter(d.device_id, "signage_command", { action: "delete_post_assets", post_id: p.id }, 2000).catch(() => {});
+        }
+      }
+      for (const img of p.images) {
+        deleteMediaFile(img.image_path);
+      }
+    }
+    await prisma.post.deleteMany({ where: { id: { in: validIds } } });
+  } else if (action === "remove-signage") {
+    if (emitter) {
+      const deps = await prisma.signageDeployment.findMany({ where: { post_id: { in: validIds } } });
+      const rsOnline = await getOnlineDeviceIdSet(prisma, deps.map((d) => d.device_id));
+      for (const dep of deps) {
+        if (!rsOnline.has(dep.device_id)) continue;
+        await emitter(dep.device_id, "signage_command", { action: "delete_post_assets", post_id: dep.post_id }, 2000).catch(() => {});
+      }
+    }
+    await prisma.signageAsset.deleteMany({ where: { post_id: { in: validIds } } });
+    await prisma.post.updateMany({
+      where: { id: { in: validIds } },
+      data: { allowed_on_signage: false, requested_signage: false },
+    });
+  } else if (action === "remove-feed") {
+    await prisma.post.updateMany({
+      where: { id: { in: validIds } },
+      data: { allowed_on_feed: false, requested_feed: false },
+    });
+  } else if (action === "add-feed") {
+    for (const p of posts) {
+      if (!validIds.includes(p.id)) continue;
+      const isAutoApprove = p.author?.auto_approve || actor.role === "admin";
+      await prisma.post.update({
+        where: { id: p.id },
+        data: { requested_feed: true, allowed_on_feed: isAutoApprove },
+      });
+    }
+  } else if (action === "add-signage" || action === "add-both") {
+    const publishFeed = action === "add-both";
+    const unionTargets = new Set();
+    for (const p of posts) {
+      if (!validIds.includes(p.id)) continue;
+      const t = selectedDeviceIds.length > 0 ? selectedDeviceIds : p.signage_deployments.map((d) => d.device_id);
+      t.forEach((id) => unionTargets.add(id));
+    }
+    const unionArr = [...unionTargets];
+    if (unionArr.length > 0) {
+      const chk = await ensureDevicesOnline(prisma, unionArr);
+      if (!chk.ok) throw Object.assign(new Error(chk.error), { statusCode: 400 });
+    }
+    for (const p of posts) {
+      if (!validIds.includes(p.id)) continue;
+      const isAutoApprove = p.author?.auto_approve || actor.role === "admin";
+      const updated = await prisma.post.update({
+        where: { id: p.id },
+        data: {
+          requested_signage: true,
+          allowed_on_signage: isAutoApprove,
+          ...(publishFeed && { requested_feed: true, allowed_on_feed: isAutoApprove }),
+        },
+        include: { images: true, signage_metadata: true },
+      });
+      const targetIds = selectedDeviceIds.length > 0 ? selectedDeviceIds : p.signage_deployments.map((d) => d.device_id);
+      if (targetIds.length > 0) {
+        const targetDevices = await prisma.device.findMany({ where: { id: { in: targetIds } } });
+        await deployPostToDevices(emitter, actor, updated, targetDevices, updated.signage_metadata || {});
+      }
+    }
+  }
+
+  return { ok: true, count: validIds.length };
+}
+
+module.exports = { createPost, updatePost, removePost, bulkAction };
