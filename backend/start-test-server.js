@@ -47,8 +47,14 @@ async function seedUsers() {
   await prisma.user.create({
     data: { username: "test-admin", password_hash: hash, role: "admin", auto_approve: true },
   });
+
+  // Seed a group and assign it to the test-creator so creator dashboard tests work
+  const group = await prisma.group.create({
+    data: { name: "Creator Test Group" },
+  });
+
   await prisma.user.create({
-    data: { username: "test-creator", password_hash: hash, role: "creator", auto_approve: true },
+    data: { username: "test-creator", password_hash: hash, role: "creator", auto_approve: true, group_id: group.id },
   });
 }
 

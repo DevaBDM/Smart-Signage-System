@@ -1355,3 +1355,523 @@ test.describe("Post API tests", () => {
     expect(deleteCall, "delete_post_assets should have been emitted after post deletion").toBeDefined();
   });
 });
+
+test.describe("Creator My Posts UI tests", () => {
+  test.beforeEach(async ({ page, request }) => {
+    await resetState(request);
+
+    // Clear any stale auth tokens from previous tests
+    await page.goto("/login");
+    await page.evaluate(() => localStorage.clear());
+
+    // Log in as test-creator via UI
+    await page.reload();
+    await page.fill('input[name="username"]', "test-creator");
+    await page.fill('input[name="password"]', "TestPass123!");
+    await page.click('button[type="submit"]');
+    await page.waitForURL("**/creator", { timeout: 5000 });
+  });
+
+  test("1. Page loads with My Posts heading and empty state", async ({ page }) => {
+    await page.goto("/creator/posts");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.locator('h1:has-text("My Posts")')).toBeVisible();
+    await expect(page.locator('h2:has-text("New Post")')).toBeVisible();
+    await expect(page.locator('h2:has-text("Posts (0)")')).toBeVisible();
+  });
+
+  test("2. Creator can create a post with image via UI", async ({ page }) => {
+    await page.goto("/creator/posts");
+    await page.waitForLoadState("networkidle");
+
+    const ts = Date.now();
+
+    // Fill title and description
+    await page.locator('label:has-text("Title") + input').fill(`UI Post ${ts}`);
+    await page.locator('label:has-text("Description") + textarea').fill("Test description from UI");
+
+    // Upload mock image via the hidden file input
+    const mockImage = path.resolve(__dirname, "MockMedia/Images/pexels-pixabay-267507.jpg");
+    await page.locator('input[type="file"]').setInputFiles(mockImage);
+
+    // Confirm cropper modal and apply
+    await expect(page.locator('h3:has-text("Crop image")')).toBeVisible();
+    await page.click('button:has-text("Apply crop")');
+    await expect(page.locator('h3:has-text("Crop image")')).not.toBeVisible();
+
+    // Check Publish to Feed
+    await page.getByLabel("Publish to Feed").check();
+
+    // Set status to published
+    await page.locator('label:has-text("Post Status") + select').selectOption("published");
+
+    // Save post
+    await page.click('button:has-text("Save Post")');
+
+    // Verify the post appears in the list (resetForm clears the success msg instantly,
+    // so we verify by DOM state instead of toast)
+    await expect(page.locator(`text=UI Post ${ts}`)).toBeVisible();
+    await expect(page.locator('h2:has-text("Posts (1)")')).toBeVisible();
+  });
+
+  test("3. Creator can edit a post via UI", async ({ page, request }) => {
+    const ts = Date.now();
+
+    // Seed a post via API
+    const loginRes = await request.post(`${API_URL}/auth/login`, {
+      data: { username: "test-creator", password: "TestPass123!" },
+    });
+    const { token: creatorToken } = await loginRes.json();
+
+    const meRes = await request.get(`${API_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+    });
+    const me = await meRes.json();
+
+    const postRes = await request.post(`${API_URL}/posts`, {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+      multipart: {
+        title: `Edit Target ${ts}`,
+        group_ids: JSON.stringify([me.group_id]),
+        status: "published",
+        allowed_on_feed: "true",
+      },
+    });
+    expect(postRes.ok()).toBeTruthy();
+
+    // Navigate to My Posts
+    await page.goto("/creator/posts");
+    await page.waitForLoadState("networkidle");
+
+    // Click edit on the post
+    await page.getByTitle("Edit post").first().click();
+
+    // Verify form switched to edit mode
+    await expect(page.locator('h2:has-text("Edit Post")')).toBeVisible();
+
+    // Change title
+    await page.locator('label:has-text("Title") + input').fill(`Updated Title ${ts}`);
+
+    // Update
+    await page.click('button:has-text("Update Post")');
+
+    // Verify updated title in list (success msg is cleared by resetForm, so verify via DOM)
+    await expect(page.locator(`text=Updated Title ${ts}`)).toBeVisible();
+  });
+
+  test("4. Creator can delete a post via UI", async ({ page, request }) => {
+    const ts = Date.now();
+
+    // Seed a post via API
+    const loginRes = await request.post(`${API_URL}/auth/login`, {
+      data: { username: "test-creator", password: "TestPass123!" },
+    });
+    const { token: creatorToken } = await loginRes.json();
+
+    const meRes = await request.get(`${API_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+    });
+    const me = await meRes.json();
+
+    const postRes = await request.post(`${API_URL}/posts`, {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+      multipart: {
+        title: `Delete Target ${ts}`,
+        group_ids: JSON.stringify([me.group_id]),
+        status: "published",
+        allowed_on_feed: "true",
+      },
+    });
+    expect(postRes.ok()).toBeTruthy();
+
+    // Navigate to My Posts
+    await page.goto("/creator/posts");
+    await page.waitForLoadState("networkidle");
+
+    // Handle confirmation dialogs
+    page.on('dialog', async dialog => {
+      if (dialog.type() === 'confirm') await dialog.accept();
+    });
+
+    // Click delete
+    await page.getByTitle("Delete post").first().click();
+
+    // Verify post is gone
+    await expect(page.locator(`text=Delete Target ${ts}`)).not.toBeVisible();
+    await expect(page.locator('h2:has-text("Posts (0)")')).toBeVisible();
+  });
+
+  test("5. Creator can filter posts by channel", async ({ page, request }) => {
+    const ts = Date.now();
+
+    // Seed posts via API
+    const loginRes = await request.post(`${API_URL}/auth/login`, {
+      data: { username: "test-creator", password: "TestPass123!" },
+    });
+    const { token: creatorToken } = await loginRes.json();
+
+    const meRes = await request.get(`${API_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+    });
+    const me = await meRes.json();
+
+    // Feed-only post
+    const feedRes = await request.post(`${API_URL}/posts`, {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+      multipart: {
+        title: `Feed Post ${ts}`,
+        group_ids: JSON.stringify([me.group_id]),
+        status: "published",
+        allowed_on_feed: "true",
+        allowed_on_signage: "false",
+      },
+    });
+    expect(feedRes.ok()).toBeTruthy();
+
+    // Signage post
+    const signRes = await request.post(`${API_URL}/posts`, {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+      multipart: {
+        title: `Signage Post ${ts}`,
+        group_ids: JSON.stringify([me.group_id]),
+        status: "published",
+        allowed_on_feed: "false",
+        allowed_on_signage: "true",
+      },
+    });
+    expect(signRes.ok()).toBeTruthy();
+
+    // Navigate to My Posts
+    await page.goto("/creator/posts");
+    await page.waitForLoadState("networkidle");
+
+    // Verify both posts visible initially
+    await expect(page.locator(`text=Feed Post ${ts}`)).toBeVisible();
+    await expect(page.locator(`text=Signage Post ${ts}`)).toBeVisible();
+
+    // Filter by feed
+    const feedPromise = page.waitForResponse(resp => resp.url().includes("/api/posts") && resp.status() === 200);
+    await page.locator('label:has-text("Type") select').selectOption("feed");
+    await feedPromise;
+
+    await expect(page.locator(`text=Feed Post ${ts}`)).toBeVisible();
+    await expect(page.locator(`text=Signage Post ${ts}`)).not.toBeVisible();
+
+    // Filter by signage
+    const signPromise = page.waitForResponse(resp => resp.url().includes("/api/posts") && resp.status() === 200);
+    await page.locator('label:has-text("Type") select').selectOption("signage");
+    await signPromise;
+
+    await expect(page.locator(`text=Feed Post ${ts}`)).not.toBeVisible();
+    await expect(page.locator(`text=Signage Post ${ts}`)).toBeVisible();
+
+    // Reset to all
+    const allPromise = page.waitForResponse(resp => resp.url().includes("/api/posts") && resp.status() === 200);
+    await page.locator('label:has-text("Type") select').selectOption("all");
+    await allPromise;
+
+    await expect(page.locator(`text=Feed Post ${ts}`)).toBeVisible();
+    await expect(page.locator(`text=Signage Post ${ts}`)).toBeVisible();
+  });
+
+  test("6. Creator can select all and bulk delete posts", async ({ page, request }) => {
+    const ts = Date.now();
+
+    // Seed multiple posts via API
+    const loginRes = await request.post(`${API_URL}/auth/login`, {
+      data: { username: "test-creator", password: "TestPass123!" },
+    });
+    const { token: creatorToken } = await loginRes.json();
+
+    const meRes = await request.get(`${API_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+    });
+    const me = await meRes.json();
+
+    for (let i = 1; i <= 3; i++) {
+      const postRes = await request.post(`${API_URL}/posts`, {
+        headers: { Authorization: `Bearer ${creatorToken}` },
+        multipart: {
+          title: `Bulk Post ${i} ${ts}`,
+          group_ids: JSON.stringify([me.group_id]),
+          status: "published",
+          allowed_on_feed: "true",
+        },
+      });
+      expect(postRes.ok()).toBeTruthy();
+    }
+
+    // Navigate to My Posts
+    await page.goto("/creator/posts");
+    await page.waitForLoadState("networkidle");
+
+    // Verify posts exist
+    for (let i = 1; i <= 3; i++) {
+      await expect(page.locator(`text=Bulk Post ${i} ${ts}`)).toBeVisible();
+    }
+
+    // Click "Select Mine" to select all manageable posts
+    await page.click('button:has-text("Select Mine")');
+
+    // Verify bulk action bar appears with correct count
+    await expect(page.locator('text=3 items selected')).toBeVisible();
+
+    // Handle bulk delete confirmation
+    page.on('dialog', async dialog => {
+      if (dialog.type() === 'confirm') await dialog.accept();
+    });
+
+    // Click bulk delete
+    await page.click('button:has-text("🗑 Delete")');
+
+    // Verify all posts are gone
+    for (let i = 1; i <= 3; i++) {
+      await expect(page.locator(`text=Bulk Post ${i} ${ts}`)).not.toBeVisible();
+    }
+    await expect(page.locator('h2:has-text("Posts (0)")')).toBeVisible();
+  });
+
+  test("7. Horizontal isolation — other creator's post is view-only", async ({ page, request }) => {
+    const ts = Date.now();
+
+    // Register two creators in the same group
+    const adminToken = await loginTestAdmin(request);
+    const groupRes = await request.post(`${API_URL}/groups`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { name: `SharedGroup-${ts}` },
+    });
+    expect(groupRes.ok()).toBeTruthy();
+    const group = await groupRes.json();
+
+    const regA = await request.post(`${API_URL}/auth/register`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { username: `creator-a-${ts}`, password: "TestPass123!", role: "creator", managed_group_ids: JSON.stringify([group.id]) },
+    });
+    expect(regA.ok()).toBeTruthy();
+
+    const regB = await request.post(`${API_URL}/auth/register`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { username: `creator-b-${ts}`, password: "TestPass123!", role: "creator", managed_group_ids: JSON.stringify([group.id]) },
+    });
+    expect(regB.ok()).toBeTruthy();
+
+    // Log in as Creator A and create a post
+    const loginA = await request.post(`${API_URL}/auth/login`, {
+      data: { username: `creator-a-${ts}`, password: "TestPass123!" },
+    });
+    const { token: tokenA } = await loginA.json();
+
+    const postRes = await request.post(`${API_URL}/posts`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+      multipart: {
+        title: `A Secret Post ${ts}`,
+        group_ids: JSON.stringify([group.id]),
+        status: "published",
+        allowed_on_feed: "true",
+      },
+    });
+    expect(postRes.ok()).toBeTruthy();
+
+    // Log in as Creator B via UI
+    await page.goto("/login");
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await page.fill('input[name="username"]', `creator-b-${ts}`);
+    await page.fill('input[name="password"]', "TestPass123!");
+    await page.click('button[type="submit"]');
+    await page.waitForURL("**/creator", { timeout: 5000 });
+
+    // Navigate to My Posts
+    await page.goto("/creator/posts");
+    await page.waitForLoadState("networkidle");
+
+    // Verify the post is visible but marked view-only
+    await expect(page.locator(`text=A Secret Post ${ts}`)).toBeVisible();
+    await expect(page.locator('text=view only')).toBeVisible();
+
+    // Verify edit and delete buttons are disabled (titles change when canManage is false)
+    const editBtn = page.getByTitle("Admin approval is required to edit this post").first();
+    const delBtn = page.getByTitle("Admin approval is required to delete this post").first();
+    await expect(editBtn).toBeDisabled();
+    await expect(delBtn).toBeDisabled();
+
+    // Verify checkbox is disabled
+    const checkbox = page.locator('input[type="checkbox"][title^="Admin approval"]').first();
+    await expect(checkbox).toBeDisabled();
+  });
+
+  test("8. Validation — missing media blocks save", async ({ page }) => {
+    await page.goto("/creator/posts");
+    await page.waitForLoadState("networkidle");
+
+    // Fill title and description without uploading media
+    await page.locator('label:has-text("Title") + input').fill("No Media Post");
+    await page.locator('label:has-text("Description") + textarea').fill("This post has no media");
+
+    // Try to save
+    await page.click('button:has-text("Save Post")');
+
+    // Verify validation error appears
+    await expect(page.locator('text=❌ Add at least one image or video.')).toBeVisible();
+
+    // Verify the post was NOT created
+    await expect(page.locator('text=No Media Post')).not.toBeVisible();
+  });
+
+  test("9. Bulk action guardrail — + Signage without displays triggers alert", async ({ page, request }) => {
+    const ts = Date.now();
+
+    // Seed a post via API
+    const loginRes = await request.post(`${API_URL}/auth/login`, {
+      data: { username: "test-creator", password: "TestPass123!" },
+    });
+    const { token: creatorToken } = await loginRes.json();
+
+    const meRes = await request.get(`${API_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+    });
+    const me = await meRes.json();
+
+    const postRes = await request.post(`${API_URL}/posts`, {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+      multipart: {
+        title: `Guardrail Post ${ts}`,
+        group_ids: JSON.stringify([me.group_id]),
+        status: "published",
+        allowed_on_feed: "true",
+      },
+    });
+    expect(postRes.ok()).toBeTruthy();
+
+    // Navigate to My Posts
+    await page.goto("/creator/posts");
+    await page.waitForLoadState("networkidle");
+
+    // Select the post
+    await page.click('button:has-text("Select Mine")');
+    await expect(page.locator('text=1 items selected')).toBeVisible();
+
+    // Intercept the alert from bulkAction guardrail
+    let alertMessage = "";
+    page.on("dialog", async (dialog) => {
+      alertMessage = dialog.message();
+      await dialog.accept();
+    });
+
+    // Click + Signage without choosing any displays
+    await page.click('button:has-text("+ Signage")');
+
+    // Verify the guardrail alert fired
+    expect(alertMessage).toContain("select at least one display");
+  });
+
+  test("10. Filter by Creator dropdown shows only selected creator's posts", async ({ page, request }) => {
+    const ts = Date.now();
+
+    // Register two creators in the same group via admin
+    const adminToken = await loginTestAdmin(request);
+    const groupRes = await request.post(`${API_URL}/groups`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { name: `CreatorFilterGroup-${ts}` },
+    });
+    expect(groupRes.ok()).toBeTruthy();
+    const group = await groupRes.json();
+
+    const regA = await request.post(`${API_URL}/auth/register`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { username: `cf-creator-a-${ts}`, password: "TestPass123!", role: "creator", group_id: group.id, managed_group_ids: JSON.stringify([group.id]) },
+    });
+    expect(regA.ok()).toBeTruthy();
+    const userA = await regA.json();
+
+    const regB = await request.post(`${API_URL}/auth/register`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { username: `cf-creator-b-${ts}`, password: "TestPass123!", role: "creator", group_id: group.id, managed_group_ids: JSON.stringify([group.id]) },
+    });
+    expect(regB.ok()).toBeTruthy();
+    const userB = await regB.json();
+
+    // Log in as A and create a post
+    const loginA = await request.post(`${API_URL}/auth/login`, {
+      data: { username: `cf-creator-a-${ts}`, password: "TestPass123!" },
+    });
+    const { token: tokenA } = await loginA.json();
+    const postA = await request.post(`${API_URL}/posts`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+      multipart: {
+        title: `Post By A ${ts}`,
+        group_ids: JSON.stringify([group.id]),
+        status: "published",
+        allowed_on_feed: "true",
+      },
+    });
+    expect(postA.ok()).toBeTruthy();
+
+    // Log in as B and create a post
+    const loginB = await request.post(`${API_URL}/auth/login`, {
+      data: { username: `cf-creator-b-${ts}`, password: "TestPass123!" },
+    });
+    const { token: tokenB } = await loginB.json();
+    const postB = await request.post(`${API_URL}/posts`, {
+      headers: { Authorization: `Bearer ${tokenB}` },
+      multipart: {
+        title: `Post By B ${ts}`,
+        group_ids: JSON.stringify([group.id]),
+        status: "published",
+        allowed_on_feed: "true",
+      },
+    });
+    expect(postB.ok()).toBeTruthy();
+
+    // Log in as test-creator (who manages the group) via UI to see both posts
+    await page.goto("/login");
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await page.fill('input[name="username"]', "test-creator");
+    await page.fill('input[name="password"]', "TestPass123!");
+    await page.click('button[type="submit"]');
+    await page.waitForURL("**/creator", { timeout: 5000 });
+
+    // Assign the group to test-creator so they can manage both posts
+    const meRes = await request.get(`${API_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    const meAdmin = await meRes.json();
+
+    // Actually, test-creator only sees their own group's posts.
+    // Instead, log in as creator-a who can see their own post and creator-b's post in the same group
+    await page.goto("/login");
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await page.fill('input[name="username"]', `cf-creator-a-${ts}`);
+    await page.fill('input[name="password"]', "TestPass123!");
+    await page.click('button[type="submit"]');
+    await page.waitForURL("**/creator", { timeout: 5000 });
+
+    await page.goto("/creator/posts");
+    await page.waitForLoadState("networkidle");
+
+    // Verify both posts are visible initially
+    await expect(page.locator(`text=Post By A ${ts}`)).toBeVisible();
+    await expect(page.locator(`text=Post By B ${ts}`)).toBeVisible();
+
+    // Filter by Creator A in the dropdown
+    const creatorSelect = page.locator('select').filter({ has: page.locator('option', { hasText: 'All creators in group' }) });
+
+    const filterPromise = page.waitForResponse(resp => resp.url().includes("/api/posts") && resp.status() === 200);
+    await creatorSelect.selectOption(String(userA.id));
+    await filterPromise;
+
+    await expect(page.locator(`text=Post By A ${ts}`)).toBeVisible();
+    await expect(page.locator(`text=Post By B ${ts}`)).not.toBeVisible();
+
+    // Filter by Creator B
+    const filterPromiseB = page.waitForResponse(resp => resp.url().includes("/api/posts") && resp.status() === 200);
+    await creatorSelect.selectOption(String(userB.id));
+    await filterPromiseB;
+
+    await expect(page.locator(`text=Post By A ${ts}`)).not.toBeVisible();
+    await expect(page.locator(`text=Post By B ${ts}`)).toBeVisible();
+  });
+});

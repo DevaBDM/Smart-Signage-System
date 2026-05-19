@@ -43,12 +43,17 @@ async function seedUsers(prisma) {
     },
   });
 
+  const group = await prisma.group.create({
+    data: { name: "Creator Test Group" },
+  });
+
   await prisma.user.create({
     data: {
       username: "test-creator",
       password_hash: hash,
       role: "creator",
       auto_approve: true,
+      group_id: group.id,
     },
   });
 }

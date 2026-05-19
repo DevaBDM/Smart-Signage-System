@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import CreatorSidebar from "../../components/CreatorSidebar";
 import { mediaSrc } from "../../components/PostMedia";
+import api from "../../api/axios";
 import * as postsApi from "../../api/posts";
 import * as devicesApi from "../../api/devices";
 import * as groupsApi from "../../api/groups";
