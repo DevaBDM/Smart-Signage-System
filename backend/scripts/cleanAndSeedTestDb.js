@@ -2,6 +2,7 @@
 const path = require("path");
 require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
 
+process.env.NODE_ENV = "test";
 const prisma = require("../src/db/prisma");
 const bcrypt = require("bcryptjs");
 

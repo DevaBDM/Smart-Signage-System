@@ -9,10 +9,19 @@ if (!process.env.TEST_DATABASE_URL) {
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
 process.env.PORT = "5001";
 
+// Track piBridge emitter calls so E2E tests can verify clear_all was sent.
+global._bridgeCalls = [];
+
+const app = require("./src/app");
+app.get("/api/test/bridge-calls", (_req, res) => {
+  res.json(global._bridgeCalls || []);
+});
+
 require("./src/index");
 
 // Mock the socket bridge so signage routes don't fail in e2e tests.
 const piBridge = require("./src/services/piBridge");
-piBridge.setEmitter(
-  () => Promise.resolve({ ok: true, asset: { asset_id: "mock-asset" } }),
-);
+piBridge.setEmitter((device_id, event, data, timeout) => {
+  global._bridgeCalls.push({ device_id, event, data, timeout, at: new Date().toISOString() });
+  return Promise.resolve({ ok: true, asset: { asset_id: "mock-asset" } });
+});

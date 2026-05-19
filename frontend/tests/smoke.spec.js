@@ -296,3 +296,174 @@ test.describe("UI smoke tests", () => {
     expect(names).not.toContain(`Security-Group-${ts}`);
   });
 });
+
+test.describe("Device lifecycle API tests", () => {
+  let adminToken;
+  let creatorToken;
+  let group;
+  let deviceId;
+
+  test.beforeAll(async ({ request }) => {
+    adminToken = await loginTestAdmin(request);
+
+    // Login as test-creator
+    const creatorLogin = await request.post(`${API_URL}/auth/login`, {
+      data: { username: "test-creator", password: "TestPass123!" },
+    });
+    expect(creatorLogin.ok()).toBeTruthy();
+    const creatorData = await creatorLogin.json();
+    creatorToken = creatorData.token;
+
+    // Create a group for device tests
+    const groupRes = await request.post(`${API_URL}/groups`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { name: `DeviceTestGroup-${Date.now()}` },
+    });
+    expect(groupRes.ok()).toBeTruthy();
+    group = await groupRes.json();
+  });
+
+  test("1. Approval flow — pending device becomes active", async ({ request }) => {
+    // Seed a pending device via backend script (simulates agent heartbeat)
+    const script = path.resolve(__dirname, "../../backend/scripts/createPendingDevice.js");
+    const out = execSync(`node "${script}" ${group.id}`, { encoding: "utf-8" });
+    // Filter out dotenvx injection logs and take the last JSON line
+    const jsonLine = out.trim().split(/\r?\n/).filter((l) => l.trim().startsWith("{")).pop();
+    const { id } = JSON.parse(jsonLine);
+    deviceId = id;
+
+    // Verify the device is pending
+    const getRes = await request.get(`${API_URL}/devices/${deviceId}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(getRes.ok()).toBeTruthy();
+    const before = await getRes.json();
+    expect(before.is_approved).toBe(false);
+    expect(before.pending_name).toBe("Lab-Pi-01");
+    expect(before.pending_ip).toBe("192.168.1.50");
+
+    // Approve the device
+    const approveRes = await request.post(`${API_URL}/devices/${deviceId}/approve`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { group_id: group.id },
+    });
+    expect(approveRes.ok()).toBeTruthy();
+    const after = await approveRes.json();
+    expect(after.is_approved).toBe(true);
+    expect(after.device_name).toBe("Lab-Pi-01");
+    expect(after.pending_name).toBeNull();
+    expect(after.pending_ip).toBeNull();
+  });
+
+  test("2. Configuration flow — edit metadata", async ({ request }) => {
+    const updateRes = await request.put(`${API_URL}/devices/${deviceId}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { location: "Science Wing, Room 302", all_groups: true },
+    });
+    expect(updateRes.ok()).toBeTruthy();
+    const updated = await updateRes.json();
+    expect(updated.location).toBe("Science Wing, Room 302");
+    expect(updated.all_groups).toBe(true);
+
+    // Verify DB reflects changes via GET
+    const getRes = await request.get(`${API_URL}/devices/${deviceId}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(getRes.ok()).toBeTruthy();
+    const device = await getRes.json();
+    expect(device.location).toBe("Science Wing, Room 302");
+    expect(device.all_groups).toBe(true);
+  });
+
+  test("3. Cleanup flow — secure deletion with clear_all", async ({ request }) => {
+    // Mark device as online so the delete path triggers the socket emit
+    const statusRes = await request.put(`${API_URL}/devices/${deviceId}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { status: "online" },
+    });
+    expect(statusRes.ok()).toBeTruthy();
+
+    // Delete the device
+    const deleteRes = await request.delete(`${API_URL}/devices/${deviceId}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(deleteRes.ok()).toBeTruthy();
+    const delBody = await deleteRes.json();
+    expect(delBody.ok).toBe(true);
+
+    // Verify the socket bridge received a clear_all command for this device
+    const bridgeRes = await request.get(`${API_URL}/test/bridge-calls`);
+    expect(bridgeRes.ok()).toBeTruthy();
+    const calls = await bridgeRes.json();
+    const clearAllCall = calls.find(
+      (c) =>
+        c.device_id === deviceId &&
+        c.event === "signage_command" &&
+        c.data?.action === "clear_all",
+    );
+    expect(clearAllCall, "clear_all command should have been emitted to the device").toBeDefined();
+
+    // Verify the device no longer exists in the DB
+    const getRes = await request.get(`${API_URL}/devices/${deviceId}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(getRes.status()).toBe(404);
+  });
+
+  test("4. Security flow — RBAC enforcement", async ({ request }) => {
+    // Seed another pending device for the RBAC test
+    const script = path.resolve(__dirname, "../../backend/scripts/createPendingDevice.js");
+    const out = execSync(`node "${script}" ${group.id}`, { encoding: "utf-8" });
+    const jsonLine = out.trim().split(/\r?\n/).filter((l) => l.trim().startsWith("{")).pop();
+    const { id: rbacDeviceId } = JSON.parse(jsonLine);
+
+    // Creator tries to approve → 403 Forbidden
+    const approveRes = await request.post(`${API_URL}/devices/${rbacDeviceId}/approve`, {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+      data: { group_id: group.id },
+    });
+    expect(approveRes.status()).toBe(403);
+
+    // Creator tries to delete → 403 Forbidden
+    const deleteRes = await request.delete(`${API_URL}/devices/${rbacDeviceId}`, {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+    });
+    expect(deleteRes.status()).toBe(403);
+
+    // Clean up as admin
+    const adminDel = await request.delete(`${API_URL}/devices/${rbacDeviceId}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(adminDel.ok()).toBeTruthy();
+  });
+
+  test("5. Reset flow — factory reset simulation", async ({ request }) => {
+    // Register an approved device with custom fields
+    const regRes = await request.post(`${API_URL}/devices/register`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: {
+        device_name: "Custom Pi",
+        ip_address: "192.168.1.100",
+        location: "Library",
+        group_id: group.id,
+      },
+    });
+    expect(regRes.ok()).toBeTruthy();
+    const device = await regRes.json();
+
+    // Reset it
+    const resetRes = await request.put(`${API_URL}/devices/${device.id}/reset`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(resetRes.ok()).toBeTruthy();
+    const resetBody = await resetRes.json();
+    expect(resetBody.device.device_name).toBe(`Pi Display ${device.id}`);
+    expect(resetBody.device.location).toBeNull();
+    expect(resetBody.device.ip_address).toBe("");
+
+    // Clean up
+    await request.delete(`${API_URL}/devices/${device.id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+  });
+});
