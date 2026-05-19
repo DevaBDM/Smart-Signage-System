@@ -466,6 +466,63 @@ test.describe("Device lifecycle API tests", () => {
       headers: { Authorization: `Bearer ${adminToken}` },
     });
   });
+
+  test("6. Device logs — sensor logs are created and retrievable", async ({ request }) => {
+    // Register a device
+    const regRes = await request.post(`${API_URL}/devices/register`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: {
+        device_name: "Log Test Pi",
+        ip_address: "192.168.1.55",
+        group_id: group.id,
+      },
+    });
+    expect(regRes.ok()).toBeTruthy();
+    const device = await regRes.json();
+
+    // Create a sensor log via the device REST endpoint
+    const logRes = await request.post(`${API_URL}/sensors/log`, {
+      data: {
+        device_id: device.id,
+        motion: true,
+        brightness: 75,
+        rain: false,
+      },
+    });
+    expect(logRes.ok()).toBeTruthy();
+    const logBody = await logRes.json();
+    expect(logBody.device_id).toBe(device.id);
+    expect(logBody.motion).toBe(true);
+    expect(logBody.brightness).toBe(75);
+    expect(logBody.rain).toBe(false);
+
+    // Verify the log appears via GET /devices/:id (includes sensor_logs)
+    const getRes = await request.get(`${API_URL}/devices/${device.id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(getRes.ok()).toBeTruthy();
+    const fullDevice = await getRes.json();
+    expect(fullDevice.sensor_logs).toBeInstanceOf(Array);
+    expect(fullDevice.sensor_logs.length).toBeGreaterThan(0);
+    const found = fullDevice.sensor_logs.find(
+      (l) => l.motion === true && l.brightness === 75 && l.rain === false,
+    );
+    expect(found, "sensor log should be embedded in device response").toBeDefined();
+
+    // Verify via the sensors endpoint
+    const sensorRes = await request.get(`${API_URL}/sensors/${device.id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(sensorRes.ok()).toBeTruthy();
+    const sensorLogs = await sensorRes.json();
+    expect(sensorLogs).toBeInstanceOf(Array);
+    expect(sensorLogs.length).toBeGreaterThan(0);
+
+    // Clean up
+    await request.delete(`${API_URL}/devices/${device.id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+  });
 });
 
 test.describe("Group API hardening tests", () => {
