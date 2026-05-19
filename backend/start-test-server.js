@@ -19,9 +19,15 @@ app.get("/api/test/bridge-calls", (_req, res) => {
 
 require("./src/index");
 
+// Override emitToDevice so refreshGroupDevices calls are visible to tests.
+app.set("emitToDevice", (device_id, event, data) => {
+  global._bridgeCalls.push({ device_id, event, data, type: "emit" });
+  return true;
+});
+
 // Mock the socket bridge so signage routes don't fail in e2e tests.
 const piBridge = require("./src/services/piBridge");
 piBridge.setEmitter((device_id, event, data, timeout) => {
-  global._bridgeCalls.push({ device_id, event, data, timeout, at: new Date().toISOString() });
+  global._bridgeCalls.push({ device_id, event, data, timeout, at: new Date().toISOString(), type: "ack" });
   return Promise.resolve({ ok: true, asset: { asset_id: "mock-asset" } });
 });

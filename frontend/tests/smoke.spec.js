@@ -467,3 +467,175 @@ test.describe("Device lifecycle API tests", () => {
     });
   });
 });
+
+test.describe("Group API hardening tests", () => {
+  let adminToken;
+
+  test.beforeAll(async ({ request }) => {
+    adminToken = await loginTestAdmin(request);
+  });
+
+  test("Device refresh side-effect when signage_state changes", async ({ request }) => {
+    // Create a group
+    const groupRes = await request.post(`${API_URL}/groups`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { name: `RefreshGroup-${Date.now()}` },
+    });
+    expect(groupRes.ok()).toBeTruthy();
+    const grp = await groupRes.json();
+
+    // Register and approve a device in the group, mark it online
+    const regRes = await request.post(`${API_URL}/devices/register`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: {
+        device_name: "Refresh Pi",
+        ip_address: "192.168.1.200",
+        group_id: grp.id,
+      },
+    });
+    expect(regRes.ok()).toBeTruthy();
+    const dev = await regRes.json();
+
+    await request.post(`${API_URL}/devices/${dev.id}/approve`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { group_id: grp.id },
+    });
+
+    await request.put(`${API_URL}/devices/${dev.id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { status: "online" },
+    });
+
+    // Change group signage_state → should trigger refresh_display
+    const updateRes = await request.put(`${API_URL}/groups/${grp.id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { signage_state: "EMERGENCY" },
+    });
+    expect(updateRes.ok()).toBeTruthy();
+
+    // Verify the bridge received a refresh_display command for this device
+    const bridgeRes = await request.get(`${API_URL}/test/bridge-calls`);
+    expect(bridgeRes.ok()).toBeTruthy();
+    const calls = await bridgeRes.json();
+    const refreshCall = calls.find(
+      (c) =>
+        c.type === "emit" &&
+        c.device_id === dev.id &&
+        c.event === "refresh_display" &&
+        c.data?.reason === "group_signage_state",
+    );
+    expect(refreshCall, "refresh_display should have been emitted after group state change").toBeDefined();
+
+    // Clean up
+    await request.delete(`${API_URL}/devices/${dev.id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    await request.delete(`${API_URL}/groups/${grp.id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+  });
+
+  test("Managed groups visibility — creator only sees assigned groups", async ({ request }) => {
+    const ts = Date.now();
+
+    // Create three groups
+    const aRes = await request.post(`${API_URL}/groups`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { name: `Group-A-${ts}` },
+    });
+    expect(aRes.ok()).toBeTruthy();
+    const groupA = await aRes.json();
+
+    const bRes = await request.post(`${API_URL}/groups`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { name: `Group-B-${ts}` },
+    });
+    expect(bRes.ok()).toBeTruthy();
+    const groupB = await bRes.json();
+
+    const cRes = await request.post(`${API_URL}/groups`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { name: `Group-C-${ts}` },
+    });
+    expect(cRes.ok()).toBeTruthy();
+    const groupC = await cRes.json();
+
+    // Register a creator assigned only to Group A and B
+    const regRes = await request.post(`${API_URL}/auth/register`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: {
+        username: `creator-visibility-${ts}`,
+        password: "TestPass123!",
+        role: "creator",
+        managed_group_ids: JSON.stringify([groupA.id, groupB.id]),
+      },
+    });
+    expect(regRes.ok()).toBeTruthy();
+
+    // Login as the new creator
+    const loginRes = await request.post(`${API_URL}/auth/login`, {
+      data: { username: `creator-visibility-${ts}`, password: "TestPass123!" },
+    });
+    expect(loginRes.ok()).toBeTruthy();
+    const loginData = await loginRes.json();
+    const creatorToken = loginData.token;
+
+    // GET /groups as creator
+    const listRes = await request.get(`${API_URL}/groups`, {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+    });
+    expect(listRes.ok()).toBeTruthy();
+    const groups = await listRes.json();
+    const names = groups.map((g) => g.name);
+
+    expect(groups).toHaveLength(2);
+    expect(names).toContain(`Group-A-${ts}`);
+    expect(names).toContain(`Group-B-${ts}`);
+    expect(names).not.toContain(`Group-C-${ts}`);
+
+    // Clean up groups
+    await request.delete(`${API_URL}/groups/${groupA.id}`, { headers: { Authorization: `Bearer ${adminToken}` } });
+    await request.delete(`${API_URL}/groups/${groupB.id}`, { headers: { Authorization: `Bearer ${adminToken}` } });
+    await request.delete(`${API_URL}/groups/${groupC.id}`, { headers: { Authorization: `Bearer ${adminToken}` } });
+  });
+
+  test("Delete protection — cannot delete a group that has an active post", async ({ request }) => {
+    const ts = Date.now();
+
+    // Create a group
+    const groupRes = await request.post(`${API_URL}/groups`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { name: `ProtectedGroup-${ts}` },
+    });
+    expect(groupRes.ok()).toBeTruthy();
+    const grp = await groupRes.json();
+
+    // Create a post inside the group
+    const postRes = await request.post(`${API_URL}/posts`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      multipart: {
+        title: "Protected Post",
+        group_ids: JSON.stringify([grp.id]),
+        status: "published",
+        allowed_on_signage: "true",
+      },
+    });
+    expect(postRes.ok()).toBeTruthy();
+
+    // Attempt to delete the group
+    const delRes = await request.delete(`${API_URL}/groups/${grp.id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(delRes.status()).toBe(400);
+    const body = await delRes.json();
+    expect(body.error).toMatch(/still used/i);
+
+    // Verify the group still exists
+    const listRes = await request.get(`${API_URL}/groups`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(listRes.ok()).toBeTruthy();
+    const groups = await listRes.json();
+    expect(groups.some((g) => g.id === grp.id)).toBe(true);
+  });
+});

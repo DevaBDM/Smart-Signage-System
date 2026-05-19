@@ -6,7 +6,8 @@ const piBridge = require("./services/piBridge");
 
 const server = http.createServer(app);
 
-const { emitToDeviceAck } = initSocket(server);
+const { emitToDevice, emitToDeviceAck } = initSocket(server);
+app.set("emitToDevice", emitToDevice);
 piBridge.setEmitter(emitToDeviceAck);
 
 const PORT = process.env.PORT || 5000;
