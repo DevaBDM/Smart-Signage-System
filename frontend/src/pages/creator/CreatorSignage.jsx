@@ -50,7 +50,7 @@ export default function CreatorSignage() {
     () => posts.find((p) => String(p.id) === String(form.post_id)),
     [posts, form.post_id],
   );
-  const selectedMeta = useMemo(
+  const selectedPostMeta = useMemo(
     () => postMediaMeta(selectedPost),
     [selectedPost],
   );
@@ -217,7 +217,8 @@ export default function CreatorSignage() {
             onSubmit={publish}
             posts={posts}
             devices={devices}
-            selectedMeta={selectedMeta}
+            selectedMeta={selectedPostMeta}
+            postMediaMeta={postMediaMeta}
             msg={msg}
             messageStyle={messageStyle}
           />

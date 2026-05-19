@@ -8,6 +8,7 @@ export default function SignagePublishForm({
   posts,
   devices,
   selectedMeta,
+  postMediaMeta,
   msg,
   messageStyle,
 }) {
@@ -30,7 +31,7 @@ export default function SignagePublishForm({
         >
           <option value="">— Select post —</option>
           {posts.map((p) => {
-            const meta = selectedMeta(p);
+            const meta = postMediaMeta(p);
             return (
               <option key={p.id} value={p.id}>
                 {p.title} — {p.group?.name || "—"} ({meta.label}

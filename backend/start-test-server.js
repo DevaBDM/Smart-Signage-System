@@ -81,5 +81,9 @@ app.set("emitToDevice", (device_id, event, data) => {
 const piBridge = require("./src/services/piBridge");
 piBridge.setEmitter((device_id, event, data, timeout) => {
   global._bridgeCalls.push({ device_id, event, data, timeout, at: new Date().toISOString(), type: "ack" });
+  // Return offline for "list" so the asset-list stale path is exercised in tests
+  if (data?.action === "list") {
+    return Promise.resolve({ ok: false, error: "Device is offline" });
+  }
   return Promise.resolve({ ok: true, asset: { asset_id: "mock-asset" } });
 });

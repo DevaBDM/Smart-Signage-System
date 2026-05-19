@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { execSync } from "child_process";
 import { fileURLToPath } from "url";
 import path from "path";
+import fs from "fs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1873,5 +1874,592 @@ test.describe("Creator My Posts UI tests", () => {
 
     await expect(page.locator(`text=Post By A ${ts}`)).not.toBeVisible();
     await expect(page.locator(`text=Post By B ${ts}`)).toBeVisible();
+  });
+});
+
+test.describe("Creator Signage UI tests", () => {
+  test.beforeEach(async ({ page, request }) => {
+    await resetState(request);
+    await page.goto("/login");
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await page.fill('input[name="username"]', "test-creator");
+    await page.fill('input[name="password"]', "TestPass123!");
+    await page.click('button[type="submit"]');
+    await page.waitForURL("**/creator", { timeout: 5000 });
+  });
+
+  test("1. Page loads with Publish to Signage heading and empty state", async ({ page }) => {
+    await page.goto("/creator/signage");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.locator('h1:has-text("Publish to Signage")')).toBeVisible();
+    await expect(page.locator('h2:has-text("Signage Publish")')).toBeVisible();
+    await expect(page.locator('h2:has-text("Display Assets")')).toBeVisible();
+    await expect(page.locator('text=Select a display to see its assets.')).toBeVisible();
+  });
+
+  test("2. Publish form validation blocks submission without post or device", async ({ page }) => {
+    await page.goto("/creator/signage");
+    await page.waitForLoadState("networkidle");
+
+    await page.click('button:has-text("Publish to Display")');
+    // HTML5 validation should prevent submission
+    await expect(page.locator('text=✅ Published')).not.toBeVisible();
+    await expect(page.locator('text=⚠️ Saved on server')).not.toBeVisible();
+  });
+
+  test("3. Publish a post to an online display via mock bridge shows success", async ({ page, request }) => {
+    const ts = Date.now();
+
+    // Log in as test-creator and get group info
+    const loginRes = await request.post(`${API_URL}/auth/login`, {
+      data: { username: "test-creator", password: "TestPass123!" },
+    });
+    const { token: creatorToken } = await loginRes.json();
+
+    const meRes = await request.get(`${API_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+    });
+    const me = await meRes.json();
+
+    // Create a post with an image via API
+    const imagePath = path.resolve(__dirname, "MockMedia/Images/pexels-pixabay-267507.jpg");
+    const postRes = await request.post(`${API_URL}/posts`, {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+      multipart: {
+        title: `Signage Post ${ts}`,
+        group_ids: JSON.stringify([me.group_id]),
+        status: "published",
+        allowed_on_signage: "true",
+        images: { name: "test.jpg", mimeType: "image/jpeg", buffer: fs.readFileSync(imagePath) },
+      },
+    });
+    expect(postRes.ok()).toBeTruthy();
+    const postData = await postRes.json();
+    const postId = postData.posts[0].id;
+
+    // Register, approve, and set online a device in the same group
+    const adminToken = await loginTestAdmin(request);
+    const deviceRes = await request.post(`${API_URL}/devices/register`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { device_name: `Test Display ${ts}`, ip_address: "192.168.1.100", group_id: me.group_id },
+    });
+    expect(deviceRes.ok()).toBeTruthy();
+    const device = await deviceRes.json();
+
+    await request.post(`${API_URL}/devices/${device.id}/approve`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { group_id: me.group_id },
+    });
+    await request.put(`${API_URL}/devices/${device.id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { status: "online" },
+    });
+
+    // Navigate to Signage page
+    await page.goto("/creator/signage");
+    await page.waitForLoadState("networkidle");
+
+    // Select post and device, then publish
+    await page.locator('label:has-text("Post") + select').selectOption(String(postId));
+    await page.locator('label:has-text("Target Display") + select').selectOption(String(device.id));
+    await page.click('button:has-text("Publish to Display")');
+
+    // Verify success message (mock Pi bridge returns ok:true for publish)
+    await expect(page.locator('text=✅ Published — display updated.')).toBeVisible({ timeout: 10000 });
+  });
+
+  test("4. Previous/Next/Refresh buttons disabled without device", async ({ page }) => {
+    await page.goto("/creator/signage");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.locator('button:has-text("Previous")')).toBeDisabled();
+    await expect(page.locator('button:has-text("Next")')).toBeDisabled();
+    await expect(page.locator('button:has-text("Refresh")')).toBeDisabled();
+  });
+
+  test("5. Asset list shows stale seeded assets after selecting a display", async ({ page, request }) => {
+    const ts = Date.now();
+
+    const loginRes = await request.post(`${API_URL}/auth/login`, {
+      data: { username: "test-creator", password: "TestPass123!" },
+    });
+    const { token: creatorToken } = await loginRes.json();
+
+    const meRes = await request.get(`${API_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+    });
+    const me = await meRes.json();
+
+    // Create a post with an image
+    const imagePath = path.resolve(__dirname, "MockMedia/Images/pexels-pixabay-267507.jpg");
+    const postRes = await request.post(`${API_URL}/posts`, {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+      multipart: {
+        title: `Asset Post ${ts}`,
+        group_ids: JSON.stringify([me.group_id]),
+        status: "published",
+        allowed_on_signage: "true",
+        images: { name: "test.jpg", mimeType: "image/jpeg", buffer: fs.readFileSync(imagePath) },
+      },
+    });
+    expect(postRes.ok()).toBeTruthy();
+    const postData = await postRes.json();
+    const postId = postData.posts[0].id;
+
+    // Register and approve a device
+    const adminToken = await loginTestAdmin(request);
+    const deviceRes = await request.post(`${API_URL}/devices/register`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { device_name: `Asset Display ${ts}`, ip_address: "192.168.1.101", group_id: me.group_id },
+    });
+    expect(deviceRes.ok()).toBeTruthy();
+    const device = await deviceRes.json();
+
+    await request.post(`${API_URL}/devices/${device.id}/approve`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { group_id: me.group_id },
+    });
+    await request.put(`${API_URL}/devices/${device.id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { status: "online" },
+    });
+
+    // Seed a signage asset directly in the DB so the stale list has data
+    const assetScript = path.resolve(__dirname, "../../backend/scripts/seedSignageAsset.js");
+    execSync(`node "${assetScript}" ${postId} ${device.id} asset-${ts}`, { cwd: path.resolve(__dirname, "../../backend"), encoding: "utf-8" });
+
+    // Navigate and select the device
+    await page.goto("/creator/signage");
+    await page.waitForLoadState("networkidle");
+    await page.locator('label:has-text("Target Display") + select').selectOption(String(device.id));
+
+    // Verify the stale asset appears (exact text avoids matching the dropdown option)
+    await expect(page.getByText(`Asset Post ${ts}`, { exact: true })).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=Image · Visible · 10s')).toBeVisible();
+  });
+
+  test("6. Display command succeeds via mock bridge", async ({ page, request }) => {
+    const ts = Date.now();
+
+    const loginRes = await request.post(`${API_URL}/auth/login`, {
+      data: { username: "test-creator", password: "TestPass123!" },
+    });
+    const { token: creatorToken } = await loginRes.json();
+
+    const meRes = await request.get(`${API_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+    });
+    const me = await meRes.json();
+
+    // Create a post with an image
+    const imagePath = path.resolve(__dirname, "MockMedia/Images/pexels-pixabay-267507.jpg");
+    const postRes = await request.post(`${API_URL}/posts`, {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+      multipart: {
+        title: `Command Post ${ts}`,
+        group_ids: JSON.stringify([me.group_id]),
+        status: "published",
+        allowed_on_signage: "true",
+        images: { name: "test.jpg", mimeType: "image/jpeg", buffer: fs.readFileSync(imagePath) },
+      },
+    });
+    expect(postRes.ok()).toBeTruthy();
+    const postData = await postRes.json();
+    const postId = postData.posts[0].id;
+
+    // Register and approve a device
+    const adminToken = await loginTestAdmin(request);
+    const deviceRes = await request.post(`${API_URL}/devices/register`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { device_name: `Command Display ${ts}`, ip_address: "192.168.1.102", group_id: me.group_id },
+    });
+    expect(deviceRes.ok()).toBeTruthy();
+    const device = await deviceRes.json();
+
+    await request.post(`${API_URL}/devices/${device.id}/approve`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { group_id: me.group_id },
+    });
+    await request.put(`${API_URL}/devices/${device.id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { status: "online" },
+    });
+
+    // Seed a signage asset
+    const assetScript = path.resolve(__dirname, "../../backend/scripts/seedSignageAsset.js");
+    execSync(`node "${assetScript}" ${postId} ${device.id} asset-cmd-${ts}`, { cwd: path.resolve(__dirname, "../../backend"), encoding: "utf-8" });
+
+    // Navigate and select the device
+    await page.goto("/creator/signage");
+    await page.waitForLoadState("networkidle");
+    await page.locator('label:has-text("Target Display") + select').selectOption(String(device.id));
+
+    // Wait for asset to appear (exact text avoids matching the dropdown option)
+    await expect(page.getByText(`Command Post ${ts}`, { exact: true })).toBeVisible({ timeout: 10000 });
+
+    // Click Start — mock Pi bridge returns ok:true for controls
+    await page.locator('button:has-text("Start")').first().click();
+    await expect(page.locator('text=✅ Display command sent.')).toBeVisible({ timeout: 10000 });
+  });
+
+  test("7. Horizontal isolation — other creator's asset is view-only", async ({ page, request }) => {
+    test.setTimeout(60000);
+    const ts = Date.now();
+
+    // Register two creators in the same group via admin
+    const adminToken = await loginTestAdmin(request);
+    const groupRes = await request.post(`${API_URL}/groups`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { name: `IsoGroup-${ts}` },
+    });
+    expect(groupRes.ok()).toBeTruthy();
+    const group = await groupRes.json();
+
+    const regA = await request.post(`${API_URL}/auth/register`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { username: `iso-creator-a-${ts}`, password: "TestPass123!", role: "creator", group_id: group.id, managed_group_ids: JSON.stringify([group.id]) },
+    });
+    expect(regA.ok()).toBeTruthy();
+    const userA = await regA.json();
+
+    const regB = await request.post(`${API_URL}/auth/register`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { username: `iso-creator-b-${ts}`, password: "TestPass123!", role: "creator", group_id: group.id, managed_group_ids: JSON.stringify([group.id]) },
+    });
+    expect(regB.ok()).toBeTruthy();
+    const userB = await regB.json();
+
+    // Log in as A and create a post with image
+    const loginA = await request.post(`${API_URL}/auth/login`, {
+      data: { username: `iso-creator-a-${ts}`, password: "TestPass123!" },
+    });
+    const { token: tokenA } = await loginA.json();
+    const imagePath = path.resolve(__dirname, "MockMedia/Images/pexels-pixabay-267507.jpg");
+    const postRes = await request.post(`${API_URL}/posts`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+      multipart: {
+        title: `Iso Post ${ts}`,
+        group_ids: JSON.stringify([group.id]),
+        status: "published",
+        allowed_on_signage: "true",
+        images: { name: "test.jpg", mimeType: "image/jpeg", buffer: fs.readFileSync(imagePath) },
+      },
+    });
+    expect(postRes.ok()).toBeTruthy();
+    const postData = await postRes.json();
+    const postId = postData.posts[0].id;
+
+    // Register and approve a device
+    const deviceRes = await request.post(`${API_URL}/devices/register`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { device_name: `Iso Display ${ts}`, ip_address: "192.168.1.150", group_id: group.id },
+    });
+    expect(deviceRes.ok()).toBeTruthy();
+    const device = await deviceRes.json();
+    await request.post(`${API_URL}/devices/${device.id}/approve`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { group_id: group.id },
+    });
+    await request.put(`${API_URL}/devices/${device.id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { status: "online" },
+    });
+
+    // Creator A publishes to the device
+    await request.post(`${API_URL}/signage/publish`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+      data: { post_id: postId, device_id: device.id, duration_seconds: 10, priority: 1 },
+    });
+
+    // Log in as Creator B via UI
+    await page.goto("/login");
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await page.fill('input[name="username"]', `iso-creator-b-${ts}`);
+    await page.fill('input[name="password"]', "TestPass123!");
+    await page.click('button[type="submit"]');
+    await page.waitForURL("**/creator", { timeout: 5000 });
+
+    // Navigate to Signage and select the device
+    await page.goto("/creator/signage");
+    await page.waitForLoadState("networkidle");
+    await page.locator('label:has-text("Target Display") + select').selectOption(String(device.id));
+
+    // Verify asset is visible but not manageable
+    await expect(page.getByText(`Iso Post ${ts}`, { exact: true })).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('button:has-text("Hide")')).toHaveCount(0);
+    await expect(page.locator('button:has-text("Delete")')).toHaveCount(0);
+    await expect(page.locator('text=view only')).toBeVisible();
+  });
+
+  test("8. Priority lock — higher-priority-number creator blocks lower-priority-number control", async ({ page, request }) => {
+    test.setTimeout(60000);
+    const ts = Date.now();
+
+    // Register two creators in the same group (A = priority 2, B = priority 3)
+    const adminToken = await loginTestAdmin(request);
+    const groupRes = await request.post(`${API_URL}/groups`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { name: `LockGroup-${ts}` },
+    });
+    expect(groupRes.ok()).toBeTruthy();
+    const group = await groupRes.json();
+
+    const regA = await request.post(`${API_URL}/auth/register`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { username: `lock-creator-a-${ts}`, password: "TestPass123!", role: "creator", group_id: group.id, managed_group_ids: JSON.stringify([group.id]) },
+    });
+    expect(regA.ok()).toBeTruthy();
+    const userA = await regA.json();
+
+    const regB = await request.post(`${API_URL}/auth/register`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { username: `lock-creator-b-${ts}`, password: "TestPass123!", role: "creator", group_id: group.id, managed_group_ids: JSON.stringify([group.id]) },
+    });
+    expect(regB.ok()).toBeTruthy();
+
+    // Register and approve a device
+    const deviceRes = await request.post(`${API_URL}/devices/register`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { device_name: `Lock Display ${ts}`, ip_address: "192.168.1.151", group_id: group.id },
+    });
+    expect(deviceRes.ok()).toBeTruthy();
+    const device = await deviceRes.json();
+    await request.post(`${API_URL}/devices/${device.id}/approve`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { group_id: group.id },
+    });
+    await request.put(`${API_URL}/devices/${device.id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { status: "online" },
+    });
+
+    // Creator A creates a post (no image needed; asset is seeded directly)
+    const loginA = await request.post(`${API_URL}/auth/login`, {
+      data: { username: `lock-creator-a-${ts}`, password: "TestPass123!" },
+    });
+    const { token: tokenA } = await loginA.json();
+    const postRes = await request.post(`${API_URL}/posts`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+      multipart: {
+        title: `Lock Post ${ts}`,
+        group_ids: JSON.stringify([group.id]),
+        status: "published",
+        allowed_on_signage: "true",
+      },
+    });
+    expect(postRes.ok()).toBeTruthy();
+    const postData = await postRes.json();
+    const postId = postData.posts[0].id;
+
+    // Seed the signage asset directly (bypass publish so no control lock is applied)
+    const seedScript = path.resolve(__dirname, "../../backend/scripts/seedSignageAsset.js");
+    execSync(`node "${seedScript}" ${postId} ${device.id} "lock-asset-${ts}"`, { cwd: path.resolve(__dirname, "../../backend"), encoding: "utf-8" });
+
+    // Log in as Creator B (higher priority number) and click Next to lock the device
+    await page.goto("/login");
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await page.fill('input[name="username"]', `lock-creator-b-${ts}`);
+    await page.fill('input[name="password"]', "TestPass123!");
+    await page.click('button[type="submit"]');
+    await page.waitForURL("**/creator", { timeout: 5000 });
+
+    await page.goto("/creator/signage");
+    await page.waitForLoadState("networkidle");
+    await page.locator('label:has-text("Target Display") + select').selectOption(String(device.id));
+    await page.locator('button:has-text("Next")').click();
+    await expect(page.locator('text=✅ Display command sent.')).toBeVisible({ timeout: 10000 });
+
+    // Log in as Creator A (lower priority number) and try to hide their asset
+    await page.goto("/login");
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await page.fill('input[name="username"]', `lock-creator-a-${ts}`);
+    await page.fill('input[name="password"]', "TestPass123!");
+    await page.click('button[type="submit"]');
+    await page.waitForURL("**/creator", { timeout: 5000 });
+
+    await page.goto("/creator/signage");
+    await page.waitForLoadState("networkidle");
+    await page.locator('label:has-text("Target Display") + select').selectOption(String(device.id));
+    await expect(page.getByText(`Lock Post ${ts}`, { exact: true })).toBeVisible({ timeout: 10000 });
+
+    // Click Hide on the asset — should be blocked by B's higher-priority-number lock
+    await page.locator('button:has-text("Hide")').first().click();
+    await expect(page.locator('text=Display is locked by a higher-priority creator')).toBeVisible({ timeout: 10000 });
+  });
+
+  test("9. Urgency mode — NORMAL post filtered from Pi pull when group is EMERGENCY", async ({ page, request }) => {
+    test.setTimeout(60000);
+    const ts = Date.now();
+
+    const loginRes = await request.post(`${API_URL}/auth/login`, {
+      data: { username: "test-creator", password: "TestPass123!" },
+    });
+    const { token: creatorToken } = await loginRes.json();
+
+    const meRes = await request.get(`${API_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+    });
+    const me = await meRes.json();
+
+    // Create a NORMAL post with image
+    const imagePath = path.resolve(__dirname, "MockMedia/Images/pexels-pixabay-267507.jpg");
+    const postRes = await request.post(`${API_URL}/posts`, {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+      multipart: {
+        title: `Urgency Post ${ts}`,
+        group_ids: JSON.stringify([me.group_id]),
+        status: "published",
+        allowed_on_signage: "true",
+        images: { name: "test.jpg", mimeType: "image/jpeg", buffer: fs.readFileSync(imagePath) },
+      },
+    });
+    expect(postRes.ok()).toBeTruthy();
+    const postData = await postRes.json();
+    const postId = postData.posts[0].id;
+
+    // Register and approve a device
+    const adminToken = await loginTestAdmin(request);
+    const deviceRes = await request.post(`${API_URL}/devices/register`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { device_name: `Urgency Display ${ts}`, ip_address: "192.168.1.200", group_id: me.group_id },
+    });
+    expect(deviceRes.ok()).toBeTruthy();
+    const device = await deviceRes.json();
+    await request.post(`${API_URL}/devices/${device.id}/approve`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { group_id: me.group_id },
+    });
+    await request.put(`${API_URL}/devices/${device.id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { status: "online" },
+    });
+
+    // Publish post to device
+    await request.post(`${API_URL}/signage/publish`, {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+      data: { post_id: postId, device_id: device.id, duration_seconds: 10, priority: 1 },
+    });
+
+    // Set group to EMERGENCY
+    await request.put(`${API_URL}/groups/${me.group_id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { signage_state: "EMERGENCY" },
+    });
+
+    // Pi pull endpoint should NOT include the NORMAL post
+    const pullEmergency = await request.get(`${API_URL}/signage/device/${device.id}/deployments`);
+    expect(pullEmergency.ok()).toBeTruthy();
+    const dataEmergency = await pullEmergency.json();
+    expect(dataEmergency.some((d) => d.post_id === postId)).toBeFalsy();
+
+    // Set group back to NORMAL
+    await request.put(`${API_URL}/groups/${me.group_id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { signage_state: "NORMAL" },
+    });
+
+    // Pi pull endpoint SHOULD include the NORMAL post
+    const pullNormal = await request.get(`${API_URL}/signage/device/${device.id}/deployments`);
+    expect(pullNormal.ok()).toBeTruthy();
+    const dataNormal = await pullNormal.json();
+    expect(dataNormal.some((d) => d.post_id === postId)).toBeTruthy();
+
+    // UI asset list still shows the asset (current behavior: UI doesn't filter by urgency)
+    await page.goto("/creator/signage");
+    await page.waitForLoadState("networkidle");
+    await page.locator('label:has-text("Target Display") + select').selectOption(String(device.id));
+    await expect(page.getByText(`Urgency Post ${ts}`, { exact: true })).toBeVisible({ timeout: 10000 });
+  });
+
+  test("10. Media type responsiveness — video post hides slide duration input", async ({ page, request }) => {
+    const ts = Date.now();
+
+    const loginRes = await request.post(`${API_URL}/auth/login`, {
+      data: { username: "test-creator", password: "TestPass123!" },
+    });
+    const { token: creatorToken } = await loginRes.json();
+
+    const meRes = await request.get(`${API_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+    });
+    const me = await meRes.json();
+
+    // Seed a video post directly in the DB
+    const videoScript = path.resolve(__dirname, "../../backend/scripts/seedVideoPost.js");
+    execSync(`node "${videoScript}" ${me.group_id} ${me.id} "Video Post ${ts}"`, { cwd: path.resolve(__dirname, "../../backend"), encoding: "utf-8" });
+
+    // Navigate to Signage page
+    await page.goto("/creator/signage");
+    await page.waitForLoadState("networkidle");
+
+    // Select the video post
+    await page.locator('label:has-text("Post") + select').selectOption((await page.locator('label:has-text("Post") + select option').filter({ hasText: `Video Post ${ts}` }).first().getAttribute("value")));
+
+    // Verify slide duration input is gone and video message appears
+    await expect(page.locator('label:has-text("Slide duration")')).toHaveCount(0);
+    await expect(page.locator('text=Video length is set by the trimmed file')).toBeVisible();
+  });
+
+  test("11. True offline handling — publish to offline display shows cancellation error", async ({ page, request }) => {
+    test.setTimeout(60000);
+    const ts = Date.now();
+
+    const loginRes = await request.post(`${API_URL}/auth/login`, {
+      data: { username: "test-creator", password: "TestPass123!" },
+    });
+    const { token: creatorToken } = await loginRes.json();
+
+    const meRes = await request.get(`${API_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+    });
+    const me = await meRes.json();
+
+    // Create a post with image
+    const imagePath = path.resolve(__dirname, "MockMedia/Images/pexels-pixabay-267507.jpg");
+    const postRes = await request.post(`${API_URL}/posts`, {
+      headers: { Authorization: `Bearer ${creatorToken}` },
+      multipart: {
+        title: `Offline Post ${ts}`,
+        group_ids: JSON.stringify([me.group_id]),
+        status: "published",
+        allowed_on_signage: "true",
+        images: { name: "test.jpg", mimeType: "image/jpeg", buffer: fs.readFileSync(imagePath) },
+      },
+    });
+    expect(postRes.ok()).toBeTruthy();
+    const postData = await postRes.json();
+    const postId = postData.posts[0].id;
+
+    // Register, approve, and set OFFLINE a device
+    const adminToken = await loginTestAdmin(request);
+    const deviceRes = await request.post(`${API_URL}/devices/register`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { device_name: `Offline Display ${ts}`, ip_address: "192.168.1.250", group_id: me.group_id },
+    });
+    expect(deviceRes.ok()).toBeTruthy();
+    const device = await deviceRes.json();
+    await request.post(`${API_URL}/devices/${device.id}/approve`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { group_id: me.group_id },
+    });
+    await request.put(`${API_URL}/devices/${device.id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { status: "offline" },
+    });
+
+    // Navigate to Signage page and try to publish
+    await page.goto("/creator/signage");
+    await page.waitForLoadState("networkidle");
+    await page.locator('label:has-text("Post") + select').selectOption(String(postId));
+    await page.locator('label:has-text("Target Display") + select').selectOption(String(device.id));
+    await page.click('button:has-text("Publish to Display")');
+
+    // Verify the offline error message
+    await expect(page.locator(`text=❌ Update cancelled. These displays are offline: Offline Display ${ts}`)).toBeVisible({ timeout: 10000 });
   });
 });
