@@ -295,6 +295,94 @@ test.describe("UI smoke tests", () => {
     expect(names).toContain(`Normal-Group-${ts}`);
     expect(names).not.toContain(`Security-Group-${ts}`);
   });
+
+  test("manage posts from admin dashboard", async ({ page, request }) => {
+    const ts = Date.now();
+
+    // Login via UI
+    await page.goto("/login");
+    await page.fill('input[name="username"]', "test-admin");
+    await page.fill('input[name="password"]', "TestPass123!");
+    await page.click('button[type="submit"]');
+    await page.waitForURL("**/admin", { timeout: 5000 });
+
+    // Get token for API seeding
+    const token = await page.evaluate(() => localStorage.getItem("token"));
+
+    // Seed a group and a post via API
+    const groupRes = await request.post(`${API_URL}/groups`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { name: `PostTestGroup-${ts}` },
+    });
+    expect(groupRes.ok()).toBeTruthy();
+    const group = await groupRes.json();
+
+    const postRes = await request.post(`${API_URL}/posts`, {
+      headers: { Authorization: `Bearer ${token}` },
+      multipart: {
+        title: `Dashboard Post ${ts}`,
+        group_ids: JSON.stringify([group.id]),
+        status: "published",
+        allowed_on_feed: "false",
+        allowed_on_signage: "false",
+      },
+    });
+    expect(postRes.ok()).toBeTruthy();
+    const postData = await postRes.json();
+    const postId = postData.posts[0].id;
+
+    // Navigate to Posts page
+    await page.goto("/admin/posts");
+    await expect(page.locator('h1:has-text("All Posts")')).toBeVisible();
+    await page.waitForLoadState("networkidle");
+
+    // Verify the post row is present
+    const postRow = page.locator(`tr:has-text("Dashboard Post ${ts}")`);
+    await expect(postRow).toBeVisible();
+    // Status badge should show "published"
+    await expect(postRow.locator('text=published')).toBeVisible();
+    // Feed should be ⬜ (not allowed)
+    await expect(postRow.locator('td').nth(3).locator('text=⬜')).toBeVisible();
+    // Signage should be ⬜ (not allowed)
+    await expect(postRow.locator('td').nth(4).locator('text=⬜')).toBeVisible();
+
+    // Toggle allowed_on_feed — click the feed cell
+    const feedCell = postRow.locator('td').nth(3);
+    await feedCell.click();
+    await expect(feedCell.locator('text=✅')).toBeVisible();
+
+    // Toggle allowed_on_signage — click the signage cell
+    const signageCell = postRow.locator('td').nth(4);
+    await signageCell.click();
+    await expect(signageCell.locator('text=✅')).toBeVisible();
+
+    // Verify toggles persisted via API
+    const getRes = await request.get(`${API_URL}/posts/${postId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(getRes.ok()).toBeTruthy();
+    const apiPost = await getRes.json();
+    expect(apiPost.allowed_on_feed).toBe(true);
+    expect(apiPost.allowed_on_signage).toBe(true);
+
+    // Delete the post via UI
+    page.on('dialog', async (dialog) => await dialog.accept());
+    await postRow.locator('button:has-text("Delete")').click();
+    await expect(postRow).not.toBeVisible();
+
+    // Verify deletion via API
+    const listRes = await request.get(`${API_URL}/posts`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(listRes.ok()).toBeTruthy();
+    const posts = await listRes.json();
+    expect(posts.some((p) => p.id === postId)).toBe(false);
+
+    // Clean up group
+    await request.delete(`${API_URL}/groups/${group.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  });
 });
 
 test.describe("Device lifecycle API tests", () => {
@@ -996,6 +1084,311 @@ test.describe("User lifecycle API tests", () => {
 
     // Clean up
     await request.delete(`${API_URL}/users/${created.id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+  });
+});
+
+test.describe("Post API tests", () => {
+  let adminToken;
+  let creatorToken;
+
+  test.beforeAll(async ({ request }) => {
+    adminToken = await loginTestAdmin(request);
+
+    // Login as test-creator
+    const creatorLogin = await request.post(`${API_URL}/auth/login`, {
+      data: { username: "test-creator", password: "TestPass123!" },
+    });
+    expect(creatorLogin.ok()).toBeTruthy();
+    const creatorData = await creatorLogin.json();
+    creatorToken = creatorData.token;
+  });
+
+  test("1. Admin global visibility — sees posts from all groups regardless of own group_id", async ({ request }) => {
+    const ts = Date.now();
+
+    // Create two groups
+    const aRes = await request.post(`${API_URL}/groups`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { name: `PostVis-A-${ts}` },
+    });
+    expect(aRes.ok()).toBeTruthy();
+    const groupA = await aRes.json();
+
+    const bRes = await request.post(`${API_URL}/groups`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { name: `PostVis-B-${ts}` },
+    });
+    expect(bRes.ok()).toBeTruthy();
+    const groupB = await bRes.json();
+
+    // Create one post in each group
+    const postA = await request.post(`${API_URL}/posts`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      multipart: {
+        title: `Post-A-${ts}`,
+        group_ids: JSON.stringify([groupA.id]),
+        status: "published",
+      },
+    });
+    expect(postA.ok()).toBeTruthy();
+
+    const postB = await request.post(`${API_URL}/posts`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      multipart: {
+        title: `Post-B-${ts}`,
+        group_ids: JSON.stringify([groupB.id]),
+        status: "published",
+      },
+    });
+    expect(postB.ok()).toBeTruthy();
+
+    // Admin lists all posts — should see both
+    const listRes = await request.get(`${API_URL}/posts`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(listRes.ok()).toBeTruthy();
+    const posts = await listRes.json();
+    const titles = posts.map((p) => p.title);
+    expect(titles).toContain(`Post-A-${ts}`);
+    expect(titles).toContain(`Post-B-${ts}`);
+
+    // Clean up
+    await request.delete(`${API_URL}/groups/${groupA.id}`, { headers: { Authorization: `Bearer ${adminToken}` } });
+    await request.delete(`${API_URL}/groups/${groupB.id}`, { headers: { Authorization: `Bearer ${adminToken}` } });
+  });
+
+  test("2. Pending approval toggle — admin approves creator's feed request", async ({ request }) => {
+    const ts = Date.now();
+
+    // Create a group
+    const gRes = await request.post(`${API_URL}/groups`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { name: `ApprovalGroup-${ts}` },
+    });
+    expect(gRes.ok()).toBeTruthy();
+    const group = await gRes.json();
+
+    // Register a fresh creator with this group pre-assigned (auto_approve defaults to true in backend)
+    const regRes = await request.post(`${API_URL}/auth/register`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: {
+        username: `approval-creator-${ts}`,
+        password: "TestPass123!",
+        role: "creator",
+        managed_group_ids: JSON.stringify([group.id]),
+        auto_approve: false,
+      },
+    });
+    expect(regRes.ok()).toBeTruthy();
+
+    // Login as the new creator
+    const loginRes = await request.post(`${API_URL}/auth/login`, {
+      data: { username: `approval-creator-${ts}`, password: "TestPass123!" },
+    });
+    expect(loginRes.ok()).toBeTruthy();
+    const loginData = await loginRes.json();
+    const freshCreatorToken = loginData.token;
+
+    // Creator makes a post (for creators without auto_approve, both flags start false)
+    const postRes = await request.post(`${API_URL}/posts`, {
+      headers: { Authorization: `Bearer ${freshCreatorToken}` },
+      multipart: {
+        title: `Pending Post ${ts}`,
+        group_ids: JSON.stringify([group.id]),
+        status: "published",
+        allowed_on_feed: "false",
+      },
+    });
+    expect(postRes.ok()).toBeTruthy();
+    const postData = await postRes.json();
+    const postId = postData.posts[0].id;
+
+    // Creator requests feed approval via add-feed bulk action
+    const reqRes = await request.post(`${API_URL}/posts/bulk-action`, {
+      headers: { Authorization: `Bearer ${freshCreatorToken}` },
+      data: { ids: [postId], action: "add-feed" },
+    });
+    expect(reqRes.ok()).toBeTruthy();
+
+    // Verify the post now has requested_feed=true but allowed_on_feed=false
+    const getRes = await request.get(`${API_URL}/posts/${postId}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(getRes.ok()).toBeTruthy();
+    const before = await getRes.json();
+    expect(before.requested_feed).toBe(true);
+    expect(before.allowed_on_feed).toBe(false);
+
+    // Admin toggles allowed_on_feed to true
+    const putRes = await request.put(`${API_URL}/posts/${postId}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      multipart: {
+        allowed_on_feed: "true",
+      },
+    });
+    expect(putRes.ok()).toBeTruthy();
+
+    // Verify the post is now allowed on feed
+    const afterRes = await request.get(`${API_URL}/posts/${postId}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(afterRes.ok()).toBeTruthy();
+    const after = await afterRes.json();
+    expect(after.allowed_on_feed).toBe(true);
+    expect(after.requested_feed).toBe(true);
+
+    // Clean up
+    await request.delete(`${API_URL}/groups/${group.id}`, { headers: { Authorization: `Bearer ${adminToken}` } });
+  });
+
+  test("3. Cross-group bulk deletion — admin deletes posts from multiple groups at once", async ({ request }) => {
+    const ts = Date.now();
+
+    // Create three groups
+    const g1 = await request.post(`${API_URL}/groups`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { name: `BulkDel-1-${ts}` },
+    });
+    expect(g1.ok()).toBeTruthy();
+    const group1 = await g1.json();
+
+    const g2 = await request.post(`${API_URL}/groups`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { name: `BulkDel-2-${ts}` },
+    });
+    expect(g2.ok()).toBeTruthy();
+    const group2 = await g2.json();
+
+    const g3 = await request.post(`${API_URL}/groups`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { name: `BulkDel-3-${ts}` },
+    });
+    expect(g3.ok()).toBeTruthy();
+    const group3 = await g3.json();
+
+    // Create one post in each group
+    const posts = [];
+    for (const group of [group1, group2, group3]) {
+      const pRes = await request.post(`${API_URL}/posts`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+        multipart: {
+          title: `BulkPost-${group.id}-${ts}`,
+          group_ids: JSON.stringify([group.id]),
+          status: "published",
+        },
+      });
+      expect(pRes.ok()).toBeTruthy();
+      const pData = await pRes.json();
+      posts.push(pData.posts[0].id);
+    }
+
+    // Bulk delete all three
+    const bulkRes = await request.post(`${API_URL}/posts/bulk-action`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { ids: posts, action: "delete" },
+    });
+    expect(bulkRes.ok()).toBeTruthy();
+    const bulkBody = await bulkRes.json();
+    expect(bulkBody.ok).toBe(true);
+
+    // Verify posts are gone
+    const listRes = await request.get(`${API_URL}/posts`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(listRes.ok()).toBeTruthy();
+    const remaining = await listRes.json();
+    const remainingIds = remaining.map((p) => p.id);
+    for (const pid of posts) {
+      expect(remainingIds).not.toContain(pid);
+    }
+
+    // Clean up groups
+    await request.delete(`${API_URL}/groups/${group1.id}`, { headers: { Authorization: `Bearer ${adminToken}` } });
+    await request.delete(`${API_URL}/groups/${group2.id}`, { headers: { Authorization: `Bearer ${adminToken}` } });
+    await request.delete(`${API_URL}/groups/${group3.id}`, { headers: { Authorization: `Bearer ${adminToken}` } });
+  });
+
+  test("4. Forced signage removal — delete_post_assets command emitted on delete", async ({ request }) => {
+    const ts = Date.now();
+
+    // Create a group
+    const gRes = await request.post(`${API_URL}/groups`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { name: `SignageRem-${ts}` },
+    });
+    expect(gRes.ok()).toBeTruthy();
+    const group = await gRes.json();
+
+    // Register, approve and set a device online in the group
+    const devRes = await request.post(`${API_URL}/devices/register`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: {
+        device_name: "Signage Pi",
+        ip_address: "192.168.1.250",
+        group_id: group.id,
+      },
+    });
+    expect(devRes.ok()).toBeTruthy();
+    const device = await devRes.json();
+
+    await request.post(`${API_URL}/devices/${device.id}/approve`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { group_id: group.id },
+    });
+
+    await request.put(`${API_URL}/devices/${device.id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { status: "online" },
+    });
+
+    // Create a post (no image needed for this test)
+    const postRes = await request.post(`${API_URL}/posts`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      multipart: {
+        title: `Signage Post ${ts}`,
+        group_ids: JSON.stringify([group.id]),
+        status: "published",
+        allowed_on_signage: "true",
+      },
+    });
+    expect(postRes.ok()).toBeTruthy();
+    const postData = await postRes.json();
+    const postId = postData.posts[0].id;
+
+    // Seed a signage deployment so removePost has targets to emit to
+    const scriptPath = path.resolve(__dirname, "../../backend/scripts/seedSignageDeployment.js");
+    execSync(`node "${scriptPath}" ${postId} ${device.id}`, { cwd: path.resolve(__dirname, "../../backend"), encoding: "utf-8" });
+
+    // Clear bridge-calls to isolate this test
+    await request.post(`${API_URL}/test/bridge-calls/clear`).catch(() => {});
+
+    // Delete the post
+    const delRes = await request.delete(`${API_URL}/posts/${postId}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(delRes.ok()).toBeTruthy();
+
+    // Verify the bridge received delete_post_assets
+    const bridgeRes = await request.get(`${API_URL}/test/bridge-calls`);
+    expect(bridgeRes.ok()).toBeTruthy();
+    const calls = await bridgeRes.json();
+    const deleteCall = calls.find(
+      (c) =>
+        c.type === "ack" &&
+        c.device_id === device.id &&
+        c.event === "signage_command" &&
+        c.data?.action === "delete_post_assets" &&
+        c.data?.post_id === postId,
+    );
+    expect(deleteCall, "delete_post_assets should have been emitted after post deletion").toBeDefined();
+
+    // Clean up
+    await request.delete(`${API_URL}/devices/${device.id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    await request.delete(`${API_URL}/groups/${group.id}`, {
       headers: { Authorization: `Bearer ${adminToken}` },
     });
   });

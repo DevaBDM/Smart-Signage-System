@@ -16,6 +16,10 @@ const app = require("./src/app");
 app.get("/api/test/bridge-calls", (_req, res) => {
   res.json(global._bridgeCalls || []);
 });
+app.post("/api/test/bridge-calls/clear", (_req, res) => {
+  global._bridgeCalls = [];
+  res.json({ ok: true });
+});
 
 require("./src/index");
 
