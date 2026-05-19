@@ -1,20 +1,35 @@
 import { create } from "zustand";
 
 const decodeToken = (token) => {
-  if (!token) return {};
+  if (!token) return null;
   try {
     const payload = token.split(".")[1];
     const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
-    return JSON.parse(atob(normalized));
+    const bytes = Uint8Array.from(atob(normalized), (c) => c.charCodeAt(0));
+    const parsed = JSON.parse(new TextDecoder("utf-8").decode(bytes));
+    if (parsed.exp && parsed.exp * 1000 < Date.now()) {
+      return null;
+    }
+    return parsed;
   } catch {
-    return {};
+    return null;
   }
 };
 
 const storedToken = localStorage.getItem("token") || null;
 const storedUser = decodeToken(storedToken);
 
+// If token is expired/invalid on boot, purge stale localStorage
+if (!storedUser && storedToken) {
+  localStorage.removeItem("token");
+  localStorage.removeItem("role");
+  localStorage.removeItem("group_id");
+  localStorage.removeItem("max_signage_state");
+  localStorage.removeItem("managed_group_ids");
+}
+
 const managedGroupIds = (user) => {
+  if (!user) return [];
   if (Array.isArray(user.managed_group_ids)) return user.managed_group_ids;
   try {
     return JSON.parse(user.managed_group_ids || "[]");
@@ -34,15 +49,15 @@ const readManagedGroups = () => {
 };
 
 const useAuthStore = create((set) => ({
-  token: storedToken,
-  id: storedUser.id || null,
-  can_manage_other_posts: Boolean(storedUser.can_manage_other_posts),
-  creator_priority: storedUser.creator_priority || 1,
-  control_lock_minutes: storedUser.control_lock_minutes || 120,
-  auto_approve: Boolean(storedUser.auto_approve),
+  token: storedUser ? storedToken : null,
+  id: storedUser?.id || null,
+  can_manage_other_posts: Boolean(storedUser?.can_manage_other_posts),
+  creator_priority: storedUser?.creator_priority || 1,
+  control_lock_minutes: storedUser?.control_lock_minutes || 120,
+  auto_approve: Boolean(storedUser?.auto_approve),
   max_signage_state:
     localStorage.getItem("max_signage_state") ||
-    storedUser.max_signage_state ||
+    storedUser?.max_signage_state ||
     "NORMAL",
   role: localStorage.getItem("role") || null,
   group_id: localStorage.getItem("group_id") || null,

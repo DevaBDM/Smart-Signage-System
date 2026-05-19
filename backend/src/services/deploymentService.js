@@ -1,5 +1,4 @@
 const prisma = require("../db/prisma");
-const { getActor } = require("../utils/permissions");
 const { assertControlAllowed, applyControlLock } = require("../utils/controlLock");
 const { mediaFileExists } = require("../utils/mediaProcessor");
 const { upsertSignageAsset } = require("../utils/signageAssets");
@@ -15,7 +14,7 @@ const { buildSignageMeta } = require("../validators/postValidator");
  * @param {object} signageData  – raw body / metadata object
  * @returns {Promise<object[]>} per-device results
  */
-const deployPostToDevices = async (emitter, post, targetDevices, signageData) => {
+const deployPostToDevices = async (emitter, actor, post, targetDevices, signageData) => {
   const image = post.images?.[0];
   if (!image) return [];
   if (!mediaFileExists(image.image_path)) {
@@ -30,7 +29,6 @@ const deployPostToDevices = async (emitter, post, targetDevices, signageData) =>
     }));
   }
 
-  const actor = await getActor({ id: post.created_by, role: "creator" });
   const sched = buildSignageMeta(signageData, Number(signageData?.duration_seconds) || 10);
   const mediaDuration = image?.duration_seconds || sched.duration_seconds;
   const schedWithMedia = { ...sched, duration_seconds: mediaDuration };

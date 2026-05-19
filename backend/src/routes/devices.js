@@ -10,14 +10,12 @@ const {
   resetDevice,
   removeDevice,
 } = require("../services/deviceService");
+const { getActorGroupIds } = require("../utils/permissions");
 
 // List devices. Admins see all; creators see displays in their group or all groups.
 router.get("/", auth(["admin", "creator"]), async (req, res) => {
   const { sortBy = "id", sortOrder = "asc" } = req.query;
-  const allowedGroupIds = [
-    req.user.group_id,
-    ...(req.user.managed_group_ids || []),
-  ].filter(Boolean);
+  const allowedGroupIds = getActorGroupIds(req.user);
   const where =
     req.user.role === "admin"
       ? {}

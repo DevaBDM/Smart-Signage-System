@@ -10,18 +10,24 @@ const {
   postVisibleForGroup,
   compareByUrgency,
 } = require("../utils/signageStates");
-const { getActor } = require("../utils/permissions");
+const { getActor, getActorGroupIds } = require("../utils/permissions");
 const { assertControlAllowed, applyControlLock } = require("../utils/controlLock");
 const { getAllowedDevice } = require("../utils/devicePermissions");
 const { assertCanManageAsset } = require("../utils/signagePermissions");
 const { publishPost, deleteDeviceAsset } = require("../services/signageService");
 const piBridge = require("../services/piBridge");
+const authDevice = require("../middleware/authDevice");
 
 const sendSignageCommand = async (device_id, payload) =>
   piBridge.emitToDeviceAck(device_id, "signage_command", payload, 12000);
 
 // Device pull endpoint used by the Pi's periodic sync.
-router.get("/device/:device_id/deployments", async (req, res) => {
+router.get("/device/:device_id/deployments", authDevice, async (req, res) => {
+  const requestedDeviceId = Number(req.params.device_id);
+  if (req.device.id !== requestedDeviceId) {
+    return res.status(403).json({ error: "Device token does not match requested device." });
+  }
+
   const deployments = await prisma.signageDeployment.findMany({
     where: {
       device_id: Number(req.params.device_id),
@@ -111,10 +117,7 @@ router.get(
     // For non-admin creators, restrict tracked rows to assets linked to posts in
     // groups they can access (own group + managed groups). Unlinked assets stay
     // visible (admins curate them) but creators cannot manage them downstream.
-    const allowedGroupIds =
-      req.user.role === "admin"
-        ? null
-        : [req.user.group_id, ...(req.user.managed_group_ids || [])].filter(Boolean);
+    const allowedGroupIds = getActorGroupIds(req.user);
     const visibleTracked = (rows) =>
       allowedGroupIds === null
         ? rows

@@ -20,6 +20,11 @@ const canManagePost = (user, post) => {
   return user.group_id === post.group_id || managed.includes(post.group_id);
 };
 
+const getActorGroupIds = (user) => {
+  if (user.role === "admin") return null;
+  return [user.group_id, ...(user.managed_group_ids || [])].filter(Boolean);
+};
+
 const getActor = async (user) => {
   if (user.role === "admin") return user;
   const dbUser = await prisma.user.findUnique({
@@ -42,4 +47,4 @@ const getActor = async (user) => {
   };
 };
 
-module.exports = { canManage, canManagePost, getActor };
+module.exports = { canManage, canManagePost, getActorGroupIds, getActor };

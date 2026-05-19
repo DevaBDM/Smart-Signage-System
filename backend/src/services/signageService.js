@@ -5,6 +5,7 @@ const { canUseDevice } = require("../utils/devicePermissions");
 const { assertCanManageAsset } = require("../utils/signagePermissions");
 const { mediaFileExists } = require("../utils/mediaProcessor");
 const { validateSignageStateForPublish } = require("../validators/signageValidator");
+const { assertDeviceOnline } = require("../utils/devices");
 const { upsertSignageAsset } = require("../utils/signageAssets");
 const piBridge = require("./piBridge");
 
@@ -77,12 +78,7 @@ async function publishPost(user, body) {
       { statusCode: 403 },
     );
   }
-  if (device.status !== "online") {
-    throw Object.assign(
-      new Error(`Update cancelled. These displays are offline: ${device.device_name}`),
-      { statusCode: 400 },
-    );
-  }
+  assertDeviceOnline(device);
 
   // Upsert signage metadata
   await prisma.signageMetadata.upsert({

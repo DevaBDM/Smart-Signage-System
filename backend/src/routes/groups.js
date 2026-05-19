@@ -2,6 +2,7 @@ const router = require("express").Router();
 const prisma = require("../db/prisma");
 const auth = require("../middleware/auth");
 const asyncHandler = require("../middleware/asyncHandler");
+const { getActorGroupIds } = require("../utils/permissions");
 const { parseSignageState, STATE_LABELS } = require("../utils/signageStates");
 const { refreshGroupDevices } = require("../utils/refreshGroupDevices");
 
@@ -12,17 +13,10 @@ router.get("/states", (_req, res) => {
 });
 
 router.get("/", auth(["admin", "creator"]), async (req, res) => {
-  const where =
-    req.user.role === "admin"
-      ? {}
-      : {
-          id: {
-            in: [
-              req.user.group_id,
-              ...(req.user.managed_group_ids || []),
-            ].filter(Boolean),
-          },
-        };
+  const allowedGroupIds = getActorGroupIds(req.user);
+  const where = allowedGroupIds === null ? {} : {
+    id: { in: allowedGroupIds },
+  };
   res.json(
     await prisma.group.findMany({
       where,

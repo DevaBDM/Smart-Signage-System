@@ -648,9 +648,9 @@ test.describe("Creator My Posts UI tests", () => {
     });
     expect(postRes.ok()).toBeTruthy();
 
-    await page.goto("/login");
     await page.evaluate(() => localStorage.clear());
-    await page.reload();
+    await page.goto("/login");
+    await page.waitForLoadState("networkidle");
     await page.fill('input[name="username"]', `creator-b-${ts}`);
     await page.fill('input[name="password"]', "TestPass123!");
     await page.click('button[type="submit"]');

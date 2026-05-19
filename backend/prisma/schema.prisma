@@ -52,7 +52,7 @@ model User {
   password_hash          String
   role                   Role     @default(creator)
   group_id               Int?
-  auto_approve           Boolean  @default(true)
+  auto_approve           Boolean  @default(false)
   can_manage_other_posts Boolean  @default(false)
   creator_priority       Int          @default(1)
   control_lock_minutes   Int          @default(120)
@@ -62,6 +62,9 @@ model User {
   posts                  Post[]
   group                  Group?   @relation(fields: [group_id], references: [id])
   managed_groups         UserGroup[]
+
+  @@index([role])
+  @@index([group_id])
 }
 
 model Post {
@@ -86,6 +89,12 @@ model Post {
   signage_assets       SignageAsset[]
   signage_deployments  SignageDeployment[]
   signage_metadata     SignageMetadata?
+
+  @@index([status])
+  @@index([group_id])
+  @@index([created_by])
+  @@index([allowed_on_feed])
+  @@index([allowed_on_signage])
 }
 
 model PostImage {
@@ -113,6 +122,8 @@ model SignageMetadata {
   skip_asset_check Boolean   @default(false)
   created_at       DateTime  @default(now())
   post             Post      @relation(fields: [post_id], references: [id], onDelete: Cascade)
+
+  @@index([post_id])
 }
 
 model Device {
@@ -129,6 +140,7 @@ model Device {
   pending_name          String?
   pending_ip            String?
   pending_location      String?
+  device_token          String?
   control_lock_user_id  Int?
   control_lock_priority Int?
   control_lock_until    DateTime?
@@ -141,6 +153,10 @@ model Device {
   sensor_logs           SensorLog[]
   signage_assets        SignageAsset[]
   deployments           SignageDeployment[]
+
+  @@index([status])
+  @@index([group_id])
+  @@index([is_approved])
 }
 
 model SignageDeployment {

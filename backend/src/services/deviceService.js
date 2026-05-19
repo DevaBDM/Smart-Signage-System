@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const deviceRepo = require("../repositories/deviceRepo");
 const { toBool, parseGroupIds } = require("../utils/parsers");
 const piBridge = require("./piBridge");
@@ -46,6 +47,7 @@ async function approveDevice(deviceId, body) {
 
   const updateData = {
     is_approved: true,
+    device_token: device.device_token || crypto.randomBytes(32).toString("hex"),
     ...(device.pending_name && { device_name: device.pending_name, pending_name: null }),
     ...(device.pending_ip && { ip_address: device.pending_ip, pending_ip: null }),
     ...(device.pending_location && { location: device.pending_location, pending_location: null }),

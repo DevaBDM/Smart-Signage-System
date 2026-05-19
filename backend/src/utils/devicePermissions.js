@@ -1,13 +1,11 @@
 const prisma = require("../db/prisma");
-const { getActor } = require("./permissions");
+const { getActor, getActorGroupIds } = require("./permissions");
+const { assertDeviceOnline } = require("./devices");
 
 const canUseDevice = (user, device) => {
   if (user.role === "admin") return true;
   if (device.all_groups) return true;
-  const allowedGroupIds = [
-    user.group_id,
-    ...(user.managed_group_ids || []),
-  ].filter(Boolean);
+  const allowedGroupIds = getActorGroupIds(user);
   if (allowedGroupIds.includes(device.group_id)) return true;
   if (device.groups?.some((m) => allowedGroupIds.includes(m.group_id))) return true;
   return false;
@@ -33,10 +31,10 @@ const getAllowedDevice = async (req, res) => {
     res.status(403).json({ error: "Cannot control this device" });
     return null;
   }
-  if (device.status !== "online") {
-    res.status(400).json({
-      error: `Display "${device.device_name}" is offline. Operation cancelled.`,
-    });
+  try {
+    assertDeviceOnline(device);
+  } catch (err) {
+    res.status(err.statusCode || 400).json({ error: err.message });
     return null;
   }
   return device;

@@ -6,7 +6,7 @@ const { uploadMedia } = require("../middleware/upload");
 const { ensureDevicesOnline, getOnlineDeviceIdSet } = require("../utils/devices");
 const { createPost, updatePost, removePost } = require("../services/postService");
 const { deployPostToDevices } = require("../services/deploymentService");
-const { getActor, canManagePost } = require("../utils/permissions");
+const { getActor, getActorGroupIds, canManagePost } = require("../utils/permissions");
 const { toBool, parseDeviceIds } = require("../utils/parsers");
 const { deleteMediaFile } = require("../utils/mediaProcessor");
 const piBridge = require("../services/piBridge");
@@ -36,10 +36,7 @@ router.get("/", async (req, res, next) => {
 
   // Scope non-admins to their primary + managed groups (unless they explicitly filter to one of those).
   if (req.user && req.user.role !== "admin") {
-    const allowedGroupIds = [
-      req.user.group_id,
-      ...(req.user.managed_group_ids || []),
-    ].filter(Boolean);
+    const allowedGroupIds = getActorGroupIds(req.user);
     if (group_id && !isNaN(Number(group_id))) {
       const requested = Number(group_id);
       if (!allowedGroupIds.includes(requested)) {
@@ -77,9 +74,7 @@ router.get("/", async (req, res, next) => {
 // Creators in the current group (for filters; not affected by post list filters).
 router.get("/meta/group-creators", auth(["admin", "creator"]), async (req, res) => {
   const requestedGroupId = req.query.group_id ? Number(req.query.group_id) : null;
-  const allowedGroupIds = req.user.role === "admin"
-    ? null
-    : [req.user.group_id, ...(req.user.managed_group_ids || [])].filter(Boolean);
+  const allowedGroupIds = getActorGroupIds(req.user);
   const groupId = req.user.role === "admin"
     ? requestedGroupId
     : allowedGroupIds?.includes(requestedGroupId)
@@ -108,10 +103,7 @@ router.get("/:id", auth(["admin", "creator"]), async (req, res) => {
   });
   if (!post) return res.status(404).json({ error: "Not found" });
   if (req.user.role !== "admin") {
-    const allowedGroupIds = [
-      req.user.group_id,
-      ...(req.user.managed_group_ids || []),
-    ].filter(Boolean);
+    const allowedGroupIds = getActorGroupIds(req.user);
     if (!allowedGroupIds.includes(post.group_id)) {
       return res.status(403).json({ error: "Forbidden" });
     }
@@ -146,7 +138,7 @@ router.post("/bulk-action", auth(["admin", "creator"]), asyncHandler(async (req,
   
   const where = { id: { in: ids.map(Number) } };
   if (actor.role !== "admin") {
-    const allowedGroupIds = [actor.group_id, ...(actor.managed_group_ids || [])].filter(Boolean);
+    const allowedGroupIds = getActorGroupIds(actor);
     where.group_id = { in: allowedGroupIds };
   }
   const posts = await prisma.post.findMany({
@@ -251,6 +243,7 @@ router.post("/bulk-action", auth(["admin", "creator"]), asyncHandler(async (req,
         const targetDevices = await prisma.device.findMany({ where: { id: { in: targetIds } } });
         await deployPostToDevices(
           piBridge.getEmitter(),
+          actor,
           updated,
           targetDevices,
           updated.signage_metadata || {},

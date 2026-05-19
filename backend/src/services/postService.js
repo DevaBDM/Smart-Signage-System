@@ -23,15 +23,23 @@ const primaryMediaDuration = (mediaRows, fallback = 10) => {
   return fallback;
 };
 
+const ALLOWED_MEDIA_PATH_PREFIX = "/uploads/";
+
 const parseProcessedMedia = (body) => {
   const raw = body?.processed_media;
   if (!raw) return null;
-  try {
-    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
-    return Array.isArray(parsed) ? parsed : null;
-  } catch {
-    return null;
+  const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+  if (!Array.isArray(parsed)) return null;
+  for (const m of parsed) {
+    const p = m?.image_path;
+    if (typeof p !== "string" || !p.startsWith(ALLOWED_MEDIA_PATH_PREFIX)) {
+      throw Object.assign(
+        new Error(`Invalid processed_media path: ${p}`),
+        { statusCode: 400 }
+      );
+    }
   }
+  return parsed;
 };
 
 const slugify = (text) =>
@@ -115,7 +123,7 @@ async function createPost(user, body, files) {
 
     if (selectedDeviceIds.length > 0) {
       const targetDevices = await postRepo.findDevicesByIds(selectedDeviceIds);
-      await deployPostToDevices(null, post, targetDevices, body);
+      await deployPostToDevices(null, actor, post, targetDevices, body);
     }
 
     createdPosts.push(post);
@@ -158,9 +166,7 @@ async function updatePost(user, postId, body, files, emitter) {
   }
 
   if (mediaRows?.length) {
-    for (const img of post.images) {
-      deleteMediaFile(img.image_path);
-    }
+    const oldImages = post.images;
     await postRepo.deletePostImages(postId);
     await postRepo.createPostImages(
       mediaRows.map((m, i) => ({
@@ -171,6 +177,9 @@ async function updatePost(user, postId, body, files, emitter) {
         order_index: i,
       })),
     );
+    for (const img of oldImages) {
+      deleteMediaFile(img.image_path);
+    }
   }
 
   const updatedMedia = mediaRows?.length
@@ -276,14 +285,14 @@ async function updatePost(user, postId, body, files, emitter) {
   if (syncIds !== null) {
     if (syncIds.length > 0) {
       const targetDevices = await postRepo.findDevicesByIds(syncIds);
-      await deployPostToDevices(emitter, updated, targetDevices, body);
+      await deployPostToDevices(emitter, actor, updated, targetDevices, body);
       const removedIds = allDeps.map((d) => d.device_id).filter((id) => !syncIds.includes(id));
       await removeDeployments(removedIds);
     } else if (actor.role !== "admin" && allDeps.length > 0) {
       await removeDeployments(allDeps.map((d) => d.device_id));
     } else if (actor.role === "admin" && updated.allowed_on_signage && allDeps.length > 0) {
       const targetDevices = await postRepo.findDevicesByIds(allDeps.map((d) => d.device_id));
-      await deployPostToDevices(emitter, updated, targetDevices, updated.signage_metadata || {});
+      await deployPostToDevices(emitter, actor, updated, targetDevices, updated.signage_metadata || {});
     }
   }
 

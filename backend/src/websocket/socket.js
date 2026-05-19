@@ -10,6 +10,23 @@ module.exports = (httpServer) => {
     cors: { origin: "*" },
   });
 
+  // ── Device token validation on connect ─────────────────────
+  io.use(async (socket, next) => {
+    const token = socket.handshake.auth?.token;
+    if (!token) {
+      return next(new Error("Missing device token"));
+    }
+    const device = await prisma.device.findFirst({
+      where: { device_token: token },
+    });
+    if (!device) {
+      return next(new Error("Invalid device token"));
+    }
+    socket.deviceToken = token;
+    socket.verifiedDeviceId = device.id;
+    next();
+  });
+
   io.on("connection", (socket) => {
     console.log(`[socket] connected: ${socket.id}`);
 
@@ -18,6 +35,12 @@ module.exports = (httpServer) => {
       // data: { device_id, device_name, ip_address, location, status }
       const id = Number(data.device_id);
       if (!id) return;
+
+      // Reject heartbeats claiming a different device_id than the token
+      if (socket.verifiedDeviceId && id !== socket.verifiedDeviceId) {
+        console.warn(`[socket] heartbeat device_id mismatch: socket verified ${socket.verifiedDeviceId}, claimed ${id}`);
+        return;
+      }
 
       deviceSockets.set(id, socket.id);
       socket.deviceId = id;

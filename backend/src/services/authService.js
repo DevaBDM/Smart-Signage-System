@@ -40,7 +40,8 @@ function generateToken(payload) {
   });
 }
 
-async function registerUser(body) {
+async function registerUser(body, tx) {
+  const client = tx || prisma;
   const {
     username,
     password,
@@ -73,7 +74,7 @@ async function registerUser(body) {
   const hash = await hashPassword(password);
   let assignedPriority = Number(creator_priority) || 0;
   if (role === "creator") {
-    const agg = await prisma.user.aggregate({
+    const agg = await client.user.aggregate({
       where: { role: "creator" },
       _max: { creator_priority: true },
     });
@@ -83,13 +84,13 @@ async function registerUser(body) {
   const managedGroupIds = parseGroupIds(body.managed_group_ids);
 
   try {
-    const user = await prisma.user.create({
+    const user = await client.user.create({
       data: {
         username,
         password_hash: hash,
         role,
         group_id: group_id ? Number(group_id) : null,
-        auto_approve: auto_approve !== undefined ? Boolean(auto_approve) : true,
+        auto_approve: auto_approve !== undefined ? Boolean(auto_approve) : false,
         can_manage_other_posts: Boolean(can_manage_other_posts),
         creator_priority: assignedPriority,
         control_lock_minutes: Number(control_lock_minutes) || 120,

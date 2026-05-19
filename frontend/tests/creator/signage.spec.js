@@ -274,14 +274,14 @@ test.describe("Creator Signage UI tests", () => {
 
     const regA = await request.post(`${API_URL}/auth/register`, {
       headers: { Authorization: `Bearer ${adminToken}` },
-      data: { username: `iso-creator-a-${ts}`, password: "TestPass123!", role: "creator", group_id: group.id, managed_group_ids: JSON.stringify([group.id]) },
+      data: { username: `iso-creator-a-${ts}`, password: "TestPass123!", role: "creator", group_id: group.id, managed_group_ids: JSON.stringify([group.id]), auto_approve: true },
     });
     expect(regA.ok()).toBeTruthy();
     const userA = await regA.json();
 
     const regB = await request.post(`${API_URL}/auth/register`, {
       headers: { Authorization: `Bearer ${adminToken}` },
-      data: { username: `iso-creator-b-${ts}`, password: "TestPass123!", role: "creator", group_id: group.id, managed_group_ids: JSON.stringify([group.id]) },
+      data: { username: `iso-creator-b-${ts}`, password: "TestPass123!", role: "creator", group_id: group.id, managed_group_ids: JSON.stringify([group.id]), auto_approve: true },
     });
     expect(regB.ok()).toBeTruthy();
     const userB = await regB.json();
@@ -325,9 +325,9 @@ test.describe("Creator Signage UI tests", () => {
       data: { post_id: postId, device_id: device.id, duration_seconds: 10, priority: 1 },
     });
 
-    await page.goto("/login");
     await page.evaluate(() => localStorage.clear());
-    await page.reload();
+    await page.goto("/login");
+    await page.waitForLoadState("networkidle");
     await page.fill('input[name="username"]', `iso-creator-b-${ts}`);
     await page.fill('input[name="password"]', "TestPass123!");
     await page.click('button[type="submit"]');
@@ -402,9 +402,9 @@ test.describe("Creator Signage UI tests", () => {
 
     seedSignageAsset(postId, device.id, `lock-asset-${ts}`);
 
-    await page.goto("/login");
     await page.evaluate(() => localStorage.clear());
-    await page.reload();
+    await page.goto("/login");
+    await page.waitForLoadState("networkidle");
     await page.fill('input[name="username"]', `lock-creator-b-${ts}`);
     await page.fill('input[name="password"]', "TestPass123!");
     await page.click('button[type="submit"]');
@@ -416,9 +416,9 @@ test.describe("Creator Signage UI tests", () => {
     await page.locator('button:has-text("Next")').click();
     await expect(page.locator('text=✅ Display command sent.')).toBeVisible({ timeout: 10000 });
 
-    await page.goto("/login");
     await page.evaluate(() => localStorage.clear());
-    await page.reload();
+    await page.goto("/login");
+    await page.waitForLoadState("networkidle");
     await page.fill('input[name="username"]', `lock-creator-a-${ts}`);
     await page.fill('input[name="password"]', "TestPass123!");
     await page.click('button[type="submit"]');
@@ -469,10 +469,14 @@ test.describe("Creator Signage UI tests", () => {
     });
     expect(deviceRes.ok()).toBeTruthy();
     const device = await deviceRes.json();
-    await request.post(`${API_URL}/devices/${device.id}/approve`, {
+    const approveRes = await request.post(`${API_URL}/devices/${device.id}/approve`, {
       headers: { Authorization: `Bearer ${adminToken}` },
       data: { group_id: me.group_id },
     });
+    expect(approveRes.ok()).toBeTruthy();
+    const approvedDevice = await approveRes.json();
+    const deviceToken = approvedDevice.device_token;
+
     await request.put(`${API_URL}/devices/${device.id}`, {
       headers: { Authorization: `Bearer ${adminToken}` },
       data: { status: "online" },
@@ -488,7 +492,9 @@ test.describe("Creator Signage UI tests", () => {
       data: { signage_state: "EMERGENCY" },
     });
 
-    const pullEmergency = await request.get(`${API_URL}/signage/device/${device.id}/deployments`);
+    const pullEmergency = await request.get(`${API_URL}/signage/device/${device.id}/deployments`, {
+      headers: { Authorization: `Bearer ${deviceToken}` },
+    });
     expect(pullEmergency.ok()).toBeTruthy();
     const dataEmergency = await pullEmergency.json();
     expect(dataEmergency.some((d) => d.post_id === postId)).toBeFalsy();
@@ -498,7 +504,9 @@ test.describe("Creator Signage UI tests", () => {
       data: { signage_state: "NORMAL" },
     });
 
-    const pullNormal = await request.get(`${API_URL}/signage/device/${device.id}/deployments`);
+    const pullNormal = await request.get(`${API_URL}/signage/device/${device.id}/deployments`, {
+      headers: { Authorization: `Bearer ${deviceToken}` },
+    });
     expect(pullNormal.ok()).toBeTruthy();
     const dataNormal = await pullNormal.json();
     expect(dataNormal.some((d) => d.post_id === postId)).toBeTruthy();

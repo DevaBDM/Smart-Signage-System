@@ -1,3 +1,13 @@
+/** Assert a single device is online (throws if not). */
+function assertDeviceOnline(device) {
+  if (device.status !== "online") {
+    throw Object.assign(
+      new Error(`Update cancelled. These displays are offline: ${device.device_name}`),
+      { statusCode: 400 },
+    );
+  }
+}
+
 /** All listed displays must be online or the operation is rejected. */
 async function ensureDevicesOnline(prisma, deviceIds) {
   if (!deviceIds?.length) return { ok: true };
@@ -23,4 +33,4 @@ async function getOnlineDeviceIdSet(prisma, deviceIds) {
   return new Set(rows.map((r) => r.id));
 }
 
-module.exports = { ensureDevicesOnline, getOnlineDeviceIdSet };
+module.exports = { assertDeviceOnline, ensureDevicesOnline, getOnlineDeviceIdSet };
