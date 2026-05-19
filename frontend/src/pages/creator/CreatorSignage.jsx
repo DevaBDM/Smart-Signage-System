@@ -8,7 +8,7 @@ import SignageAssetList from "../../components/SignageAssetList";
 import useAuthStore from "../../store/useAuthStore";
 import * as S from "../../styles";
 import { assetOrigin } from "../../config/apiBase";
-import { messageStyle } from "../../tokens";
+import { messageStyle } from "../../styles";
 import usePersistentState, {
   userScopedKey,
 } from "../../hooks/usePersistentState";

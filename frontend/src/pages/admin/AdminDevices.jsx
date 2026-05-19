@@ -6,7 +6,7 @@ import DeviceList from "../../components/DeviceList";
 import * as devicesApi from "../../api/devices";
 import * as groupsApi from "../../api/groups";
 import * as S from "../../styles";
-import { messageStyle } from "../../tokens";
+import { messageStyle } from "../../styles";
 
 export default function AdminDevices() {
   const [devices, setDevices] = useState([]);

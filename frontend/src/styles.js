@@ -74,3 +74,31 @@ export const badge = (color) => ({
   fontWeight: 600,
   ...color,
 });
+
+export const messageStyle = (msg) => ({
+  padding: `${spacing.sm}px ${spacing.md}px`,
+  borderRadius: radii.md,
+  marginBottom: spacing.md,
+  fontSize: fontSize.md,
+  background: msg.startsWith("✅")
+    ? colors.success.bg
+    : msg.startsWith("⚠️")
+      ? colors.warning.bg
+      : colors.error.bg,
+  color: msg.startsWith("✅")
+    ? colors.success.text
+    : msg.startsWith("⚠️")
+      ? colors.warning.text
+      : colors.error.text,
+});
+
+export const statusBadge = (status) => ({
+  fontSize: fontSize.sm,
+  fontWeight: 600,
+  padding: "2px 8px",
+  borderRadius: radii.pill,
+  marginTop: spacing.xs,
+  display: "inline-block",
+  background: status === "online" ? colors.success.bg : colors.error.bg,
+  color: status === "online" ? colors.success.strong : colors.error.strong,
+});

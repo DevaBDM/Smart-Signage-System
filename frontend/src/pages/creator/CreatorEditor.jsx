@@ -11,7 +11,7 @@ import usePersistentState, {
   userScopedKey,
 } from "../../hooks/usePersistentState";
 import SignagePanel from "../../components/SignagePanel";
-import { messageStyle } from "../../tokens";
+import { messageStyle } from "../../styles";
 import {
   SIGNAGE_STATE_LABELS,
   creatorSignageStateOptions,
