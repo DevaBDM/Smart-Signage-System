@@ -784,6 +784,7 @@ test.describe("Creator My Posts UI tests", () => {
     await page.goto("/login");
     await page.evaluate(() => localStorage.clear());
     await page.reload();
+    await page.waitForLoadState("networkidle");
     await page.fill('input[name="username"]', `cf-creator-a-${ts}`);
     await page.fill('input[name="password"]', "TestPass123!");
     await page.click('button[type="submit"]');

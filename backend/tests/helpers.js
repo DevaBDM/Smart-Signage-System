@@ -116,6 +116,7 @@ async function createPostImage(postId, overrides = {}) {
 }
 
 async function createDevice({
+  id,
   device_name = "Test Pi",
   pending_name = null,
   pending_ip = null,
@@ -124,9 +125,11 @@ async function createDevice({
   ip_address = "192.168.1.100",
   is_approved = true,
   status = "offline",
+  device_token = null,
 } = {}) {
   return prisma.device.create({
     data: {
+      ...(id !== undefined && { id }),
       device_name,
       pending_name,
       pending_ip,
@@ -135,6 +138,7 @@ async function createDevice({
       ip_address,
       is_approved,
       status,
+      device_token,
     },
   });
 }

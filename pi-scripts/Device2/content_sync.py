@@ -6,7 +6,20 @@ import time
 from datetime import datetime, timedelta, timezone
 import requests
 
-from config import ANTHIAS_URL, DEVICE_ID, SERVER_URL
+from config import ANTHIAS_URL, DEVICE_ID, SERVER_URL, DEVICE_TOKEN
+
+# Token may be assigned after first Socket.IO registration and stored in a sidecar file.
+_TOKEN_FILE = os.path.join(os.path.dirname(__file__), ".device_token")
+
+
+def _device_token():
+    """Return the current bearer token from config or the sidecar file."""
+    if DEVICE_TOKEN:
+        return DEVICE_TOKEN
+    if os.path.exists(_TOKEN_FILE):
+        with open(_TOKEN_FILE, "r") as f:
+            return f.read().strip()
+    return ""
 
 REQUEST_TIMEOUT = 10
 MEDIA_DOWNLOAD_TIMEOUT = 300
@@ -90,7 +103,15 @@ def delete_from_anthias(asset_id):
 
 def get_posts():
     try:
-        r = requests.get(f"{SERVER_URL}/signage/device/{DEVICE_ID}/deployments", timeout=REQUEST_TIMEOUT)
+        headers = {}
+        token = _device_token()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        r = requests.get(
+            f"{SERVER_URL}/signage/device/{DEVICE_ID}/deployments",
+            headers=headers,
+            timeout=REQUEST_TIMEOUT,
+        )
         r.raise_for_status()
         return r.json()
     except Exception as e:

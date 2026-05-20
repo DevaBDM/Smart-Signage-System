@@ -1,9 +1,14 @@
 const { Server } = require("socket.io");
+const crypto = require("crypto");
 const prisma = require("../db/prisma");
 const { upsertSignageAsset } = require("../utils/signageAssets");
 
 // Track connected Pi sockets: device_id → socket.id
 const deviceSockets = new Map();
+
+function generateDeviceToken() {
+  return crypto.randomBytes(32).toString("hex");
+}
 
 module.exports = (httpServer) => {
   const io = new Server(httpServer, {
@@ -11,19 +16,26 @@ module.exports = (httpServer) => {
   });
 
   // ── Device token validation on connect ─────────────────────
+  // Unregistered devices may connect without a token for their first
+  // heartbeat. After the server assigns a token, the device must
+  // present it on every subsequent connection.
   io.use(async (socket, next) => {
     const token = socket.handshake.auth?.token;
-    if (!token) {
-      return next(new Error("Missing device token"));
-    }
-    const device = await prisma.device.findFirst({
-      where: { device_token: token },
-    });
-    if (!device) {
+    if (token) {
+      const device = await prisma.device.findFirst({
+        where: { device_token: token },
+      });
+      if (device) {
+        socket.deviceToken = token;
+        socket.verifiedDeviceId = device.id;
+        return next();
+      }
+      // Token present but invalid → reject
       return next(new Error("Invalid device token"));
     }
-    socket.deviceToken = token;
-    socket.verifiedDeviceId = device.id;
+    // No token → allow for initial registration (heartbeat will create
+    // the device record and emit a token back to the Pi).
+    socket.verifiedDeviceId = null;
     next();
   });
 
@@ -39,11 +51,9 @@ module.exports = (httpServer) => {
       // Reject heartbeats claiming a different device_id than the token
       if (socket.verifiedDeviceId && id !== socket.verifiedDeviceId) {
         console.warn(`[socket] heartbeat device_id mismatch: socket verified ${socket.verifiedDeviceId}, claimed ${id}`);
+        socket.disconnect(true);
         return;
       }
-
-      deviceSockets.set(id, socket.id);
-      socket.deviceId = id;
 
       const reportedIp = data.ip_address;
       const isIp = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(reportedIp);
@@ -51,49 +61,75 @@ module.exports = (httpServer) => {
 
       const existing = await prisma.device.findUnique({ where: { id } });
 
-      if (existing) {
-        // APPROVAL WORKFLOW & CHANGE DETECTION
-        const nameChanged = data.device_name && existing.device_name !== data.device_name;
-        const ipChanged = ip_address !== "unknown" && existing.ip_address !== ip_address;
-        const locationChanged = data.location && existing.location !== data.location;
+      // ── HARDENING 1: Reject unknown device IDs ──────────────
+      // Devices must be pre-registered via the admin API. Unknown IDs
+      // are not silently accepted to prevent DB-flooding attacks.
+      if (!existing) {
+        console.warn(`[socket] heartbeat rejected: unknown device_id ${id}`);
+        socket.emit("auth_error", { error: "Device not registered. Pre-register via admin dashboard." });
+        socket.disconnect(true);
+        return;
+      }
 
-        let updateData = {
-          status: "online",
-          last_seen: new Date(),
-        };
-
-        // If the device is already approved, but sends a DIFFERENT name, IP, or Location,
-        // we store these as "pending" for Admin review.
-        if (existing.is_approved) {
-          if (nameChanged) updateData.pending_name = data.device_name;
-          if (ipChanged) updateData.pending_ip = ip_address;
-          if (locationChanged) updateData.pending_location = data.location;
-        } else {
-          // If NOT yet approved, we keep updating its basic info so the admin sees current state
-          if (data.device_name) updateData.device_name = data.device_name;
-          if (ipChanged) updateData.ip_address = ip_address;
-          if (data.location) updateData.location = data.location;
+      // ── HARDENING 2: Enforce token on reconnect ─────────────
+      // Once a device has been assigned a token, every future connection
+      // must present the correct token. Prevents hijack of known IDs.
+      if (existing.device_token) {
+        if (!socket.deviceToken || socket.deviceToken !== existing.device_token) {
+          console.warn(`[socket] heartbeat rejected: device ${id} has token but socket presented none/invalid`);
+          socket.emit("auth_error", { error: "Invalid or missing device token. Re-register required." });
+          socket.disconnect(true);
+          return;
         }
+      }
 
-        await prisma.device.update({
-          where: { id },
-          data: updateData,
-        });
+      // Token verified (or device has no token yet). Track socket.
+      deviceSockets.set(id, socket.id);
+      socket.deviceId = id;
+
+      // APPROVAL WORKFLOW & CHANGE DETECTION
+      const nameChanged = data.device_name && existing.device_name !== data.device_name;
+      const ipChanged = ip_address !== "unknown" && existing.ip_address !== ip_address;
+      const locationChanged = data.location && existing.location !== data.location;
+
+      let updateData = {
+        status: "online",
+        last_seen: new Date(),
+      };
+
+      // If the device is already approved, but sends a DIFFERENT name, IP, or Location,
+      // we store these as "pending" for Admin review.
+      if (existing.is_approved) {
+        if (nameChanged) updateData.pending_name = data.device_name;
+        if (ipChanged) updateData.pending_ip = ip_address;
+        if (locationChanged) updateData.pending_location = data.location;
       } else {
-        // New device auto-registration - starts as NOT APPROVED
-        await prisma.device.create({
-          data: {
-            id,
-            device_name: data.device_name || `Pi Display ${id}`,
-            ip_address,
-            location: data.location || null,
-            status: "online",
-            is_approved: false, // Explicitly false
-            last_seen: new Date(),
-          },
-        }).catch(err => {
-          console.error(`[socket] heartbeat create failed for device ${id}:`, err.message);
-        });
+        // If NOT yet approved, we keep updating its basic info so the admin sees current state
+        if (data.device_name) updateData.device_name = data.device_name;
+        if (ipChanged) updateData.ip_address = ip_address;
+        if (data.location) updateData.location = data.location;
+      }
+
+      // Ensure every pre-registered device has a token; generate one if missing
+      // and emit it back so the Pi can persist it for future connections.
+      let tokenToEmit = null;
+      if (!existing.device_token) {
+        tokenToEmit = generateDeviceToken();
+        updateData.device_token = tokenToEmit;
+      } else if (!socket.deviceToken) {
+        // Socket connected without a token but device already has one
+        // (e.g., Pi lost its local config). Emit the existing token.
+        tokenToEmit = existing.device_token;
+      }
+
+      await prisma.device.update({
+        where: { id },
+        data: updateData,
+      });
+
+      if (tokenToEmit) {
+        socket.emit("device_token", { device_id: id, token: tokenToEmit });
+        console.log(`[socket] emitted device_token to device ${id}`);
       }
 
       console.log(`[socket] heartbeat from device ${id}`);
@@ -202,7 +238,7 @@ module.exports = (httpServer) => {
     });
 
   // ── Offline detection: mark devices offline if no heartbeat for 30s ─
-  setInterval(async () => {
+  const offlineInterval = setInterval(async () => {
     const cutoff = new Date(Date.now() - 30_000);
     await prisma.device.updateMany({
       where: { status: "online", last_seen: { lt: cutoff } },
@@ -210,5 +246,10 @@ module.exports = (httpServer) => {
     });
   }, 15_000);
 
-  return { io, emitToDevice, emitToDeviceAck };
+  const cleanup = () => {
+    clearInterval(offlineInterval);
+    io.close();
+  };
+
+  return { io, emitToDevice, emitToDeviceAck, cleanup };
 };

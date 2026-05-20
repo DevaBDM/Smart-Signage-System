@@ -1,9 +1,34 @@
+import os
 import socket
 import socketio, time, threading
-from config import DEVICE_ID, DEVICE_NAME, LOCATION, SERVER_URL, SERIAL_PORT, BAUD_RATE
+from config import DEVICE_ID, DEVICE_NAME, LOCATION, SERVER_URL, SERIAL_PORT, BAUD_RATE, DEVICE_TOKEN
 
 RAIN_THRESHOLD = 500
 
+# Token persistence path (same directory as this script)
+TOKEN_FILE = os.path.join(os.path.dirname(__file__), ".device_token")
+
+_current_token = DEVICE_TOKEN or ""
+
+
+def _load_token():
+    global _current_token
+    if _current_token:
+        return
+    if os.path.exists(TOKEN_FILE):
+        with open(TOKEN_FILE, "r") as f:
+            _current_token = f.read().strip()
+
+
+def _save_token(token):
+    global _current_token
+    _current_token = token
+    with open(TOKEN_FILE, "w") as f:
+        f.write(token)
+    print(f"[socket] Saved device token to {TOKEN_FILE}")
+
+
+_load_token()
 sio = socketio.Client()
 
 # ── Server → Pi events ───────────────────────────────────────
@@ -12,6 +37,15 @@ sio = socketio.Client()
 @sio.event
 def connect():
     print("[socket] Connected to server")
+
+
+@sio.on("device_token")
+def on_device_token(data):
+    """Server sends us our token after first heartbeat registration."""
+    token = data.get("token")
+    if token:
+        _save_token(token)
+        print(f"[socket] Received device_token for device {data.get('device_id')}")
 
 
 @sio.event
@@ -233,7 +267,10 @@ if __name__ == "__main__":
             # SERVER_URL is usually like http://localhost:5000/api
             # Socket.IO connects to the base URL
             base_url = SERVER_URL.split("/api")[0]
-            sio.connect(base_url)
+            connect_kwargs = {}
+            if _current_token:
+                connect_kwargs["auth"] = {"token": _current_token}
+            sio.connect(base_url, **connect_kwargs)
             sio.wait()
         except Exception as e:
             print(f"[socket] Reconnecting in 5s... ({e})")

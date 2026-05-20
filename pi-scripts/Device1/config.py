@@ -7,3 +7,7 @@ LOCATION = "Floor 1"  # Where this Pi is
 SERIAL_PORT = "/dev/ttyS0"  # USB port Arduino is on
 BAUD_RATE = 9600
 DEVICE_ID = 1
+
+# Server-assigned token (populated automatically after first Socket.IO heartbeat).
+# Keep this secret — do not commit production values.
+DEVICE_TOKEN = ""
