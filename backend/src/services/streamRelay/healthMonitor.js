@@ -37,13 +37,24 @@ function ffprobeStream(playlistPath) {
 async function checkStream(id) {
   const proc = PROCESSES.get(id);
   if (!proc) {
-    await liveStreamRepo.update(id, { status: "offline", last_seen: new Date() });
+    try {
+      await liveStreamRepo.update(id, { status: "offline", last_seen: new Date() });
+    } catch (e) {
+      if (e.code === "P2025") {
+        PROCESSES.delete(id);
+      }
+    }
     return;
   }
 
   if ((proc.type === "HLS" || proc.type === "YOUTUBE") && proc.passthrough) {
-    // Passthrough streams stay online as long as process record exists
-    await liveStreamRepo.update(id, { status: "online", last_seen: new Date() });
+    try {
+      await liveStreamRepo.update(id, { status: "online", last_seen: new Date() });
+    } catch (e) {
+      if (e.code === "P2025") {
+        PROCESSES.delete(id);
+      }
+    }
     return;
   }
 
@@ -51,17 +62,29 @@ async function checkStream(id) {
   const info = await ffprobeStream(playlistPath);
 
   if (!info) {
-    await liveStreamRepo.update(id, { status: "error", last_seen: new Date(), last_error: "ffprobe failed" });
+    try {
+      await liveStreamRepo.update(id, { status: "error", last_seen: new Date(), last_error: "ffprobe failed" });
+    } catch (e) {
+      if (e.code === "P2025") {
+        PROCESSES.delete(id);
+      }
+    }
     return;
   }
 
   const streamInfo = info.streams?.[0];
   const formatInfo = info.format;
-  await liveStreamRepo.update(id, {
-    status: "online",
-    last_seen: new Date(),
-    last_error: null,
-  });
+  try {
+    await liveStreamRepo.update(id, {
+      status: "online",
+      last_seen: new Date(),
+      last_error: null,
+    });
+  } catch (e) {
+    if (e.code === "P2025") {
+      PROCESSES.delete(id);
+    }
+  }
 }
 
 function start() {

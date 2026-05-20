@@ -8,6 +8,7 @@ const { validateSignageStateForPublish } = require("../validators/signageValidat
 const { assertDeviceOnline } = require("../utils/devices");
 const { upsertSignageAsset } = require("../utils/signageAssets");
 const piBridge = require("./piBridge");
+const streamRelay = require("./streamRelay");
 
 const sendSignageCommand = (device_id, payload) =>
   piBridge.emitToDeviceAck(device_id, "signage_command", payload, 12000);
@@ -60,6 +61,21 @@ async function publishPost(user, body) {
       ),
       { statusCode: 400 },
     );
+  }
+
+  // Auto-start live stream if relay_url is missing
+  if (isLiveStream && !post.live_stream?.relay_url) {
+    const startResult = await streamRelay.start(post.live_stream);
+    if (!startResult.ok) {
+      throw Object.assign(
+        new Error(
+          `Live stream could not be started: ${startResult.error || "Unknown error"}. Please start the stream from the Live Streams page before publishing.`,
+        ),
+        { statusCode: 400 },
+      );
+    }
+    // Refresh the post with the updated relay_url
+    post.live_stream.relay_url = startResult.relay_url;
   }
 
   const mediaDuration = isLiveStream
