@@ -15,6 +15,7 @@ async function cleanDatabase() {
   await prisma.sensorLog.deleteMany({});
   await prisma.deviceGroup.deleteMany({});
   await prisma.device.deleteMany({});
+  await prisma.liveStream.deleteMany({});
   await prisma.userGroup.deleteMany({});
   await prisma.user.deleteMany({});
   await prisma.group.deleteMany({});

@@ -1,5 +1,6 @@
 const prisma = require("../db/prisma");
 const postRepo = require("../repositories/postRepo");
+const liveStreamRepo = require("../repositories/liveStreamRepo");
 const { canManage, canManagePost, getActor, getActorGroupIds } = require("../utils/permissions");
 const { parseDeviceIds, toBool } = require("../utils/parsers");
 const { ensureDevicesOnline, getOnlineDeviceIdSet } = require("../utils/devices");
@@ -50,6 +51,29 @@ const slugify = (text) =>
   "-" +
   Date.now();
 
+function isEmptyLiveStreamId(val) {
+  if (val == null) return true;
+  if (typeof val === "string" && ["null", "undefined", "", "NaN"].includes(val.trim())) return true;
+  const n = Number(val);
+  return Number.isNaN(n);
+}
+
+async function validateLiveStream(user, liveStreamId, targetGroupId) {
+  if (isEmptyLiveStreamId(liveStreamId)) return null;
+  const stream = await liveStreamRepo.findById(Number(liveStreamId));
+  if (!stream) throw Object.assign(new Error("Live stream not found"), { statusCode: 404 });
+  if (!canManage(user, stream.group_id)) {
+    throw Object.assign(new Error("Forbidden: cannot use this live stream"), { statusCode: 403 });
+  }
+  if (targetGroupId && stream.group_id !== Number(targetGroupId)) {
+    throw Object.assign(
+      new Error("Live stream group must match post group"),
+      { statusCode: 400 }
+    );
+  }
+  return stream;
+}
+
 
 async function createPost(user, body, files) {
   const {
@@ -61,6 +85,7 @@ async function createPost(user, body, files) {
     publish_to_signage,
     status,
     device_ids,
+    live_stream_id,
   } = body;
 
   const targetGroupIds = extractGroupIds(body);
@@ -87,10 +112,16 @@ async function createPost(user, body, files) {
   const signageState = validateSignageState(actor, body.signage_state);
 
   let mediaRows = parseProcessedMedia(body);
-  if (!mediaRows?.length && files?.length) {
+  let liveStream = null;
+
+  if (live_stream_id) {
+    liveStream = await validateLiveStream(actor, live_stream_id, targetGroupIds[0]);
+    mediaRows = []; // live stream posts don't have uploaded media
+  } else if (!mediaRows?.length && files?.length) {
     const crops = parseMediaCrops(body, files.length);
     mediaRows = await processMediaFiles(files, crops);
   }
+
   const signageDuration =
     Number(body.duration_seconds) || primaryMediaDuration(mediaRows, 10);
 
@@ -98,6 +129,10 @@ async function createPost(user, body, files) {
 
   const createdPosts = [];
   for (const targetGroupId of targetGroupIds) {
+    if (liveStream && liveStream.group_id !== Number(targetGroupId)) {
+      continue; // skip groups that don't match the live stream's group
+    }
+
     const post = await postRepo.createPost({
       title,
       slug: slugify(title + "-" + targetGroupId),
@@ -110,14 +145,26 @@ async function createPost(user, body, files) {
       requested_feed: requestedFeed,
       requested_signage: requestedSignage,
       status: status || "draft",
-      images: {
-        create: (mediaRows || []).map((m, i) => ({
-          image_path: m.image_path,
-          media_type: m.media_type || "IMAGE",
-          duration_seconds: m.duration_seconds ?? null,
-          order_index: i,
-        })),
-      },
+      live_stream_id: liveStream ? liveStream.id : undefined,
+      images: liveStream
+        ? {
+            create: liveStream.thumbnail_path
+              ? [{
+                  image_path: liveStream.thumbnail_path,
+                  media_type: "LIVE_STREAM",
+                  duration_seconds: null,
+                  order_index: 0,
+                }]
+              : undefined,
+          }
+        : {
+            create: (mediaRows || []).map((m, i) => ({
+              image_path: m.image_path,
+              media_type: m.media_type || "IMAGE",
+              duration_seconds: m.duration_seconds ?? null,
+              order_index: i,
+            })),
+          },
       signage_metadata: { create: metaPayload },
     });
 
@@ -155,19 +202,50 @@ async function updatePost(user, postId, body, files, emitter) {
     allowed_on_signage,
     status,
     device_ids,
+    live_stream_id,
   } = body;
   const selectedIds = parseDeviceIds(device_ids);
   const isAutoApprove = post.author?.auto_approve || actor.role === "admin";
 
+  let liveStream = null;
+  if (live_stream_id !== undefined) {
+    if (!isEmptyLiveStreamId(live_stream_id)) {
+      liveStream = await validateLiveStream(actor, live_stream_id, post.group_id);
+    }
+  }
+
   let mediaRows = parseProcessedMedia(body);
-  if (!mediaRows?.length && files?.length) {
+  if (!liveStream && !mediaRows?.length && files?.length) {
     const crops = parseMediaCrops(body, files.length);
     mediaRows = await processMediaFiles(files, crops);
   }
 
-  if (mediaRows?.length) {
+  const isSwitchingToLive = liveStream && !post.live_stream_id;
+  const isSwitchingFromLive = live_stream_id === null && post.live_stream_id;
+  const isMediaUpdate = mediaRows?.length && !liveStream;
+
+  if (isSwitchingToLive || isSwitchingFromLive || isMediaUpdate) {
     const oldImages = post.images;
     await postRepo.deletePostImages(postId);
+    for (const img of oldImages) {
+      // Only delete files for non-live images (live uses stream thumbnail path)
+      if (img.media_type !== "LIVE_STREAM") {
+        deleteMediaFile(img.image_path);
+      }
+    }
+  }
+
+  if (isSwitchingToLive) {
+    if (liveStream.thumbnail_path) {
+      await postRepo.createPostImages([{
+        post_id: postId,
+        image_path: liveStream.thumbnail_path,
+        media_type: "LIVE_STREAM",
+        duration_seconds: null,
+        order_index: 0,
+      }]);
+    }
+  } else if (isMediaUpdate) {
     await postRepo.createPostImages(
       mediaRows.map((m, i) => ({
         post_id: postId,
@@ -177,9 +255,6 @@ async function updatePost(user, postId, body, files, emitter) {
         order_index: i,
       })),
     );
-    for (const img of oldImages) {
-      deleteMediaFile(img.image_path);
-    }
   }
 
   const updatedMedia = mediaRows?.length
@@ -231,6 +306,9 @@ async function updatePost(user, postId, body, files, emitter) {
 
   if (body.signage_state !== undefined) {
     data.signage_state = validateSignageState(actor, body.signage_state);
+  }
+  if (live_stream_id !== undefined) {
+    data.live_stream_id = live_stream_id ? Number(live_stream_id) : null;
   }
 
   const updated = await postRepo.updatePost(postId, data);

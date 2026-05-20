@@ -42,6 +42,7 @@ router.get("/device/:device_id/deployments", authDevice, async (req, res) => {
         include: {
           images: { orderBy: { order_index: "asc" }, take: 1 },
           group: { select: { id: true, signage_state: true } },
+          live_stream: { select: { relay_url: true, status: true } },
         },
       },
     },
@@ -49,8 +50,12 @@ router.get("/device/:device_id/deployments", authDevice, async (req, res) => {
   });
 
   const visible = deployments
-    .filter((deployment) => deployment.post.images[0])
-    .filter((deployment) => mediaFileExists(deployment.post.images[0].image_path))
+    .filter((deployment) => {
+      const post = deployment.post;
+      const isLive = post.live_stream_id != null;
+      if (isLive) return true;
+      return post.images[0] && mediaFileExists(post.images[0].image_path);
+    })
     .filter((deployment) =>
       postVisibleForGroup(
         deployment.post.signage_state,
@@ -66,22 +71,29 @@ router.get("/device/:device_id/deployments", authDevice, async (req, res) => {
     });
 
   res.json(
-    visible.map((deployment) => ({
-      deployment_id: deployment.id,
-      post_id: deployment.post_id,
-      title: deployment.post.title,
-        image_url: deployment.post.images[0].image_path,
-        media_type: deployment.post.images[0].media_type || "IMAGE",
-        duration_seconds:
-          deployment.post.images[0].duration_seconds ||
-          deployment.duration_seconds,
-      start_date: deployment.start_date,
-      end_date: deployment.end_date,
-      priority: deployment.priority,
-      display_group: deployment.display_group,
-      signage_state: deployment.post.signage_state,
-      group_signage_state: deployment.post.group?.signage_state,
-    })),
+    visible.map((deployment) => {
+      const post = deployment.post;
+      const isLive = post.live_stream_id != null;
+      const image = post.images?.[0];
+      const streamUrl = post.live_stream?.relay_url;
+      return {
+        deployment_id: deployment.id,
+        post_id: deployment.post_id,
+        title: post.title,
+        image_url: isLive ? streamUrl : image?.image_path,
+        media_type: isLive ? "LIVE_STREAM" : (image?.media_type || "IMAGE"),
+        stream_url: streamUrl,
+        duration_seconds: isLive
+          ? (deployment.duration_seconds || 3600)
+          : (image?.duration_seconds || deployment.duration_seconds),
+        start_date: deployment.start_date,
+        end_date: deployment.end_date,
+        priority: deployment.priority,
+        display_group: deployment.display_group,
+        signage_state: post.signage_state,
+        group_signage_state: post.group?.signage_state,
+      };
+    }),
   );
 });
 

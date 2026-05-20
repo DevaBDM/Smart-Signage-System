@@ -23,6 +23,7 @@ import CreatorDashboard from "./pages/creator/CreatorDashboard";
 import CreatorPosts from "./pages/creator/CreatorPosts";
 import CreatorEditor from "./pages/creator/CreatorEditor";
 import CreatorSignage from "./pages/creator/CreatorSignage";
+import CreatorLiveStreams from "./pages/creator/CreatorLiveStreams";
 
 function RequireRole({ role, children }) {
   const { token, role: userRole } = useAuthStore();
@@ -137,6 +138,14 @@ function AppRoutes() {
         element={
           <RequireRole role="creator">
             <CreatorSignage />
+          </RequireRole>
+        }
+      />
+      <Route
+        path="/creator/live-streams"
+        element={
+          <RequireRole role="creator">
+            <CreatorLiveStreams />
           </RequireRole>
         }
       />

@@ -15,9 +15,11 @@ const { buildSignageMeta } = require("../validators/postValidator");
  * @returns {Promise<object[]>} per-device results
  */
 const deployPostToDevices = async (emitter, actor, post, targetDevices, signageData) => {
+  const isLiveStream = post.live_stream_id != null;
   const image = post.images?.[0];
-  if (!image) return [];
-  if (!mediaFileExists(image.image_path)) {
+
+  if (!isLiveStream && !image) return [];
+  if (!isLiveStream && !mediaFileExists(image.image_path)) {
     console.warn(`[deploy] missing media file: ${image.image_path}`);
     return targetDevices.map((device) => ({
       device_id: device.id,
@@ -30,7 +32,9 @@ const deployPostToDevices = async (emitter, actor, post, targetDevices, signageD
   }
 
   const sched = buildSignageMeta(signageData, Number(signageData?.duration_seconds) || 10);
-  const mediaDuration = image?.duration_seconds || sched.duration_seconds;
+  const mediaDuration = isLiveStream
+    ? (sched.duration_seconds || 3600)
+    : (image?.duration_seconds || sched.duration_seconds);
   const schedWithMedia = { ...sched, duration_seconds: mediaDuration };
   const results = [];
 
@@ -74,6 +78,10 @@ const deployPostToDevices = async (emitter, actor, post, targetDevices, signageD
           where: { device_id: device.id, post_id: post.id },
         });
 
+        const streamUrl = isLiveStream
+          ? post.live_stream?.relay_url
+          : null;
+
         const result = existingAsset
           ? { ok: true, already_exists: true, asset: existingAsset }
           : emitter
@@ -84,8 +92,9 @@ const deployPostToDevices = async (emitter, actor, post, targetDevices, signageD
                   action: "publish_asset",
                   post_id: post.id,
                   title: post.title,
-                  image_url: image.image_path,
-                  media_type: image.media_type || "IMAGE",
+                  image_url: isLiveStream ? streamUrl : image.image_path,
+                  media_type: isLiveStream ? "LIVE_STREAM" : (image.media_type || "IMAGE"),
+                  stream_url: streamUrl,
                   duration_seconds: mediaDuration,
                   start_date: sched.start_date || null,
                   end_date: sched.end_date || null,
@@ -103,7 +112,7 @@ const deployPostToDevices = async (emitter, actor, post, targetDevices, signageD
             await upsertSignageAsset(prisma, {
               device_id: device.id,
               post_id: post.id,
-              image_url: image.image_path,
+              image_url: isLiveStream ? streamUrl : image.image_path,
               asset: result.asset,
             });
           }

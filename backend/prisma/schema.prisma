@@ -19,6 +19,7 @@ model Group {
   posts              Post[]
   users              User[]
   user_memberships   UserGroup[]
+  live_streams       LiveStream[]
 }
 
 model UserGroup {
@@ -60,6 +61,7 @@ model User {
   created_at             DateTime     @default(now())
   device_locks           Device[] @relation("DeviceControlLock")
   posts                  Post[]
+  live_streams           LiveStream[]
   group                  Group?   @relation(fields: [group_id], references: [id])
   managed_groups         UserGroup[]
 
@@ -89,12 +91,38 @@ model Post {
   signage_assets       SignageAsset[]
   signage_deployments  SignageDeployment[]
   signage_metadata     SignageMetadata?
+  live_stream_id       Int?
+  live_stream          LiveStream? @relation("PostLiveStream", fields: [live_stream_id], references: [id], onDelete: SetNull)
 
   @@index([status])
   @@index([group_id])
   @@index([created_by])
   @@index([allowed_on_feed])
   @@index([allowed_on_signage])
+  @@index([live_stream_id])
+}
+
+model LiveStream {
+  id             Int               @id @default(autoincrement())
+  title          String
+  stream_type    LiveStreamType
+  source_url     String?
+  relay_url      String?
+  stream_key     String?           @unique
+  thumbnail_path String?
+  status         LiveStreamStatus  @default(idle)
+  last_error     String?
+  last_seen      DateTime?
+  group_id       Int
+  created_by     Int
+  created_at     DateTime          @default(now())
+  updated_at     DateTime          @updatedAt
+  group          Group             @relation(fields: [group_id], references: [id])
+  author         User              @relation(fields: [created_by], references: [id])
+  posts          Post[]            @relation("PostLiveStream")
+
+  @@index([group_id])
+  @@index([status])
 }
 
 model PostImage {
@@ -265,7 +293,23 @@ enum SignageState {
   NORMAL
 }
 
+enum LiveStreamType {
+  HLS
+  RTSP
+  YOUTUBE
+  RTMP
+}
+
+enum LiveStreamStatus {
+  idle
+  starting
+  online
+  offline
+  error
+}
+
 enum MediaType {
   IMAGE
   VIDEO
+  LIVE_STREAM
 }

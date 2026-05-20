@@ -233,24 +233,51 @@ def push_to_anthias(post):
     if not image_path: return {"ok": False, "error": "No media"}
     media_type = (post.get("media_type") or "IMAGE").upper()
     is_video = media_type == "VIDEO" or image_path.lower().endswith((".mp4", ".webm", ".mov", ".m4v"))
+    is_live = media_type == "LIVE_STREAM"
 
     title = post.get("title") or f"Post {post_id}"
     asset_name = f"{title} ({post_id})"
     image_url = media_absolute_url(image_path)
     if not image_url:
         return {"ok": False, "error": "No media URL"}
-    
+
+    # --- LIVE STREAM: skip download/upload, register as webpage ---
+    if is_live:
+        stream_url = post.get("stream_url") or image_url
+        now = datetime.now(timezone.utc)
+        duration = int(post.get("duration_seconds") or 3600)
+        payload = {
+            "name": asset_name,
+            "uri": stream_url,
+            "mimetype": "webpage",
+            "start_date": (now - timedelta(minutes=1)).isoformat().replace("+00:00", "Z"),
+            "end_date": (now + timedelta(days=3650)).isoformat().replace("+00:00", "Z"),
+            "duration": duration,
+            "is_enabled": True,
+            "skip_asset_check": True,
+        }
+        print(f"[content_sync] Registering LIVE stream asset '{asset_name}' (webpage, {duration}s)")
+        res = register_anthias_asset(payload)
+        if res.get("ok"):
+            raw = res.get("data")
+            asset = normalize_asset(raw if isinstance(raw, dict) else {})
+            print(f"[content_sync] Live asset registered: {asset.get('asset_id')}")
+            return {"ok": True, "post_id": post_id, "asset": asset, "image_url": stream_url}
+        err = res.get("error") or "Live stream registration failed"
+        print(f"[content_sync] Live asset registration failed: {err}")
+        return {"ok": False, "error": err}
+
     # Check current assets
     current = get_anthias_assets()
     matches = [a for a in current if get_post_id_from_name(a.get("name")) == post_id]
-    
+
     if matches:
         # If exactly one and looks correct, we're done
         if len(matches) == 1:
             a = matches[0]
             if a.get("name") == asset_name and not a.get("uri").startswith("http"):
                 return {"ok": True, "post_id": post_id, "already_exists": True, "asset": normalize_asset(a)}
-        
+
         # Multiple or stale: Wipe them all and re-upload to be safe
         print(f"[content_sync] Cleaning up {len(matches)} stale assets for post {post_id}...")
         for a in matches: delete_from_anthias(_asset_id(a))

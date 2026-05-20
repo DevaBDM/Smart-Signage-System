@@ -1,4 +1,5 @@
 import MediaUploadField from "./MediaUploadField";
+import LiveStreamPicker from "./LiveStreamPicker";
 import SignagePanel from "./SignagePanel";
 import { Card, Message } from "./ui";
 import * as S from "../styles";
@@ -67,12 +68,41 @@ export default function PostForm({
           placeholder="## Announcement&#10;Write your **markdown** here..."
         />
 
-        <MediaUploadField
-          label={editingId ? "Media (add or replace)" : "Images & videos"}
-          items={mediaItems}
-          onChange={onMediaChange}
-          max={10}
-        />
+        <div style={{ display: "flex", gap: 12, marginBottom: 4 }}>
+          <label style={{ fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+            <input
+              type="radio"
+              name="media_source"
+              checked={form.media_source !== "live_stream"}
+              onChange={() => setField({ media_source: "upload", live_stream_id: null })}
+            />
+            Upload media
+          </label>
+          <label style={{ fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+            <input
+              type="radio"
+              name="media_source"
+              checked={form.media_source === "live_stream"}
+              onChange={() => setField({ media_source: "live_stream" })}
+            />
+            Use live stream
+          </label>
+        </div>
+
+        {form.media_source === "live_stream" ? (
+          <LiveStreamPicker
+            value={form.live_stream_id}
+            onChange={(val) => setField({ live_stream_id: val })}
+            groupId={form.group_ids?.[0]}
+          />
+        ) : (
+          <MediaUploadField
+            label={editingId ? "Media (add or replace)" : "Images & videos"}
+            items={mediaItems}
+            onChange={onMediaChange}
+            max={10}
+          />
+        )}
 
         <div style={{ display: "flex", gap: 16, marginTop: 4 }}>
           <label

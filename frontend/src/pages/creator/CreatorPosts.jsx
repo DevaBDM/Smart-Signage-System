@@ -55,6 +55,8 @@ export default function CreatorPosts() {
     play_order: 0,
     nocache: false,
     skip_asset_check: false,
+    media_source: "upload",
+    live_stream_id: null,
   };
   const [form, setForm, clearForm] = usePersistentState(
     userScopedKey("creator.posts.form", userId),
@@ -292,9 +294,10 @@ export default function CreatorPosts() {
         );
       }
       delete payload.group_ids;
-      Object.entries(payload).forEach(([k, v]) =>
-        fd.append(k, Array.isArray(v) ? JSON.stringify(v) : v),
-      );
+      Object.entries(payload).forEach(([k, v]) => {
+        if (v == null) return;
+        fd.append(k, Array.isArray(v) ? JSON.stringify(v) : v);
+      });
 
       const saveOpts = mediaItems.length > 0 ? { timeout: 120000 } : {};
 
