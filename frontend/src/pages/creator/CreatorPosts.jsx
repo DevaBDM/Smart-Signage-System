@@ -257,7 +257,7 @@ export default function CreatorPosts() {
     setLoading(true);
     setMsg("");
     try {
-      if (!editingId && mediaItems.length === 0) {
+      if (!editingId && mediaItems.length === 0 && !form.live_stream_id) {
         setMsg("❌ Add at least one image or video.");
         setLoading(false);
         return;

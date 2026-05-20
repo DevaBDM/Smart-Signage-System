@@ -41,7 +41,7 @@ async function checkStream(id) {
     return;
   }
 
-  if (proc.type === "HLS" && proc.passthrough) {
+  if ((proc.type === "HLS" || proc.type === "YOUTUBE") && proc.passthrough) {
     // Passthrough streams stay online as long as process record exists
     await liveStreamRepo.update(id, { status: "online", last_seen: new Date() });
     return;

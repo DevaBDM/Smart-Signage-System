@@ -2,6 +2,7 @@ const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 const liveStreamRepo = require("../../repositories/liveStreamRepo");
+const youtubeRelay = require("./youtubeRelay");
 
 const STREAMS_DIR = process.env.STREAMS_DIR || path.resolve(__dirname, "../../../streams");
 const PROCESSES = new Map(); // id -> { child, type, startedAt }
@@ -42,8 +43,7 @@ async function start(stream) {
   }
 
   if (stream.stream_type === "YOUTUBE") {
-    // YouTube requires yt-dlp resolution — placeholder for Phase 5
-    return { ok: false, error: "YouTube relay not yet implemented" };
+    return startYouTubeRelay(stream);
   }
 
   if (stream.stream_type === "RTMP") {
@@ -54,11 +54,39 @@ async function start(stream) {
   return { ok: false, error: `Unsupported stream_type: ${stream.stream_type}` };
 }
 
+/** Start a YouTube relay by resolving the URL via yt-dlp and treating it as HLS passthrough. */
+async function startYouTubeRelay(stream) {
+  const id = stream.id;
+  const resolvedUrl = await youtubeRelay.resolve(stream.source_url);
+  await liveStreamRepo.update(id, { relay_url: resolvedUrl, status: "online" });
+
+  const refreshTimer = youtubeRelay.startRefreshTimer(
+    id,
+    stream.source_url,
+    async (url) => {
+      await liveStreamRepo.update(id, { relay_url: url });
+    }
+  );
+
+  PROCESSES.set(id, {
+    type: "YOUTUBE",
+    passthrough: true,
+    refreshTimer,
+    startedAt: Date.now(),
+  });
+
+  return { ok: true, status: "started", relay_url: resolvedUrl };
+}
+
 /** Stop relay for a stream. Idempotent. */
 async function stop(id) {
   const proc = PROCESSES.get(id);
   if (!proc) {
     return { ok: true, status: "already_stopped" };
+  }
+
+  if (proc.refreshTimer) {
+    proc.refreshTimer.clear();
   }
 
   if (proc.child) {

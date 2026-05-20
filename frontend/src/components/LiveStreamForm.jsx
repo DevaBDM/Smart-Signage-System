@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, Message, Button } from "./ui";
 import * as S from "../styles";
 
@@ -22,6 +22,16 @@ export default function LiveStreamForm({
     group_id: initial.group_id ? String(initial.group_id) : "",
   });
   const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    setForm({
+      title: initial.title || "",
+      stream_type: initial.stream_type || "HLS",
+      source_url: initial.source_url || "",
+      group_id: initial.group_id ? String(initial.group_id) : "",
+    });
+    setMsg("");
+  }, [initial.id]);
 
   const setField = (patch) => setForm({ ...form, ...patch });
 

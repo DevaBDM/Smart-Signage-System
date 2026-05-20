@@ -33,6 +33,7 @@ async function cleanDatabase() {
   await prisma.signageMetadata.deleteMany({});
   await prisma.postImage.deleteMany({});
   await prisma.post.deleteMany({});
+  await prisma.liveStream.deleteMany({});
   await prisma.errorLog.deleteMany({});
   await prisma.sensorLog.deleteMany({});
   await prisma.deviceGroup.deleteMany({});

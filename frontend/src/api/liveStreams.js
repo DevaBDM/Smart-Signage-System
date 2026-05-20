@@ -1,43 +1,36 @@
-import axios from "axios";
-
-const API_BASE = import.meta.env.VITE_API_URL || "/api";
-
-function authHeaders() {
-  const token = localStorage.getItem("token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
+import api from "./axios";
 
 export async function listLiveStreams() {
-  const res = await axios.get(`${API_BASE}/live-streams`, { headers: authHeaders() });
+  const res = await api.get("/live-streams");
   return res.data;
 }
 
 export async function getLiveStream(id) {
-  const res = await axios.get(`${API_BASE}/live-streams/${id}`, { headers: authHeaders() });
+  const res = await api.get(`/live-streams/${id}`);
   return res.data;
 }
 
 export async function createLiveStream(data) {
-  const res = await axios.post(`${API_BASE}/live-streams`, data, { headers: authHeaders() });
+  const res = await api.post("/live-streams", data);
   return res.data;
 }
 
 export async function updateLiveStream(id, data) {
-  const res = await axios.put(`${API_BASE}/live-streams/${id}`, data, { headers: authHeaders() });
+  const res = await api.put(`/live-streams/${id}`, data);
   return res.data;
 }
 
 export async function deleteLiveStream(id, force = false) {
-  const res = await axios.delete(`${API_BASE}/live-streams/${id}?force=${force}`, { headers: authHeaders() });
+  const res = await api.delete(`/live-streams/${id}?force=${force}`);
   return res.data;
 }
 
 export async function startLiveStream(id) {
-  const res = await axios.post(`${API_BASE}/live-streams/${id}/start`, {}, { headers: authHeaders() });
+  const res = await api.post(`/live-streams/${id}/start`);
   return res.data;
 }
 
 export async function stopLiveStream(id) {
-  const res = await axios.post(`${API_BASE}/live-streams/${id}/stop`, {}, { headers: authHeaders() });
+  const res = await api.post(`/live-streams/${id}/stop`);
   return res.data;
 }

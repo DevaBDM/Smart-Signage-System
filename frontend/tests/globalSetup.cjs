@@ -30,6 +30,7 @@ async function cleanDatabase(prisma) {
   await safeDelete(prisma, "signageMetadata");
   await safeDelete(prisma, "postImage");
   await safeDelete(prisma, "post");
+  await safeDelete(prisma, "liveStream");
   await safeDelete(prisma, "errorLog");
   await safeDelete(prisma, "sensorLog");
   await safeDelete(prisma, "deviceGroup");

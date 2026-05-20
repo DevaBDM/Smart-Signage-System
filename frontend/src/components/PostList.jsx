@@ -215,8 +215,23 @@ export default function PostList({
                 </div>
               )}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>
+                <div style={{ fontWeight: 600, fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
                   {p.title}
+                  {p.live_stream_id && (
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: "#fff",
+                        background: "#dc2626",
+                        padding: "2px 8px",
+                        borderRadius: 12,
+                        lineHeight: 1,
+                      }}
+                    >
+                      LIVE
+                    </span>
+                  )}
                 </div>
                 {p.author && (
                   <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>
