@@ -4,7 +4,7 @@ const findUserById = (id) =>
   prisma.user.findUnique({ where: { id } });
 
 const createPost = (data) =>
-  prisma.post.create({ data, include: { images: true, signage_metadata: true } });
+  prisma.post.create({ data, include: { images: true, signage_metadata: true, live_stream: true } });
 
 const findPostWithImagesAndAuthor = (id) =>
   prisma.post.findUnique({
@@ -41,7 +41,7 @@ const updatePost = (id, data) =>
   prisma.post.update({
     where: { id },
     data,
-    include: { images: true, signage_metadata: true },
+    include: { images: true, signage_metadata: true, live_stream: true },
   });
 
 const findAllDeploymentsForPost = (postId) =>

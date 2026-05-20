@@ -549,7 +549,7 @@ async function bulkAction(actor, body, emitter) {
           allowed_on_signage: isAutoApprove,
           ...(publishFeed && { requested_feed: true, allowed_on_feed: isAutoApprove }),
         },
-        include: { images: true, signage_metadata: true },
+        include: { images: true, signage_metadata: true, live_stream: true },
       });
       const targetIds = selectedDeviceIds.length > 0 ? selectedDeviceIds : p.signage_deployments.map((d) => d.device_id);
       if (targetIds.length > 0) {

@@ -221,6 +221,7 @@ export default function CreatorPosts() {
   const startEdit = (post) => {
     if (!canManagePost(post)) return;
     setEditingId(post.id);
+    const isLiveStream = post.live_stream_id != null;
     setForm({
       title: post.title,
       description_markdown: post.description_markdown || "",
@@ -239,6 +240,8 @@ export default function CreatorPosts() {
       play_order: post.signage_metadata?.play_order || 0,
       nocache: post.signage_metadata?.nocache ?? false,
       skip_asset_check: post.signage_metadata?.skip_asset_check ?? false,
+      media_source: isLiveStream ? "live_stream" : "upload",
+      live_stream_id: isLiveStream ? post.live_stream_id : null,
     });
     setMediaItems(
       (post.images || []).map((img) => ({

@@ -19,10 +19,11 @@ function postMediaMeta(post) {
   const media = post?.images?.[0];
   if (!media) return { isVideo: false, label: "", duration: 10 };
   const isVideo = media.media_type === "VIDEO";
+  const isLive = media.media_type === "LIVE_STREAM" || post?.live_stream_id != null;
   return {
-    isVideo,
-    label: isVideo ? "Video" : "Image",
-    duration: media.duration_seconds || 10,
+    isVideo: isVideo || isLive,
+    label: isLive ? "Live Stream" : (isVideo ? "Video" : "Image"),
+    duration: isLive ? (media.duration_seconds || 3600) : (media.duration_seconds || 10),
   };
 }
 
@@ -69,7 +70,7 @@ export default function CreatorSignage() {
           unique.push(p);
         }
       }
-      setPosts(unique.filter((p) => p.images?.length > 0));
+      setPosts(unique.filter((p) => p.images?.length > 0 || p.live_stream_id != null));
     };
     loadAll();
     devicesApi.listDevices()

@@ -30,7 +30,7 @@ async function publishPost(user, body) {
   const actor = await getActor(user);
   const post = await prisma.post.findUnique({
     where: { id: Number(post_id) },
-    include: { images: true, author: true },
+    include: { images: true, author: true, live_stream: true },
   });
   if (!post) throw Object.assign(new Error("Post not found"), { statusCode: 404 });
   if (!canManagePost(actor, post)) {
@@ -47,9 +47,13 @@ async function publishPost(user, body) {
     post.signage_state = validatedState;
   }
 
-  const image = post.images[0];
-  if (!image) throw Object.assign(new Error("Post has no media"), { statusCode: 400 });
-  if (!mediaFileExists(image.image_path)) {
+  const isLiveStream = post.live_stream_id != null;
+  const image = post.images?.[0];
+
+  if (!isLiveStream && !image) {
+    throw Object.assign(new Error("Post has no media"), { statusCode: 400 });
+  }
+  if (!isLiveStream && image && !mediaFileExists(image.image_path)) {
     throw Object.assign(
       new Error(
         `Media file missing on server: ${image.image_path}. Re-upload the video on the post.`,
@@ -58,7 +62,9 @@ async function publishPost(user, body) {
     );
   }
 
-  const mediaDuration = image.duration_seconds || Number(duration_seconds) || 10;
+  const mediaDuration = isLiveStream
+    ? (Number(duration_seconds) || 3600)
+    : (image?.duration_seconds || Number(duration_seconds) || 10);
 
   const device = await prisma.device.findUnique({
     where: { id: Number(device_id) },
@@ -110,22 +116,17 @@ async function publishPost(user, body) {
     },
   });
 
+  const streamUrl = isLiveStream ? post.live_stream?.relay_url : null;
   const payload = {
     post_id: post.id,
     title: post.title,
-    image_url: image?.image_path,
-    media_type: image.media_type || "IMAGE",
+    image_url: isLiveStream ? streamUrl : image?.image_path,
+    media_type: isLiveStream ? "LIVE_STREAM" : (image?.media_type || "IMAGE"),
+    stream_url: streamUrl,
     duration_seconds: mediaDuration,
     start_date: start_date || null,
     end_date: end_date || null,
   };
-
-  const existingAsset = await prisma.signageAsset.findFirst({
-    where: {
-      device_id: Number(device_id),
-      post_id: post.id,
-    },
-  });
 
   await prisma.signageDeployment.upsert({
     where: {
@@ -157,14 +158,22 @@ async function publishPost(user, body) {
 
   let result = { ok: true, note: "Deployment saved. Awaiting admin approval." };
   if (isAutoApprove) {
-    if (existingAsset) {
-      result = { ok: true, already_exists: true, asset: existingAsset };
-      await upsertSignageAsset(prisma, {
-        device_id,
-        post_id: post.id,
-        image_url: image?.image_path,
-        asset: existingAsset,
-      });
+    console.log(`[signageService] publishPost -> device ${device_id} payload:`, JSON.stringify(payload));
+    result = await sendSignageCommand(device_id, {
+      action: "publish_asset",
+      ...payload,
+    });
+    console.log(`[signageService] publishPost -> device ${device_id} result:`, JSON.stringify(result));
+
+    if (result.ok) {
+      if (result.asset) {
+        await upsertSignageAsset(prisma, {
+          device_id: device.id,
+          post_id: post.id,
+          image_url: isLiveStream ? streamUrl : image?.image_path,
+          asset: result.asset,
+        });
+      }
       await prisma.signageDeployment.update({
         where: {
           device_id_post_id: {
@@ -176,41 +185,15 @@ async function publishPost(user, body) {
       });
       await applyControlLock(actor, Number(device_id), "publish_asset");
     } else {
-      result = await sendSignageCommand(device_id, {
-        action: "publish_asset",
-        ...payload,
-      });
-
-      if (result.ok) {
-        if (result.asset) {
-          await upsertSignageAsset(prisma, {
-            device_id: device.id,
+      await prisma.signageDeployment.update({
+        where: {
+          device_id_post_id: {
+            device_id: Number(device_id),
             post_id: post.id,
-            image_url: image?.image_path,
-            asset: result.asset,
-          });
-        }
-        await prisma.signageDeployment.update({
-          where: {
-            device_id_post_id: {
-              device_id: Number(device_id),
-              post_id: post.id,
-            },
           },
-          data: { status: "synced", last_error: null },
-        });
-        await applyControlLock(actor, Number(device_id), "publish_asset");
-      } else {
-        await prisma.signageDeployment.update({
-          where: {
-            device_id_post_id: {
-              device_id: Number(device_id),
-              post_id: post.id,
-            },
-          },
-          data: { status: "pending", last_error: result.error || null },
-        });
-      }
+        },
+        data: { status: "pending", last_error: result.error || null },
+      });
     }
   }
 
