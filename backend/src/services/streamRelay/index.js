@@ -3,6 +3,7 @@ const path = require("path");
 const fs = require("fs");
 const liveStreamRepo = require("../../repositories/liveStreamRepo");
 const youtubeRelay = require("./youtubeRelay");
+const rtmpServer = require("./rtmpServer");
 
 const STREAMS_DIR = process.env.STREAMS_DIR || path.resolve(__dirname, "../../../streams");
 const PROCESSES = new Map(); // id -> { child, type, startedAt }
@@ -47,8 +48,10 @@ async function start(stream) {
   }
 
   if (stream.stream_type === "RTMP") {
-    // RTMP ingest handled by node-media-server — placeholder for Phase 5
-    return { ok: false, error: "RTMP relay not yet implemented" };
+    const relayUrl = rtmpServer.getRelayUrl(stream.id);
+    await liveStreamRepo.update(id, { relay_url: relayUrl, status: "starting" });
+    PROCESSES.set(id, { type: "RTMP", passthrough: false, startedAt: Date.now() });
+    return { ok: true, status: "started", relay_url: relayUrl };
   }
 
   return { ok: false, error: `Unsupported stream_type: ${stream.stream_type}` };
@@ -95,6 +98,10 @@ async function stop(id) {
     setTimeout(() => {
       if (!proc.child.killed) proc.child.kill("SIGKILL");
     }, 5000);
+  }
+
+  if (proc.type === "RTMP") {
+    rtmpServer.stopFfmpegRelay(id);
   }
 
   PROCESSES.delete(id);

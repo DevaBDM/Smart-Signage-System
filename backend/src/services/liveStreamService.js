@@ -111,12 +111,27 @@ async function getStream(actor, id) {
   return stream;
 }
 
+async function rotateStreamKey(actor, id) {
+  const stream = await liveStreamRepo.findById(id);
+  if (!stream) throw Object.assign(new Error("Stream not found"), { statusCode: 404 });
+  if (!canManage(actor, stream.group_id)) {
+    throw Object.assign(new Error("Forbidden"), { statusCode: 403 });
+  }
+  if (stream.stream_type !== "RTMP") {
+    throw Object.assign(new Error("Stream key rotation is only available for RTMP streams"), { statusCode: 400 });
+  }
+  const newKey = generateStreamKey();
+  await liveStreamRepo.update(id, { stream_key: newKey });
+  return { stream_key: newKey };
+}
+
 module.exports = {
   listForActor,
   createStream,
   updateStream,
   deleteStream,
   getStream,
+  rotateStreamKey,
   validateUrl,
   generateStreamKey,
 };

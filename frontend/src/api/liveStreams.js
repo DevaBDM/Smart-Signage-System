@@ -34,3 +34,8 @@ export async function stopLiveStream(id) {
   const res = await api.post(`/live-streams/${id}/stop`);
   return res.data;
 }
+
+export async function rotateStreamKey(id) {
+  const res = await api.post(`/live-streams/${id}/rotate-key`);
+  return res.data;
+}

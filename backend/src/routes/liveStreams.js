@@ -8,6 +8,7 @@ const {
   updateStream,
   deleteStream,
   getStream,
+  rotateStreamKey,
 } = require("../services/liveStreamService");
 const streamRelay = require("../services/streamRelay");
 const liveStreamRepo = require("../repositories/liveStreamRepo");
@@ -81,6 +82,16 @@ router.post(
     const actor = await getActor(req.user);
     await getStream(actor, Number(req.params.id));
     const result = await streamRelay.stop(Number(req.params.id));
+    res.json(result);
+  })
+);
+
+router.post(
+  "/:id/rotate-key",
+  auth(["admin", "creator"]),
+  asyncHandler(async (req, res) => {
+    const actor = await getActor(req.user);
+    const result = await rotateStreamKey(actor, Number(req.params.id));
     res.json(result);
   })
 );

@@ -15,6 +15,7 @@ const app = require("./app");
 const piBridge = require("./services/piBridge");
 const streamRelay = require("./services/streamRelay");
 const healthMonitor = require("./services/streamRelay/healthMonitor");
+const rtmpServer = require("./services/streamRelay/rtmpServer");
 
 const server = http.createServer(app);
 
@@ -30,6 +31,9 @@ streamRelay.bootstrapAll().catch((err) => {
 
 // Start periodic health checks for active relays
 healthMonitor.start();
+
+// Start RTMP ingest server (node-media-server)
+rtmpServer.init();
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, "0.0.0.0", () => {

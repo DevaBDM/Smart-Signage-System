@@ -207,3 +207,49 @@ describe("DELETE /api/live-streams/:id", () => {
     expect(res.body.error).toMatch(/Cannot delete/);
   });
 });
+
+describe("POST /api/live-streams/:id/rotate-key", () => {
+  it("rotates the stream key for an RTMP stream", async () => {
+    const group = await createGroup();
+    const { token, user } = await createUser({ role: "creator", group_id: group.id });
+    const stream = await prisma.liveStream.create({
+      data: {
+        title: "RTMP Ingest",
+        stream_type: "RTMP",
+        stream_key: "oldkey123",
+        group_id: group.id,
+        created_by: user.id,
+      },
+    });
+
+    const res = await request(app)
+      .post(`/api/live-streams/${stream.id}/rotate-key`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.stream_key).toBeDefined();
+    expect(res.body.stream_key).not.toBe("oldkey123");
+    expect(res.body.stream_key).toHaveLength(32);
+  });
+
+  it("blocks rotation for non-RTMP streams", async () => {
+    const group = await createGroup();
+    const { token, user } = await createUser({ role: "creator", group_id: group.id });
+    const stream = await prisma.liveStream.create({
+      data: {
+        title: "HLS Stream",
+        stream_type: "HLS",
+        source_url: "https://example.com/stream.m3u8",
+        group_id: group.id,
+        created_by: user.id,
+      },
+    });
+
+    const res = await request(app)
+      .post(`/api/live-streams/${stream.id}/rotate-key`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/only available for RTMP/);
+  });
+});
