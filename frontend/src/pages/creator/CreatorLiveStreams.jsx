@@ -107,10 +107,10 @@ export default function CreatorLiveStreams() {
   const editingStream = streams.find((s) => s.id === editingId);
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh" }}>
+    <div style={S.layout}>
       <CreatorSidebar />
-      <div style={{ flex: 1, padding: 24 }}>
-        <h1 style={{ fontWeight: 800, marginBottom: 16 }}>Live Streams</h1>
+      <main style={S.main}>
+        <h1 style={S.heading}>Live Streams</h1>
         {msg && (
           <div
             style={{
@@ -178,13 +178,13 @@ export default function CreatorLiveStreams() {
                         {s.stream_type !== "HLS" && (
                           <>
                             <button
-                              style={{ ...S.btn, padding: "4px 8px", fontSize: 12 }}
+                              style={{ ...S.btn, padding: "4px 8px", fontSize: 12, background: "#16a34a", color: "#fff" }}
                               onClick={() => handleStart(s.id)}
                             >
                               Start
                             </button>
                             <button
-                              style={{ ...S.btn, padding: "4px 8px", fontSize: 12 }}
+                              style={{ ...S.btn, padding: "4px 8px", fontSize: 12, background: "#dc2626", color: "#fff" }}
                               onClick={() => handleStop(s.id)}
                             >
                               Stop
@@ -192,7 +192,7 @@ export default function CreatorLiveStreams() {
                           </>
                         )}
                         <button
-                          style={{ ...S.btn, padding: "4px 8px", fontSize: 12 }}
+                          style={{ ...S.btn, padding: "4px 8px", fontSize: 12, background: "#2563eb", color: "#fff" }}
                           onClick={() => setEditingId(s.id)}
                         >
                           Edit
@@ -227,7 +227,7 @@ export default function CreatorLiveStreams() {
             )}
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
