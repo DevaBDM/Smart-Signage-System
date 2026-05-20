@@ -110,7 +110,7 @@ router.get("/:id", auth(["admin", "creator"]), async (req, res) => {
 
 // POST create post
 router.post("/", auth(["admin", "creator"]), uploadMedia, asyncHandler(async (req, res) => {
-  const result = await createPost(req.user, req.body, req.files);
+  const result = await createPost(req.user, req.body, req.files, piBridge.getEmitter());
   res.json(result);
 }));
 

@@ -51,6 +51,81 @@ test.describe("Post API tests", () => {
     expect(postData.count).toBe(1);
   });
 
+  test("edit post with image does not delete the image file", async ({ request }) => {
+    const ts = Date.now();
+
+    const groupRes = await request.post(`${API_URL}/groups`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { name: `ImgGroup-${ts}` },
+    });
+    expect(groupRes.ok()).toBeTruthy();
+    const group = await groupRes.json();
+
+    const mockImage = mockImagePath();
+
+    // 1. Create a post with an image
+    const createRes = await request.post(`${API_URL}/posts`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      multipart: {
+        title: `Image Post ${ts}`,
+        group_ids: JSON.stringify([group.id]),
+        status: "published",
+        allowed_on_signage: "true",
+        images: { name: "test.png", mimeType: "image/png", buffer: fs.readFileSync(mockImage) },
+      },
+    });
+    expect(createRes.ok()).toBeTruthy();
+    const createData = await createRes.json();
+    const postId = createData.posts[0].id;
+    const imagePath = createData.posts[0].images[0].image_path;
+
+    // 2. Verify image is initially reachable
+    const initialImage = await request.get(`http://localhost:5001${imagePath}`);
+    expect(initialImage.ok()).toBeTruthy();
+
+    // 3. Edit the post — toggle signage OFF then back ON (simulating the bug trigger)
+    const processedMedia = JSON.stringify(createData.posts[0].images.map((img, i) => ({
+      image_path: img.image_path,
+      media_type: img.media_type,
+      duration_seconds: img.duration_seconds,
+      order_index: i,
+    })));
+
+    const updateRes = await request.put(`${API_URL}/posts/${postId}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      multipart: {
+        title: `Image Post ${ts}`,
+        processed_media: processedMedia,
+        allowed_on_signage: "false",
+      },
+    });
+    expect(updateRes.ok()).toBeTruthy();
+
+    // 4. Toggle back to signage ON
+    const updateRes2 = await request.put(`${API_URL}/posts/${postId}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      multipart: {
+        title: `Image Post ${ts}`,
+        processed_media: processedMedia,
+        allowed_on_signage: "true",
+      },
+    });
+    expect(updateRes2.ok()).toBeTruthy();
+
+    // 5. Verify the image file is STILL reachable (regression check)
+    const finalImage = await request.get(`http://localhost:5001${imagePath}`);
+    expect(finalImage.ok()).toBeTruthy();
+
+    // 6. Verify DB still has the image record
+    const getRes = await request.get(`${API_URL}/posts/${postId}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(getRes.ok()).toBeTruthy();
+    const post = await getRes.json();
+    expect(post.images.length).toBe(1);
+    expect(post.images[0].image_path).toBe(imagePath);
+  });
+
   test("1. Admin global visibility — sees posts from all groups regardless of own group_id", async ({ request }) => {
     const ts = Date.now();
 

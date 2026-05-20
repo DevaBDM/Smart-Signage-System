@@ -75,7 +75,7 @@ async function validateLiveStream(user, liveStreamId, targetGroupId) {
 }
 
 
-async function createPost(user, body, files) {
+async function createPost(user, body, files, emitter = null) {
   const {
     title,
     description_markdown,
@@ -170,7 +170,7 @@ async function createPost(user, body, files) {
 
     if (selectedDeviceIds.length > 0) {
       const targetDevices = await postRepo.findDevicesByIds(selectedDeviceIds);
-      await deployPostToDevices(null, actor, post, targetDevices, body);
+      await deployPostToDevices(emitter, actor, post, targetDevices, body);
     }
 
     createdPosts.push(post);
@@ -214,23 +214,71 @@ async function updatePost(user, postId, body, files, emitter) {
     }
   }
 
-  let mediaRows = parseProcessedMedia(body);
-  if (!liveStream && !mediaRows?.length && files?.length) {
+  // Existing images the frontend wants to keep (from processed_media JSON)
+  const keepMediaRows = parseProcessedMedia(body);
+
+  // Process any NEW uploaded files
+  let newMediaRows = null;
+  if (!liveStream && files?.length) {
     const crops = parseMediaCrops(body, files.length);
-    mediaRows = await processMediaFiles(files, crops);
+    newMediaRows = await processMediaFiles(files, crops);
   }
 
+  // Combined final media set = kept existing + newly uploaded
+  const mediaRows = [...(keepMediaRows || []), ...(newMediaRows || [])];
+  const keepPaths = new Set((keepMediaRows || []).map((m) => m.image_path));
+
+  const oldImages = post.images || [];
   const isSwitchingToLive = liveStream && !post.live_stream_id;
   const isSwitchingFromLive = live_stream_id === null && post.live_stream_id;
-  const isMediaUpdate = mediaRows?.length && !liveStream;
+  const hasNewMedia = newMediaRows?.length > 0;
 
-  if (isSwitchingToLive || isSwitchingFromLive || isMediaUpdate) {
-    const oldImages = post.images;
+  if (isSwitchingToLive || isSwitchingFromLive) {
+    // Live stream transition: remove all old images and their files
     await postRepo.deletePostImages(postId);
     for (const img of oldImages) {
-      // Only delete files for non-live images (live uses stream thumbnail path)
       if (img.media_type !== "LIVE_STREAM") {
         deleteMediaFile(img.image_path);
+      }
+    }
+  } else if (hasNewMedia) {
+    // New files uploaded: replace DB records, but only delete
+    // files for images that are truly being removed (not kept)
+    const removedImages = oldImages.filter(
+      (img) => !keepPaths.has(img.image_path),
+    );
+    await postRepo.deletePostImages(postId);
+    for (const img of removedImages) {
+      if (img.media_type !== "LIVE_STREAM") {
+        deleteMediaFile(img.image_path);
+      }
+    }
+    await postRepo.createPostImages(
+      mediaRows.map((m, i) => ({
+        post_id: postId,
+        image_path: m.image_path,
+        media_type: m.media_type || "IMAGE",
+        duration_seconds: m.duration_seconds ?? null,
+        order_index: i,
+      })),
+    );
+  } else if (keepMediaRows) {
+    // Reordering or removing existing images only (no new uploads)
+    const keepPathsSet = new Set(keepMediaRows.map((m) => m.image_path));
+    const removedImages = oldImages.filter(
+      (img) => !keepPathsSet.has(img.image_path),
+    );
+    if (removedImages.length) {
+      await prisma.postImage.deleteMany({
+        where: {
+          post_id: postId,
+          image_path: { in: removedImages.map((i) => i.image_path) },
+        },
+      });
+      for (const img of removedImages) {
+        if (img.media_type !== "LIVE_STREAM") {
+          deleteMediaFile(img.image_path);
+        }
       }
     }
   }
@@ -245,16 +293,6 @@ async function updatePost(user, postId, body, files, emitter) {
         order_index: 0,
       }]);
     }
-  } else if (isMediaUpdate) {
-    await postRepo.createPostImages(
-      mediaRows.map((m, i) => ({
-        post_id: postId,
-        image_path: m.image_path,
-        media_type: m.media_type || "IMAGE",
-        duration_seconds: m.duration_seconds ?? null,
-        order_index: i,
-      })),
-    );
   }
 
   const updatedMedia = mediaRows?.length

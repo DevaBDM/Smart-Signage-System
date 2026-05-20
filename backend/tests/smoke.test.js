@@ -1,3 +1,4 @@
+const fs = require("fs");
 const request = require("supertest");
 const app = require("../src/app");
 const piBridge = require("../src/services/piBridge");
@@ -77,6 +78,63 @@ describe("PUT /api/posts/:id", () => {
 
     expect(res.status).toBe(403);
     expect(res.body.error).toMatch(/admin approval/);
+  });
+
+  it("keeps existing image files when editing signage toggle without new uploads", async () => {
+    const group = await createGroup();
+    const { user, token } = await createUser({ role: "creator", group_id: group.id });
+    const post = await createPost({ group_id: group.id, created_by: user.id });
+    const { image, absPath } = await createPostImage(post.id);
+
+    const processedMedia = JSON.stringify([{
+      image_path: image.image_path,
+      media_type: "IMAGE",
+      duration_seconds: 10,
+    }]);
+
+    const res = await request(app)
+      .put(`/api/posts/${post.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .field("title", post.title)
+      .field("processed_media", processedMedia)
+      .field("allowed_on_signage", "true");
+
+    expect(res.status).toBe(200);
+    expect(fs.existsSync(absPath)).toBe(true);
+
+    const { prisma } = require("./helpers");
+    const imagesAfter = await prisma.postImage.findMany({ where: { post_id: post.id } });
+    expect(imagesAfter.length).toBe(1);
+    expect(imagesAfter[0].image_path).toBe(image.image_path);
+  });
+
+  it("deletes removed image files from disk when updating processed_media", async () => {
+    const group = await createGroup();
+    const { user, token } = await createUser({ role: "creator", group_id: group.id });
+    const post = await createPost({ group_id: group.id, created_by: user.id });
+    const { image: imgKeep, absPath: pathKeep } = await createPostImage(post.id);
+    const { image: imgRemove, absPath: pathRemove } = await createPostImage(post.id);
+
+    const processedMedia = JSON.stringify([{
+      image_path: imgKeep.image_path,
+      media_type: "IMAGE",
+      duration_seconds: 10,
+    }]);
+
+    const res = await request(app)
+      .put(`/api/posts/${post.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .field("title", post.title)
+      .field("processed_media", processedMedia);
+
+    expect(res.status).toBe(200);
+    expect(fs.existsSync(pathKeep)).toBe(true);
+    expect(fs.existsSync(pathRemove)).toBe(false);
+
+    const { prisma } = require("./helpers");
+    const imagesAfter = await prisma.postImage.findMany({ where: { post_id: post.id } });
+    expect(imagesAfter.length).toBe(1);
+    expect(imagesAfter[0].image_path).toBe(imgKeep.image_path);
   });
 });
 
