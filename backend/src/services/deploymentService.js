@@ -74,18 +74,12 @@ const deployPostToDevices = async (emitter, actor, post, targetDevices, signageD
           continue;
         }
 
-        const existingAsset = await prisma.signageAsset.findFirst({
-          where: { device_id: device.id, post_id: post.id },
-        });
-
         const streamUrl = isLiveStream
           ? post.live_stream?.relay_url
           : null;
 
-        const result = existingAsset
-          ? { ok: true, already_exists: true, asset: existingAsset }
-          : emitter
-            ? await emitter(
+        const result = emitter
+          ? await emitter(
                 device.id,
                 "signage_command",
                 {

@@ -351,13 +351,19 @@ def sync():
     for asset in current_assets:
         aid = _asset_id(asset)
         pid = get_post_id_from_name(asset.get("name"))
-        
+
         # If it's one of ours but not allowed anymore
         if pid and pid not in allowed_post_ids:
             print(f"[content_sync] Purging unauthorized post {pid} (Asset {aid})")
             delete_from_anthias(aid)
             continue
-            
+
+        # Orphan/manual upload not managed by the server — purge when server has active deployments
+        if not pid and allowed_post_ids:
+            print(f"[content_sync] Purging orphan/manual asset {aid} ({asset.get('name')})")
+            delete_from_anthias(aid)
+            continue
+
         # If it IS allowed, track it to find duplicates
         if pid:
             if pid not in post_tracker: post_tracker[pid] = []
