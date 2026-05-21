@@ -9,6 +9,11 @@ export function mediaSrc(item) {
     : `${origin}${item.image_path}`;
 }
 
+function absoluteStreamUrl(url) {
+  if (!url) return "";
+  return url.startsWith("http") ? url : `${origin}${url}`;
+}
+
 export default function PostMedia({
   item,
   alt = "",
@@ -21,11 +26,12 @@ export default function PostMedia({
   streamUrl = "",
 }) {
   const src = mediaSrc(item);
+  const absStreamUrl = absoluteStreamUrl(streamUrl);
 
   // LIVE_STREAM: thumbnail + badge in preview, native video in full mode
-  if (streamUrl && (item?.media_type === "LIVE_STREAM" || !item)) {
+  if (absStreamUrl && (item?.media_type === "LIVE_STREAM" || !item)) {
     if (preview) {
-      const thumbSrc = src || streamUrl;
+      const thumbSrc = src || absStreamUrl;
       return (
         <div style={{ position: "relative", width: "100%", ...style }}>
           <img
@@ -76,7 +82,7 @@ export default function PostMedia({
     }
     return (
       <video
-        src={streamUrl}
+        src={absStreamUrl}
         controls
         playsInline
         autoPlay

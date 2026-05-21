@@ -47,7 +47,8 @@ async function checkStream(id) {
     return;
   }
 
-  if ((proc.type === "HLS" || proc.type === "YOUTUBE") && proc.passthrough) {
+  // RTMP has no local HLS file to probe; just mark online if process record exists
+  if (proc.type === "RTMP") {
     try {
       await liveStreamRepo.update(id, { status: "online", last_seen: new Date() });
     } catch (e) {

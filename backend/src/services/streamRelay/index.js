@@ -6,7 +6,7 @@ const youtubeRelay = require("./youtubeRelay");
 const rtmpServer = require("./rtmpServer");
 
 const STREAMS_DIR = process.env.STREAMS_DIR || path.resolve(__dirname, "../../../streams");
-const PROCESSES = new Map(); // id -> { child, type, startedAt }
+const PROCESSES = new Map(); // id -> { child, type, startedAt, refreshTimer, sourceUrl }
 
 function getStreamDir(id) {
   return path.join(STREAMS_DIR, String(id));
@@ -24,101 +24,20 @@ function getStatus(id) {
   return PROCESSES.has(id) ? "running" : "stopped";
 }
 
-/** Start relay for a stream. Idempotent. */
-async function start(stream) {
-  const id = stream.id;
-  if (PROCESSES.has(id)) {
-    return { ok: true, status: "already_running", relay_url: stream.relay_url };
-  }
-
-  if (stream.stream_type === "HLS") {
-    // Passthrough: no local relay needed
-    const relayUrl = stream.source_url;
-    await liveStreamRepo.update(id, { relay_url: relayUrl, status: "online" });
-    PROCESSES.set(id, { type: "HLS", passthrough: true, startedAt: Date.now() });
-    return { ok: true, status: "started", relay_url: relayUrl };
-  }
-
-  if (stream.stream_type === "RTSP") {
-    return startRtspRelay(stream);
-  }
-
-  if (stream.stream_type === "YOUTUBE") {
-    return startYouTubeRelay(stream);
-  }
-
-  if (stream.stream_type === "RTMP") {
-    const relayUrl = rtmpServer.getRelayUrl(stream.id);
-    await liveStreamRepo.update(id, { relay_url: relayUrl, status: "starting" });
-    PROCESSES.set(id, { type: "RTMP", passthrough: false, startedAt: Date.now() });
-    return { ok: true, status: "started", relay_url: relayUrl };
-  }
-
-  return { ok: false, error: `Unsupported stream_type: ${stream.stream_type}` };
+function buildRelayUrl(id) {
+  return `${process.env.PUBLIC_BASE_URL || ""}/streams/${id}/index.m3u8`;
 }
 
-/** Start a YouTube relay by resolving the URL via yt-dlp and treating it as HLS passthrough. */
-async function startYouTubeRelay(stream) {
-  const id = stream.id;
-  const resolvedUrl = await youtubeRelay.resolve(stream.source_url);
-  await liveStreamRepo.update(id, { relay_url: resolvedUrl, status: "online" });
-
-  const refreshTimer = youtubeRelay.startRefreshTimer(
-    id,
-    stream.source_url,
-    async (url) => {
-      await liveStreamRepo.update(id, { relay_url: url });
-    }
-  );
-
-  PROCESSES.set(id, {
-    type: "YOUTUBE",
-    passthrough: true,
-    refreshTimer,
-    startedAt: Date.now(),
-  });
-
-  return { ok: true, status: "started", relay_url: resolvedUrl };
-}
-
-/** Stop relay for a stream. Idempotent. */
-async function stop(id) {
-  const proc = PROCESSES.get(id);
-  if (!proc) {
-    return { ok: true, status: "already_stopped" };
-  }
-
-  if (proc.refreshTimer) {
-    proc.refreshTimer.clear();
-  }
-
-  if (proc.child) {
-    proc.child.kill("SIGTERM");
-    // Force kill after 5s if still alive
-    setTimeout(() => {
-      if (!proc.child.killed) proc.child.kill("SIGKILL");
-    }, 5000);
-  }
-
-  if (proc.type === "RTMP") {
-    rtmpServer.stopFfmpegRelay(id);
-  }
-
-  PROCESSES.delete(id);
-  await liveStreamRepo.update(id, { status: "offline" });
-  return { ok: true, status: "stopped" };
-}
-
-function startRtspRelay(stream) {
+/** Start an FFmpeg HLS relay for any input URL. */
+function startFfmpegHlsRelay(id, inputUrl, extraInputArgs = []) {
   return new Promise((resolve) => {
-    const id = stream.id;
     const dir = ensureStreamDir(id);
     const outputPath = path.join(dir, "index.m3u8");
-    const relayUrl = `${process.env.PUBLIC_BASE_URL || ""}/streams/${id}/index.m3u8`;
+    const relayUrl = buildRelayUrl(id);
 
     const args = [
-      "-rtsp_transport", "tcp",
-      "-i", stream.source_url,
+      ...extraInputArgs,
+      "-i", inputUrl,
       "-c", "copy",
       "-f", "hls",
       "-hls_time", "2",
@@ -133,7 +52,6 @@ function startRtspRelay(stream) {
     let stderrBuffer = "";
     child.stderr.on("data", (data) => {
       stderrBuffer += data.toString();
-      // Keep last 4KB of stderr for error reporting
       if (stderrBuffer.length > 4096) {
         stderrBuffer = stderrBuffer.slice(-4096);
       }
@@ -149,9 +67,8 @@ function startRtspRelay(stream) {
       }
     });
 
-    PROCESSES.set(id, { child, type: "RTSP", startedAt: Date.now() });
+    PROCESSES.set(id, { child, type: "HLS_RELAY", startedAt: Date.now(), sourceUrl: inputUrl });
 
-    // Give ffmpeg a moment to start writing the playlist
     setTimeout(async () => {
       if (fs.existsSync(outputPath)) {
         await liveStreamRepo.update(id, { relay_url: relayUrl, status: "online" });
@@ -161,6 +78,98 @@ function startRtspRelay(stream) {
       }
     }, 3000);
   });
+}
+
+/** Stop and restart FFmpeg with a new input URL. */
+async function restartFfmpegHlsRelay(id, newInputUrl, extraInputArgs = []) {
+  const proc = PROCESSES.get(id);
+  if (proc?.child) {
+    proc.child.kill("SIGTERM");
+    setTimeout(() => {
+      if (!proc.child.killed) proc.child.kill("SIGKILL");
+    }, 5000);
+  }
+  if (proc?.refreshTimer) {
+    proc.refreshTimer.clear();
+  }
+  PROCESSES.delete(id);
+  // Small delay to let old process release files
+  await new Promise((r) => setTimeout(r, 500));
+  return startFfmpegHlsRelay(id, newInputUrl, extraInputArgs);
+}
+
+/** Start relay for a stream. Idempotent. */
+async function start(stream) {
+  const id = stream.id;
+  if (PROCESSES.has(id)) {
+    return { ok: true, status: "already_running", relay_url: stream.relay_url };
+  }
+
+  if (stream.stream_type === "HLS") {
+    // Proxy external HLS through local FFmpeg so isolated Pi devices can reach it
+    return startFfmpegHlsRelay(id, stream.source_url);
+  }
+
+  if (stream.stream_type === "RTSP") {
+    return startFfmpegHlsRelay(id, stream.source_url, ["-rtsp_transport", "tcp"]);
+  }
+
+  if (stream.stream_type === "YOUTUBE") {
+    const resolvedUrl = await youtubeRelay.resolve(stream.source_url);
+    const result = await startFfmpegHlsRelay(id, resolvedUrl);
+
+    // Refresh timer: re-resolve YouTube URL and restart FFmpeg periodically
+    const refreshTimer = youtubeRelay.startRefreshTimer(
+      id,
+      stream.source_url,
+      async (url) => {
+        await restartFfmpegHlsRelay(id, url);
+      }
+    );
+
+    const proc = PROCESSES.get(id);
+    if (proc) {
+      proc.refreshTimer = refreshTimer;
+    }
+
+    return result;
+  }
+
+  if (stream.stream_type === "RTMP") {
+    const relayUrl = rtmpServer.getRelayUrl(stream.id);
+    await liveStreamRepo.update(id, { relay_url: relayUrl, status: "starting" });
+    PROCESSES.set(id, { type: "RTMP", passthrough: false, startedAt: Date.now() });
+    return { ok: true, status: "started", relay_url: relayUrl };
+  }
+
+  return { ok: false, error: `Unsupported stream_type: ${stream.stream_type}` };
+}
+
+/** Stop relay for a stream. Idempotent. */
+async function stop(id) {
+  const proc = PROCESSES.get(id);
+  if (!proc) {
+    return { ok: true, status: "already_stopped" };
+  }
+
+  if (proc.refreshTimer) {
+    proc.refreshTimer.clear();
+  }
+
+  if (proc.child) {
+    proc.child.kill("SIGTERM");
+    setTimeout(() => {
+      if (!proc.child.killed) proc.child.kill("SIGKILL");
+    }, 5000);
+  }
+
+  if (proc.type === "RTMP") {
+    rtmpServer.stopFfmpegRelay(id);
+  }
+
+  PROCESSES.delete(id);
+  await liveStreamRepo.update(id, { status: "offline" });
+  return { ok: true, status: "stopped" };
 }
 
 /** Restart relays for all streams that have published signage posts. */
