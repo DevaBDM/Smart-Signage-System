@@ -93,13 +93,23 @@ router.get("/meta/group-creators", auth(["admin", "creator"]), async (req, res) 
   res.json(users);
 });
 
-// GET single post
-router.get("/:id", auth(["admin", "creator"]), async (req, res) => {
+// GET single post — public for published feed posts; auth required otherwise
+router.get("/:id", async (req, res, next) => {
   const post = await prisma.post.findUnique({
     where: { id: Number(req.params.id) },
     include: { author: true, images: true, signage_metadata: true, signage_deployments: true, live_stream: true },
   });
   if (!post) return res.status(404).json({ error: "Not found" });
+
+  // Public access: only published posts allowed on feed
+  if (!req.user) {
+    if (post.status === "published" && post.allowed_on_feed) {
+      return res.json(post);
+    }
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  // Authenticated access
   if (req.user.role !== "admin") {
     const allowedGroupIds = getActorGroupIds(req.user);
     if (!allowedGroupIds.includes(post.group_id)) {
