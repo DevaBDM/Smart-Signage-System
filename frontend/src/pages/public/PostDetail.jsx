@@ -117,13 +117,14 @@ export default function PostDetail() {
 
       <div style={s.container}>
         {/* Image Carousel */}
-        {images.length > 0 && (
+        {(images.length > 0 || post.live_stream) && (
           <div style={s.carousel}>
             <PostMedia
               item={images[imgIdx]}
               alt={post.title}
               style={s.carouselImg}
               videoProps={{ style: s.carouselImg, controls: true }}
+              streamUrl={post.live_stream?.relay_url}
             />
             {images.length > 1 && (
               <div style={s.carouselControls}>

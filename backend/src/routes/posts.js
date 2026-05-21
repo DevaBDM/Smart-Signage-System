@@ -61,6 +61,7 @@ router.get("/", async (req, res, next) => {
       images: { orderBy: { order_index: "asc" } },
       signage_metadata: true,
       signage_deployments: true,
+      live_stream: true,
       group: true,
     },
     orderBy: { created_at: "desc" },
@@ -96,7 +97,7 @@ router.get("/meta/group-creators", auth(["admin", "creator"]), async (req, res) 
 router.get("/:id", auth(["admin", "creator"]), async (req, res) => {
   const post = await prisma.post.findUnique({
     where: { id: Number(req.params.id) },
-    include: { author: true, images: true, signage_metadata: true, signage_deployments: true },
+    include: { author: true, images: true, signage_metadata: true, signage_deployments: true, live_stream: true },
   });
   if (!post) return res.status(404).json({ error: "Not found" });
   if (req.user.role !== "admin") {

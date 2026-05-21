@@ -101,12 +101,13 @@ export default function Feed() {
               onClick={() => navigate(`/post/${p.id}`)}
               style={s.card}
             >
-              {p.images?.[0] ? (
+              {p.images?.[0] || p.live_stream ? (
                 <PostMedia
-                  item={p.images[0]}
+                  item={p.images?.[0]}
                   alt={p.title}
                   style={s.img}
                   preview
+                  streamUrl={p.live_stream?.relay_url}
                 />
               ) : (
                 <div style={s.imgPlaceholder}>📋</div>
