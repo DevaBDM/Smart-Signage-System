@@ -97,12 +97,24 @@ def scheduler_loop():
             expired = current is None or elapsed >= _duration_seconds(current)
 
             # Also advance if MPV went idle (video finished, nothing playing)
+            is_idle = False
             if not expired and current and current.get("media_type") != "LIVE_STREAM":
                 try:
                     if player.mpv.is_idle():
+                        is_idle = True
                         expired = True
                 except Exception:
                     pass
+
+            # If only one post and already playing it (not a jump), don't reload — just reset timer.
+            # Videos that go idle are allowed to loop; images just stay on screen.
+            if not jumped and len(active) == 1 and current:
+                only_post = active[0]
+                if current.get("post_id") == only_post.get("post_id") and not is_idle:
+                    with _lock:
+                        _state["last_change"] = time.time()
+                    time.sleep(1)
+                    continue
 
             if expired or jumped:
                 now = time.time()
