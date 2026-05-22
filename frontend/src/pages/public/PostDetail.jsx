@@ -8,6 +8,7 @@ import rehypeKatex from "rehype-katex";
 import remarkWikiLink from "remark-wiki-link";
 import api from "../../api/axios";
 import PostMedia from "../../components/PostMedia";
+import PostAIChat from "../../components/PostAIChat";
 import "katex/dist/katex.min.css"; // For LaTeX math
 
 // Custom renderer for Obsidian Callouts
@@ -188,6 +189,8 @@ export default function PostDetail() {
           )}
         </div>
       </div>
+
+      <PostAIChat postId={post.id} descriptionMarkdown={post.description_markdown} />
     </div>
   );
 }

@@ -31,6 +31,7 @@ app.use("/api/signage", require("./routes/signage"));
 app.use("/api/users", require("./routes/users"));
 app.use("/api/media", require("./routes/media"));
 app.use("/api/live-streams", require("./routes/liveStreams"));
+app.use("/api/ai", require("./routes/ai"));
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", uploads_dir: UPLOADS_DIR });
