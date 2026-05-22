@@ -39,3 +39,8 @@ export async function rotateStreamKey(id) {
   const res = await api.post(`/live-streams/${id}/rotate-key`);
   return res.data;
 }
+
+export async function getLiveStreamLogs(id, limit = 100) {
+  const res = await api.get(`/live-streams/${id}/logs?limit=${limit}`);
+  return res.data;
+}

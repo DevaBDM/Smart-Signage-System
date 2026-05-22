@@ -4,6 +4,7 @@ const fs = require("fs");
 const liveStreamRepo = require("../../repositories/liveStreamRepo");
 const youtubeRelay = require("./youtubeRelay");
 const rtmpServer = require("./rtmpServer");
+const logBuffer = require("./logBuffer");
 
 const STREAMS_DIR = process.env.STREAMS_DIR || path.resolve(__dirname, "../../../streams");
 const PROCESSES = new Map(); // id -> { child, type, startedAt, refreshTimer, sourceUrl }
@@ -25,7 +26,8 @@ function getStatus(id) {
 }
 
 function buildRelayUrl(id) {
-  return `${process.env.PUBLIC_BASE_URL || ""}/streams/${id}/index.m3u8`;
+  const base = process.env.PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
+  return `${base}/streams/${id}/index.m3u8`;
 }
 
 /** Start an FFmpeg HLS relay for any input URL. */
@@ -34,6 +36,8 @@ function startFfmpegHlsRelay(id, inputUrl, extraInputArgs = []) {
     const dir = ensureStreamDir(id);
     const outputPath = path.join(dir, "index.m3u8");
     const relayUrl = buildRelayUrl(id);
+
+    const isRtsp = inputUrl.startsWith("rtsp://");
 
     const args = [
       ...extraInputArgs,
@@ -49,39 +53,78 @@ function startFfmpegHlsRelay(id, inputUrl, extraInputArgs = []) {
     const ffmpegPath = require("@ffmpeg-installer/ffmpeg").path;
     const child = spawn(ffmpegPath, args, { detached: false });
 
+    logBuffer.append(id, `ffmpeg args: ${args.join(" ")}`);
+    logBuffer.append(id, `ffmpeg start pid=${child.pid}`);
+
     let stderrBuffer = "";
+    let hasExited = false;
+    let exitCode = null;
+
     child.stderr.on("data", (data) => {
-      stderrBuffer += data.toString();
+      const text = data.toString();
+      stderrBuffer += text;
       if (stderrBuffer.length > 4096) {
         stderrBuffer = stderrBuffer.slice(-4096);
       }
+      text.split("\n").forEach((line) => {
+        const trimmed = line.trim();
+        if (trimmed) logBuffer.append(id, `ffmpeg: ${trimmed}`);
+      });
+    });
+
+    child.stdout.on("data", (data) => {
+      data.toString().split("\n").forEach((line) => {
+        const trimmed = line.trim();
+        if (trimmed) logBuffer.append(id, `ffmpeg stdout: ${trimmed}`);
+      });
     });
 
     child.on("exit", async (code) => {
+      hasExited = true;
+      exitCode = code;
       PROCESSES.delete(id);
+      logBuffer.append(id, `ffmpeg exit code=${code}`);
       if (code !== 0 && code !== null) {
+        const lastErr = stderrBuffer.slice(-500) || `ffmpeg exited with code ${code}`;
+        logBuffer.append(id, `ffmpeg error: ${lastErr}`);
         await liveStreamRepo.update(id, {
           status: "error",
-          last_error: stderrBuffer.slice(-500) || `ffmpeg exited with code ${code}`,
+          last_error: lastErr,
         });
       }
     });
 
     PROCESSES.set(id, { child, type: "HLS_RELAY", startedAt: Date.now(), sourceUrl: inputUrl });
 
+    // RTSP negotiation can take 5-10 seconds; use longer timeout
+    const startupMs = isRtsp ? 10_000 : 3_000;
     setTimeout(async () => {
       if (fs.existsSync(outputPath)) {
         await liveStreamRepo.update(id, { relay_url: relayUrl, status: "online" });
         resolve({ ok: true, status: "started", relay_url: relayUrl });
-      } else {
-        resolve({ ok: false, error: "ffmpeg did not produce output within startup window" });
+        return;
       }
-    }, 3000);
+
+      if (hasExited && exitCode !== 0) {
+        const lastErr = stderrBuffer.slice(-500) || `ffmpeg exited with code ${exitCode}`;
+        logBuffer.append(id, `startup failed: ffmpeg exited early — ${lastErr}`);
+        resolve({ ok: false, error: lastErr });
+        return;
+      }
+
+      // Still running but no output yet — for RTSP give it more time
+      if (isRtsp && !hasExited) {
+        logBuffer.append(id, "startup: no playlist yet, FFmpeg still connecting (RTSP can be slow)...");
+      }
+
+      resolve({ ok: false, error: `ffmpeg did not produce output within ${startupMs}ms startup window` });
+    }, startupMs);
   });
 }
 
 /** Stop and restart FFmpeg with a new input URL. */
 async function restartFfmpegHlsRelay(id, newInputUrl, extraInputArgs = []) {
+  logBuffer.append(id, `ffmpeg restart requested input=${newInputUrl}`);
   const proc = PROCESSES.get(id);
   if (proc?.child) {
     proc.child.kill("SIGTERM");
@@ -101,21 +144,32 @@ async function restartFfmpegHlsRelay(id, newInputUrl, extraInputArgs = []) {
 /** Start relay for a stream. Idempotent. */
 async function start(stream) {
   const id = stream.id;
+  logBuffer.clear(id);
+  logBuffer.append(id, `relay start requested type=${stream.stream_type} source=${stream.source_url || "(none)"}`);
   if (PROCESSES.has(id)) {
+    logBuffer.append(id, "relay already running");
     return { ok: true, status: "already_running", relay_url: stream.relay_url };
   }
 
   if (stream.stream_type === "HLS") {
-    // Proxy external HLS through local FFmpeg so isolated Pi devices can reach it
+    logBuffer.append(id, `starting HLS relay from ${stream.source_url}`);
     return startFfmpegHlsRelay(id, stream.source_url);
   }
 
   if (stream.stream_type === "RTSP") {
-    return startFfmpegHlsRelay(id, stream.source_url, ["-rtsp_transport", "tcp"]);
+    logBuffer.append(id, `starting RTSP relay from ${stream.source_url}`);
+    // -rtsp_transport tcp forces TCP instead of UDP (more reliable through NAT/firewalls)
+    // -stimeout in microseconds (5s socket timeout for TCP connect)
+    return startFfmpegHlsRelay(id, stream.source_url, [
+      "-rtsp_transport", "tcp",
+      "-stimeout", "5000000",
+    ]);
   }
 
   if (stream.stream_type === "YOUTUBE") {
+    logBuffer.append(id, `resolving YouTube URL: ${stream.source_url}`);
     const resolvedUrl = await youtubeRelay.resolve(stream.source_url);
+    logBuffer.append(id, `resolved YouTube URL: ${resolvedUrl}`);
     const result = await startFfmpegHlsRelay(id, resolvedUrl);
 
     // Refresh timer: re-resolve YouTube URL and restart FFmpeg periodically
@@ -137,11 +191,13 @@ async function start(stream) {
 
   if (stream.stream_type === "RTMP") {
     const relayUrl = rtmpServer.getRelayUrl(stream.id);
+    logBuffer.append(id, `starting RTMP relay; awaiting ingest on ${relayUrl}`);
     await liveStreamRepo.update(id, { relay_url: relayUrl, status: "starting" });
     PROCESSES.set(id, { type: "RTMP", passthrough: false, startedAt: Date.now() });
     return { ok: true, status: "started", relay_url: relayUrl };
   }
 
+  logBuffer.append(id, `Unsupported stream_type: ${stream.stream_type}`);
   return { ok: false, error: `Unsupported stream_type: ${stream.stream_type}` };
 }
 
@@ -151,6 +207,8 @@ async function stop(id) {
   if (!proc) {
     return { ok: true, status: "already_stopped" };
   }
+
+  logBuffer.append(id, "relay stop requested");
 
   if (proc.refreshTimer) {
     proc.refreshTimer.clear();
@@ -169,6 +227,7 @@ async function stop(id) {
 
   PROCESSES.delete(id);
   await liveStreamRepo.update(id, { status: "offline" });
+  logBuffer.append(id, "relay stopped");
   return { ok: true, status: "stopped" };
 }
 
@@ -222,10 +281,15 @@ function pruneOrphanDirs() {
   });
 }
 
+function getLogs(id, limit) {
+  return logBuffer.get(id, limit);
+}
+
 module.exports = {
   start,
   stop,
   getStatus,
+  getLogs,
   bootstrapAll,
   pruneOrphanDirs,
   getStreamDir,

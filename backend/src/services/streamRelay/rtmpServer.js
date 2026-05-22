@@ -3,6 +3,7 @@ const path = require("path");
 const fs = require("fs");
 const NodeMediaServer = require("node-media-server");
 const liveStreamRepo = require("../../repositories/liveStreamRepo");
+const logBuffer = require("./logBuffer");
 
 const RTMP_PORT = Number(process.env.RTMP_PORT) || 1935;
 const RTMP_HTTP_PORT = Number(process.env.RTMP_HTTP_PORT) || 8000;
@@ -12,7 +13,8 @@ const RELAY_PROCESSES = new Map(); // streamId -> child
 let nms = null;
 
 function getRelayUrl(streamId) {
-  return `${process.env.PUBLIC_BASE_URL || ""}/streams/${streamId}/index.m3u8`;
+  const base = process.env.PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
+  return `${base}/streams/${streamId}/index.m3u8`;
 }
 
 function ensureStreamDir(id) {
@@ -38,14 +40,27 @@ function startFfmpegRelay(streamId, streamKey) {
     outputPath,
   ];
 
+  logBuffer.append(streamId, `rtmp ffmpeg args: ${args.join(" ")}`);
   const child = spawn(ffmpegPath, args, { detached: false });
+  logBuffer.append(streamId, `rtmp ffmpeg start pid=${child.pid}`);
 
   child.stderr.on("data", (data) => {
-    // ffmpeg logs to stderr; keep quiet unless debugging
+    data.toString().split("\n").forEach((line) => {
+      const trimmed = line.trim();
+      if (trimmed) logBuffer.append(streamId, `rtmp ffmpeg: ${trimmed}`);
+    });
+  });
+
+  child.stdout.on("data", (data) => {
+    data.toString().split("\n").forEach((line) => {
+      const trimmed = line.trim();
+      if (trimmed) logBuffer.append(streamId, `rtmp ffmpeg stdout: ${trimmed}`);
+    });
   });
 
   child.on("exit", async (code) => {
     RELAY_PROCESSES.delete(streamId);
+    logBuffer.append(streamId, `rtmp ffmpeg exit code=${code}`);
     if (code !== 0 && code !== null) {
       await liveStreamRepo.update(streamId, {
         status: "error",
@@ -55,18 +70,19 @@ function startFfmpegRelay(streamId, streamKey) {
   });
 
   RELAY_PROCESSES.set(streamId, child);
-  console.log(`[rtmpServer] Started ffmpeg relay for stream ${streamId}`);
+  logBuffer.append(streamId, `rtmp ffmpeg relay started for stream ${streamId}`);
 }
 
 function stopFfmpegRelay(streamId) {
   const child = RELAY_PROCESSES.get(streamId);
   if (!child) return;
+  logBuffer.append(streamId, "rtmp ffmpeg relay stop requested");
   child.kill("SIGTERM");
   setTimeout(() => {
     if (!child.killed) child.kill("SIGKILL");
   }, 5000);
   RELAY_PROCESSES.delete(streamId);
-  console.log(`[rtmpServer] Stopped ffmpeg relay for stream ${streamId}`);
+  logBuffer.append(streamId, "rtmp ffmpeg relay stopped");
 }
 
 function init() {
@@ -102,6 +118,7 @@ function init() {
     }
 
     console.log(`[rtmpServer] Accepted publish for stream ${stream.id} key ${streamKey}`);
+    logBuffer.append(stream.id, `rtmp ingest accepted key=${streamKey}`);
     startFfmpegRelay(stream.id, streamKey);
     await liveStreamRepo.update(stream.id, { status: "online" });
   });
@@ -114,6 +131,7 @@ function init() {
     });
 
     if (stream) {
+      logBuffer.append(stream.id, `rtmp ingest ended key=${streamKey}`);
       stopFfmpegRelay(stream.id);
       await liveStreamRepo.update(stream.id, { status: "idle" });
     }

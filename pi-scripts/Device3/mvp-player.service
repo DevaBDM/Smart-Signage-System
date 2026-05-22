@@ -1,0 +1,14 @@
+[Unit]
+Description=MVP Player
+After=network.target
+Wants=network.target
+
+[Service]
+WorkingDirectory=/media/signageScript
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /media/signageScript/mvp-player.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

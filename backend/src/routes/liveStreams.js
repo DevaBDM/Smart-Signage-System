@@ -96,4 +96,21 @@ router.post(
   })
 );
 
+router.get(
+  "/:id/logs",
+  auth(["admin", "creator"]),
+  asyncHandler(async (req, res) => {
+    const actor = await getActor(req.user);
+    const stream = await getStream(actor, Number(req.params.id));
+    const limit = Number(req.query.limit) || 100;
+    const logs = streamRelay.getLogs(stream.id, limit);
+    res.json({
+      stream_id: stream.id,
+      stream_type: stream.stream_type,
+      status: stream.status,
+      logs,
+    });
+  })
+);
+
 module.exports = router;
