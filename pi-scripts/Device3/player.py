@@ -26,8 +26,13 @@ class MpvController:
             # print(f"[mpv] IPC error: {e}")
             return None
 
-    def loadfile(self, path):
+    def loadfile(self, path, options=None):
+        if options:
+            return self._send(["loadfile", path, "replace", options])
         return self._send(["loadfile", path, "replace"])
+
+    def set_property(self, name, value):
+        return self._send(["set_property", name, value])
 
     def stop(self):
         return self._send(["stop"])

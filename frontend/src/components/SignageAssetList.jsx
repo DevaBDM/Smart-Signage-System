@@ -9,6 +9,12 @@ export default function SignageAssetList({
   onToggleEnabled,
   onDelete,
   formatDuration,
+  selectedAssetIds,
+  onToggleSelect,
+  onSelectAll,
+  onBulkHide,
+  onBulkShow,
+  onBulkDelete,
 }) {
   return (
     <div style={S.card}>
@@ -31,6 +37,69 @@ export default function SignageAssetList({
           {assetLoading ? "Loading..." : "Refresh"}
         </button>
       </div>
+
+      {selectedDeviceId && assets.length > 0 && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            marginBottom: 10,
+            padding: "8px 10px",
+            background: "#f9fafb",
+            borderRadius: 6,
+            border: "1px solid #e5e7eb",
+          }}
+        >
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={
+                assets.length > 0 &&
+                assets.filter((a) => a.can_manage).every((a) => selectedAssetIds.has(a.asset_id))
+              }
+              onChange={(e) => onSelectAll(e.target.checked)}
+            />
+            Select all
+          </label>
+          {selectedAssetIds.size > 0 && (
+            <>
+              <span style={{ fontSize: 12, color: "#6b7280" }}>
+                {selectedAssetIds.size} selected
+              </span>
+              <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={onBulkHide}
+                  style={{ ...S.btn, padding: "4px 10px", fontSize: 12 }}
+                >
+                  Hide
+                </button>
+                <button
+                  type="button"
+                  onClick={onBulkShow}
+                  style={{ ...S.btn, padding: "4px 10px", fontSize: 12 }}
+                >
+                  Show
+                </button>
+                <button
+                  type="button"
+                  onClick={onBulkDelete}
+                  style={{
+                    ...S.btn,
+                    padding: "4px 10px",
+                    fontSize: 12,
+                    background: "#fee2e2",
+                    color: "#b91c1c",
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
         <button
@@ -69,13 +138,22 @@ export default function SignageAssetList({
             key={asset.asset_id}
             style={{
               display: "grid",
-              gridTemplateColumns: "72px 1fr",
+              gridTemplateColumns: asset.can_manage ? "28px 72px 1fr" : "72px 1fr",
               gap: 12,
               padding: 12,
               border: "1px solid #e5e7eb",
               borderRadius: 8,
+              alignItems: "center",
             }}
           >
+            {asset.can_manage && (
+              <input
+                type="checkbox"
+                checked={selectedAssetIds.has(asset.asset_id)}
+                onChange={() => onToggleSelect(asset.asset_id)}
+                style={{ justifySelf: "center" }}
+              />
+            )}
             {asset.preview_url && asset.is_video ? (
               <video
                 src={asset.preview_url}
@@ -117,7 +195,11 @@ export default function SignageAssetList({
                 {asset.name || "Untitled asset"}
               </div>
               <div style={{ fontSize: 12, color: "#6b7280", marginTop: 3 }}>
-                {asset.is_video ? "Video" : "Image"} ·{" "}
+                {asset.is_live_stream
+                  ? "Live Stream"
+                  : asset.is_video
+                    ? "Video"
+                    : "Image"} ·{" "}
                 {asset.is_enabled ? "Visible" : "Hidden"} ·{" "}
                 {formatDuration(asset)}
                 {!asset.can_manage ? " · view only" : ""}

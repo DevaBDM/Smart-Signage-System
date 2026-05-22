@@ -135,6 +135,11 @@ def scheduler_loop():
 
                     if _play_post(post):
                         media.set_current_post(post)
+                        # Loop single videos internally; clear loop for multi-post playlists
+                        if len(active) == 1 and post.get("media_type") == "VIDEO":
+                            player.mpv.set_property("loop-file", "inf")
+                        else:
+                            player.mpv.set_property("loop-file", "no")
                         if post_id in _load_failures:
                             del _load_failures[post_id]
                         if not jumped:

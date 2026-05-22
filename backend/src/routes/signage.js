@@ -119,6 +119,7 @@ router.get(
             id: true,
             created_by: true,
             group_id: true,
+            live_stream_id: true,
             images: { orderBy: { order_index: "asc" }, take: 1 },
           },
         },
@@ -142,12 +143,13 @@ router.get(
     const mapTracked = (rows) =>
       visibleTracked(rows).map((asset) => {
         const media = asset.post?.images?.[0];
+        const isLive = asset.post?.live_stream_id != null;
         return {
           asset_id: asset.asset_id,
           post_id: asset.post_id,
           image_url: asset.image_url,
           mimetype: asset.mimetype,
-          media_type: media?.media_type || null,
+          media_type: isLive ? "LIVE_STREAM" : (media?.media_type || null),
           clip_duration_seconds: media?.duration_seconds ?? null,
           created_by: asset.post?.created_by ?? null,
           group_id: asset.post?.group_id ?? null,
@@ -172,6 +174,7 @@ router.get(
               id: true,
               created_by: true,
               group_id: true,
+              live_stream_id: true,
               images: { orderBy: { order_index: "asc" }, take: 1 },
             },
           },

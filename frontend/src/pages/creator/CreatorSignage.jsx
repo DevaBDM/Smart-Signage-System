@@ -45,6 +45,7 @@ export default function CreatorSignage() {
     },
   );
   const [msg, setMsg] = useState("");
+  const [selectedAssetIds, setSelectedAssetIds] = useState(new Set());
 
   const selectedDeviceId = form.device_id;
   const selectedPost = useMemo(
@@ -90,7 +91,9 @@ export default function CreatorSignage() {
       const merged = (data.assets || []).map((piAsset) => {
         const t = tracked.find((ta) => ta.asset_id === piAsset.asset_id);
         const serverPath = t?.image_url;
+        const isLiveStream = t?.media_type === "LIVE_STREAM";
         const isVideo =
+          isLiveStream ||
           t?.media_type === "VIDEO" ||
           piAsset.mimetype === "video" ||
           String(piAsset.mimetype || "").startsWith("video") ||
@@ -106,6 +109,7 @@ export default function CreatorSignage() {
         return {
           ...piAsset,
           is_video: isVideo,
+          is_live_stream: isLiveStream,
           can_manage: canManage,
           clip_duration: t?.clip_duration_seconds ?? null,
           preview_url: serverPath
@@ -116,6 +120,7 @@ export default function CreatorSignage() {
         };
       });
       setAssets(merged);
+      setSelectedAssetIds(new Set());
     } catch (e) {
       setMsg(e.response?.data?.error || "❌ Could not load display assets.");
     } finally {
@@ -192,7 +197,76 @@ export default function CreatorSignage() {
     }
   };
 
+  const toggleSelectAsset = (assetId) => {
+    setSelectedAssetIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(assetId)) next.delete(assetId);
+      else next.add(assetId);
+      return next;
+    });
+  };
+
+  const selectAllAssets = (checked) => {
+    if (checked) {
+      setSelectedAssetIds(new Set(assets.filter((a) => a.can_manage).map((a) => a.asset_id)));
+    } else {
+      setSelectedAssetIds(new Set());
+    }
+  };
+
+  const bulkHide = async () => {
+    const ids = [...selectedAssetIds];
+    if (!ids.length) return;
+    setMsg("");
+    let ok = 0;
+    for (const id of ids) {
+      try {
+        await signageApi.patchAsset(selectedDeviceId, id, { is_enabled: false });
+        ok++;
+      } catch { /* ignore per-item errors */ }
+    }
+    setMsg(`✅ Hidden ${ok}/${ids.length} assets.`);
+    setSelectedAssetIds(new Set());
+    await loadAssets();
+  };
+
+  const bulkShow = async () => {
+    const ids = [...selectedAssetIds];
+    if (!ids.length) return;
+    setMsg("");
+    let ok = 0;
+    for (const id of ids) {
+      try {
+        await signageApi.patchAsset(selectedDeviceId, id, { is_enabled: true });
+        ok++;
+      } catch { /* ignore per-item errors */ }
+    }
+    setMsg(`✅ Shown ${ok}/${ids.length} assets.`);
+    setSelectedAssetIds(new Set());
+    await loadAssets();
+  };
+
+  const bulkDelete = async () => {
+    const ids = [...selectedAssetIds];
+    if (!ids.length) return;
+    if (!confirm(`Delete ${ids.length} asset(s) from this display?`)) return;
+    setMsg("");
+    let ok = 0;
+    for (const id of ids) {
+      try {
+        await signageApi.deleteAsset(selectedDeviceId, id);
+        ok++;
+      } catch { /* ignore per-item errors */ }
+    }
+    setMsg(`✅ Deleted ${ok}/${ids.length} assets.`);
+    setSelectedAssetIds(new Set());
+    await loadAssets();
+  };
+
   const formatAssetDuration = (asset) => {
+    if (asset.is_live_stream) {
+      return `${asset.duration || 3600}s stream`;
+    }
     if (asset.is_video) {
       const clip = asset.clip_duration;
       return clip ? `${clip}s clip` : "full video";
@@ -233,6 +307,12 @@ export default function CreatorSignage() {
             onToggleEnabled={setAssetEnabled}
             onDelete={deleteAsset}
             formatDuration={formatAssetDuration}
+            selectedAssetIds={selectedAssetIds}
+            onToggleSelect={toggleSelectAsset}
+            onSelectAll={selectAllAssets}
+            onBulkHide={bulkHide}
+            onBulkShow={bulkShow}
+            onBulkDelete={bulkDelete}
           />
         </div>
       </main>
