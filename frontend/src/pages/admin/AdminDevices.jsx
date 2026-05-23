@@ -34,6 +34,9 @@ export default function AdminDevices() {
   const [msg, setMsg] = useState("");
   const [regMsg, setRegMsg] = useState("");
   const [sort, setSort] = useState({ by: "id", order: "asc" });
+  const [emergencyFile, setEmergencyFile] = useState(null);
+  const [emergencyUploading, setEmergencyUploading] = useState(false);
+  const [emergencyMsg, setEmergencyMsg] = useState("");
 
   const load = () => {
     devicesApi.listDevices(sort.by, sort.order)
@@ -180,6 +183,26 @@ export default function AdminDevices() {
       setSel(null);
     } catch (e) {
       setMsg(e.response?.data?.error || "❌ Rejection failed.");
+    }
+  };
+
+  const handleEmergencyUpload = async (e) => {
+    e.preventDefault();
+    if (!sel || !emergencyFile) return;
+    setEmergencyUploading(true);
+    setEmergencyMsg("");
+    try {
+      const r = await devicesApi.uploadEmergencyAsset(sel.id, emergencyFile);
+      setEmergencyMsg("✅ Emergency asset uploaded.");
+      setEmergencyFile(null);
+      // Refresh selected device to show new path
+      const updated = await devicesApi.getDevice(sel.id);
+      setSel(updated);
+      load();
+    } catch (e) {
+      setEmergencyMsg(e.response?.data?.error || "❌ Upload failed.");
+    } finally {
+      setEmergencyUploading(false);
     }
   };
 
@@ -377,6 +400,55 @@ export default function AdminDevices() {
                   🗑️ Erase & Remove Device
                 </button>
               </form>
+
+              {/* Emergency Asset Upload */}
+              <div
+                style={{
+                  marginTop: 20,
+                  padding: 14,
+                  borderRadius: 10,
+                  background: "#fef2f2",
+                  border: "1.5px solid #fca5a5",
+                }}
+              >
+                <h3 style={{ fontWeight: 700, fontSize: 14, color: "#991b1b", marginBottom: 8 }}>
+                  🚨 Emergency Asset
+                </h3>
+                {sel.emergency_asset_path && (
+                  <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 8, wordBreak: "break-all" }}>
+                    Current: <code>{sel.emergency_asset_path}</code>
+                  </div>
+                )}
+                <form
+                  onSubmit={handleEmergencyUpload}
+                  style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                >
+                  <input
+                    type="file"
+                    accept="image/*,video/*"
+                    onChange={(e) => setEmergencyFile(e.target.files?.[0] || null)}
+                    style={{ fontSize: 13 }}
+                  />
+                  {emergencyMsg && (
+                    <div style={messageStyle(emergencyMsg)}>
+                      {emergencyMsg}
+                    </div>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={!emergencyFile || emergencyUploading}
+                    style={{
+                      ...S.btn,
+                      background: emergencyUploading ? "#d1d5db" : "#dc2626",
+                      color: "#fff",
+                      border: "none",
+                      padding: "6px 12px",
+                    }}
+                  >
+                    {emergencyUploading ? "Uploading…" : "Upload Emergency Asset"}
+                  </button>
+                </form>
+              </div>
             </div>
           )}
             <div

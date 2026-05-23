@@ -16,3 +16,11 @@ export const removeDevice = (id) => api.delete(`/devices/${id}`);
 export const approveDevice = (id, data) => api.post(`/devices/${id}/approve`, data);
 
 export const rejectDevice = (id) => api.post(`/devices/${id}/reject`);
+
+export const uploadEmergencyAsset = (id, file) => {
+  const formData = new FormData();
+  formData.append("asset", file);
+  return api.post(`/devices/${id}/emergency-asset`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+};
