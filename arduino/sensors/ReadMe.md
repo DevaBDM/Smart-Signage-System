@@ -56,6 +56,8 @@ Where emergency assets live in the system:
 3. Each Pi syncs its own device settings during the normal content sync loop, downloads the asset to `emergency_fallback.mp4` in the same folder as the running Python script, and caches it locally.
 4. When the **hardware emergency button** is pressed (or the admin triggers emergency mode), the Pi immediately plays this cached file.
 
+> **Note:** The sensor serial output is consumed by all device types (Device1/2 via `socket_client.py`, Device3 via `sensors.py`). The emergency button signal is parsed from `SENSOR:...emergency:1` in the serial stream.
+
 ---
 
 # sensors.ino — Current Code

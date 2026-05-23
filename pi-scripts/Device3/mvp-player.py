@@ -9,6 +9,7 @@ import api
 import socket_client
 import scheduler
 import sensors
+import brightness_control
 from config import SYNC_INTERVAL, EMERGENCY_FALLBACK, DISCONNECTION_IMAGE
 
 def sync_loop():
@@ -115,6 +116,7 @@ if __name__ == "__main__":
         threading.Thread(target=sync_loop, name="SyncLoop", daemon=True),
         threading.Thread(target=scheduler.scheduler_loop, name="SchedulerLoop", daemon=True),
         threading.Thread(target=sensors.sensor_loop, args=(socket_client.sio,), name="SensorLoop", daemon=True),
+        threading.Thread(target=brightness_control.run, name="BrightnessLoop", daemon=True),
     ]
 
     for t in threads:
