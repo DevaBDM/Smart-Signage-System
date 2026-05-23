@@ -348,12 +348,16 @@ def _push_disconnection_image():
         print(f"[disconnection] Push failed: {e}")
 
 def sensor_loop():
-    try:
-        import serial
+    import serial
+    ser = None
+    while True:
+        try:
+            if ser is None:
+                print(f"[sensor_loop] Opening {SERIAL_PORT} at {BAUD_RATE}...")
+                ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=2)
+                print(f"[sensor_loop] Serial port opened successfully")
+                time.sleep(2)
 
-        ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=2)
-        time.sleep(2)
-        while True:
             line = ser.readline().decode("utf-8").strip()
             if not line.startswith("SENSOR:"):
                 continue
@@ -400,8 +404,14 @@ def sensor_loop():
                     )
             except Exception as e:
                 print(f"[sensor_loop] parse error: {e}")
-    except Exception as e:
-        print(f"[sensor_loop] {e}")
+        except serial.SerialException as e:
+            print(f"[sensor_loop] Serial port error: {e} — retrying in 5s")
+            ser = None
+            time.sleep(5)
+        except Exception as e:
+            print(f"[sensor_loop] loop error: {e} — retrying in 5s")
+            ser = None
+            time.sleep(5)
 
 
 def _sync_emergency_asset():
