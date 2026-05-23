@@ -11,6 +11,7 @@ const STREAM_TYPES = [
 
 export default function LiveStreamForm({
   onSubmit,
+  onThumbnailUpload,
   loading,
   groups,
   initial = {},
@@ -22,6 +23,8 @@ export default function LiveStreamForm({
     group_id: initial.group_id ? String(initial.group_id) : "",
   });
   const [msg, setMsg] = useState("");
+  const [thumbPreview, setThumbPreview] = useState(initial.thumbnail_path || null);
+  const [thumbUploading, setThumbUploading] = useState(false);
 
   useEffect(() => {
     setForm({
@@ -30,10 +33,26 @@ export default function LiveStreamForm({
       source_url: initial.source_url || "",
       group_id: initial.group_id ? String(initial.group_id) : "",
     });
+    setThumbPreview(initial.thumbnail_path || null);
     setMsg("");
   }, [initial.id]);
 
   const setField = (patch) => setForm({ ...form, ...patch });
+
+  const handleThumbChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !onThumbnailUpload || !initial.id) return;
+    setThumbUploading(true);
+    try {
+      const data = await onThumbnailUpload(initial.id, file);
+      setThumbPreview(data.thumbnail_path);
+    } catch (err) {
+      setMsg(err.response?.data?.error || "Thumbnail upload failed");
+    } finally {
+      setThumbUploading(false);
+      e.target.value = "";
+    }
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -107,6 +126,45 @@ export default function LiveStreamForm({
             <option key={g.id} value={String(g.id)}>{g.name}</option>
           ))}
         </select>
+
+        {/* Thumbnail */}
+        <div style={{ marginTop: 6 }}>
+          <label style={S.label}>Thumbnail</label>
+          {thumbPreview && (
+            <div style={{ marginBottom: 8 }}>
+              <img
+                src={thumbPreview}
+                alt="Thumbnail"
+                style={{ width: 120, height: 80, objectFit: "cover", borderRadius: 6, border: "1px solid #e5e7eb" }}
+              />
+            </div>
+          )}
+          {initial.id && (
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+              <input
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={handleThumbChange}
+              />
+              <span
+                style={{
+                  ...S.btn,
+                  padding: "6px 12px",
+                  fontSize: 13,
+                  opacity: thumbUploading ? 0.6 : 1,
+                }}
+              >
+                {thumbUploading ? "Uploading…" : thumbPreview ? "Change Thumbnail" : "Add Thumbnail"}
+              </span>
+            </label>
+          )}
+          {!initial.id && (
+            <span style={{ fontSize: 12, color: "#9ca3af" }}>
+              Save stream first to upload thumbnail
+            </span>
+          )}
+        </div>
 
         <div style={{ marginTop: 8 }}>
           <Button type="submit" loading={loading}>

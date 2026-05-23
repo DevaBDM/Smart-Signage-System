@@ -284,16 +284,23 @@ def push_to_anthias(post):
 
             now = datetime.now(timezone.utc)
             duration = int(post.get("duration_seconds") or 3600)
+            start_dt = post.get("start_date")
+            end_dt = post.get("end_date")
+            start_date = start_dt if start_dt else (now - timedelta(minutes=1)).isoformat().replace("+00:00", "Z")
+            end_date = end_dt if end_dt else (now + timedelta(days=3650)).isoformat().replace("+00:00", "Z")
             payload = {
                 "name": asset_name,
                 "uri": stream_url,
                 "mimetype": "webpage",
-                "start_date": (now - timedelta(minutes=1)).isoformat().replace("+00:00", "Z"),
-                "end_date": (now + timedelta(days=3650)).isoformat().replace("+00:00", "Z"),
+                "start_date": start_date,
+                "end_date": end_date,
                 "duration": duration,
                 "is_enabled": True,
                 "skip_asset_check": True,
             }
+            priority = post.get("priority")
+            if priority is not None:
+                payload["play_order"] = int(priority)
             print(f"[content_sync] Registering LIVE stream asset '{asset_name}' (webpage, {duration}s)")
             res = register_anthias_asset(payload)
             if res.get("ok"):
@@ -344,16 +351,23 @@ def push_to_anthias(post):
     clip_seconds = int(post.get("duration_seconds") or 10)
     # Anthias v2: video duration must be 0 (uses native video length); images use slide time.
     duration = 0 if is_video else clip_seconds
+    start_dt = post.get("start_date")
+    end_dt = post.get("end_date")
+    start_date = start_dt if start_dt else (now - timedelta(minutes=1)).isoformat().replace("+00:00", "Z")
+    end_date = end_dt if end_dt else (now + timedelta(days=3650)).isoformat().replace("+00:00", "Z")
     payload = {
         "name": asset_name,
         "uri": local_uri,
         "mimetype": mimetype,
-        "start_date": (now - timedelta(minutes=1)).isoformat().replace("+00:00", "Z"),
-        "end_date": (now + timedelta(days=3650)).isoformat().replace("+00:00", "Z"),
+        "start_date": start_date,
+        "end_date": end_date,
         "duration": duration,
         "is_enabled": True,
         "skip_asset_check": True,
     }
+    priority = post.get("priority")
+    if priority is not None:
+        payload["play_order"] = int(priority)
     if is_video and image_path.lower().endswith(".mp4"):
         payload["ext"] = "mp4"
 

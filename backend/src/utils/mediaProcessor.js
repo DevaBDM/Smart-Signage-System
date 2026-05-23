@@ -222,6 +222,7 @@ module.exports = {
   TEMP_DIR,
   isVideoMime,
   isImageMime,
+  processImage,
   processMediaFile,
   processMediaFiles,
   deleteMediaFile,

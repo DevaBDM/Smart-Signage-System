@@ -44,3 +44,12 @@ export async function getLiveStreamLogs(id, limit = 100) {
   const res = await api.get(`/live-streams/${id}/logs?limit=${limit}`);
   return res.data;
 }
+
+export async function uploadLiveStreamThumbnail(id, file) {
+  const formData = new FormData();
+  formData.append("thumbnail", file);
+  const res = await api.post(`/live-streams/${id}/thumbnail`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data;
+}

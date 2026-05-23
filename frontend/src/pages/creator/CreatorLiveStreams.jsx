@@ -11,6 +11,7 @@ import {
   startLiveStream,
   stopLiveStream,
   getLiveStreamLogs,
+  uploadLiveStreamThumbnail,
 } from "../../api/liveStreams";
 import * as S from "../../styles";
 
@@ -216,6 +217,7 @@ export default function CreatorLiveStreams() {
         <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 24 }}>
           <LiveStreamForm
             onSubmit={editingId ? handleUpdate : handleCreate}
+            onThumbnailUpload={uploadLiveStreamThumbnail}
             loading={loading}
             groups={groups}
             initial={editingStream || {}}
