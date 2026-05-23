@@ -10,6 +10,9 @@ _FAILURE_COOLDOWN = 30  # seconds to skip a post after a load failure
 def request_jump(post_id=None, direction=None):
     """Ask the scheduler to jump immediately."""
     global _jump_request
+    if media.is_emergency():
+        print("[scheduler] Jump ignored: emergency mode active")
+        return
     _jump_request = {"post_id": post_id, "direction": direction}
 
 def _duration_seconds(post):
@@ -61,13 +64,18 @@ def scheduler_loop():
     global _jump_request
     while True:
         try:
+            # Emergency mode: do nothing, let emergency video keep playing
+            if media.is_emergency():
+                time.sleep(1)
+                continue
+
             player.ensure_mpv_running()
             active = media.get_active_posts()
 
             if not active:
                 _state, _lock = media.get_state()
                 with _lock:
-                    if _state["current_post"]:
+                    if _state["current_post"] and not media.is_emergency():
                         _state["current_post"] = None
                         player.mpv.stop()
                 time.sleep(2)

@@ -3,6 +3,7 @@ const multer = require("multer");
 const path = require("path");
 const prisma = require("../db/prisma");
 const auth = require("../middleware/auth");
+const authDevice = require("../middleware/authDevice");
 const asyncHandler = require("../middleware/asyncHandler");
 const {
   registerDevice,
@@ -68,6 +69,21 @@ router.get("/", auth(["admin", "creator"]), async (req, res) => {
   });
   res.json(devices);
 });
+
+// Device-authenticated: a Pi reads its own record (emergency_asset_path, etc.)
+// MUST be registered BEFORE /:id so Express matches /me first.
+router.get("/me", authDevice, asyncHandler(async (req, res) => {
+  const device = await prisma.device.findUnique({
+    where: { id: req.device.id },
+    include: {
+      group: true,
+      groups: { include: { group: true } },
+      sensor_logs: { orderBy: { created_at: "desc" }, take: 50 },
+    },
+  });
+  if (!device) return res.status(404).json({ error: "Not found" });
+  res.json(device);
+}));
 
 // Get single device
 router.get("/:id", auth(["admin"]), async (req, res) => {

@@ -106,6 +106,14 @@ def on_emergency_mode_start(data):
     _push_local_emergency()
 
 
+@sio.on("emergency_mode_end")
+def on_emergency_mode_end(data):
+    print(f"[socket] Emergency mode ended for group {data.get('group_id')} (cleared by {data.get('cleared_by')})")
+    # Refresh Anthias so it resumes normal playlist cycling
+    import subprocess
+    subprocess.run(["pkill", "-HUP", "anthias"], capture_output=True)
+
+
 @sio.on("signage_command")
 def on_signage_command(data):
     print(f"[socket] Signage command: {data}")
@@ -201,8 +209,10 @@ _emu2 = {"triggered": False}
 def _push_local_emergency():
     """Push a locally cached emergency asset to Anthias immediately."""
     fallback = EMERGENCY_FALLBACK
+    print(f"[emergency] Pushing local emergency asset from: {fallback}")
+    print(f"[emergency] File exists: {os.path.exists(fallback)}")
     if not os.path.exists(fallback):
-        print("[emergency] No local fallback asset found")
+        print("[emergency] No local fallback asset found — cannot push to Anthias")
         return
     try:
         from content_sync import register_anthias_asset
@@ -245,19 +255,23 @@ def sensor_loop():
 
                 # Emergency button detection
                 emergency_raw = values.get("emergency", "0")
+                print(f"[sensor_loop] parsed emergency={emergency_raw}, triggered={_emu2['triggered']}, sio.connected={sio.connected}")
                 if emergency_raw == "1" and not _emu2["triggered"]:
-                    print("[sensor_loop] EMERGENCY BUTTON DETECTED")
+                    print("[sensor_loop] EMERGENCY BUTTON DETECTED — attempting emit + local push")
                     _emu2["triggered"] = True
                     # Notify server immediately
                     if sio.connected:
                         try:
                             sio.emit("emergency_trigger", {"device_id": DEVICE_ID})
-                            print("[sensor_loop] emergency_trigger emitted")
+                            print("[sensor_loop] emergency_trigger emitted successfully")
                         except Exception as e:
                             print(f"[sensor_loop] emergency_trigger emit failed: {e}")
+                    else:
+                        print("[sensor_loop] WARNING: sio not connected — emergency_trigger NOT emitted")
                     # Local fail-safe: push cached emergency asset to Anthias
                     _push_local_emergency()
                 elif emergency_raw == "0" and _emu2["triggered"]:
+                    print("[sensor_loop] Emergency button released — resetting debounce")
                     _emu2["triggered"] = False
 
                 if sio.connected:
@@ -278,15 +292,17 @@ def sensor_loop():
 
 def _sync_emergency_asset():
     """Download the device's emergency asset from the server to local cache."""
+    global _current_token
     import requests
-    fallback = "/home/pi/emergency_fallback.mp4"
-    etag_file = "/home/pi/emergency_fallback.etag"
+    fallback = EMERGENCY_FALLBACK
+    etag_file = fallback + ".etag"
+    print(f"[emergency_sync] Using token: {'<set>' if _current_token else '<EMPTY>'}")
     try:
         headers = {}
         if _current_token:
             headers["Authorization"] = f"Bearer {_current_token}"
         r = requests.get(
-            f"{SERVER_URL}/devices/{DEVICE_ID}",
+            f"{SERVER_URL}/devices/me",
             headers=headers,
             timeout=15,
         )
@@ -320,6 +336,15 @@ def _sync_emergency_asset():
             with open(etag_file, "w") as f:
                 f.write(remote_etag)
         print(f"[emergency_sync] Cached to {fallback}")
+    except requests.exceptions.HTTPError as e:
+        status = e.response.status_code if e.response else "?"
+        if status == 401:
+            print(f"[emergency_sync] 401 Unauthorized — clearing token for re-auth")
+            _current_token = ""
+            if os.path.exists(TOKEN_FILE):
+                os.remove(TOKEN_FILE)
+        else:
+            print(f"[emergency_sync] HTTP {status}: {e}")
     except Exception as e:
         print(f"[emergency_sync] {e}")
 

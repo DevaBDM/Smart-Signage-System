@@ -74,17 +74,26 @@ def sync_deployments(ensure_cached_callback):
 def fetch_device_settings():
     """Fetch this device's settings from the server (including emergency_asset_path)."""
     token = load_token()
+    print(f"[api] fetch_device_settings using token: {'<set>' if token else '<EMPTY>'}")
     headers = {}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     try:
         r = requests.get(
-            f"{SERVER_URL}/devices/{DEVICE_ID}",
+            f"{SERVER_URL}/devices/me",
             headers=headers,
             timeout=15,
         )
         r.raise_for_status()
         return r.json()
+    except requests.exceptions.HTTPError as e:
+        status = e.response.status_code if e.response else "?"
+        if status == 401:
+            print(f"[api] fetch_device_settings 401 — token invalid, clearing for re-auth")
+            save_token("")
+        else:
+            print(f"[api] Failed to fetch device settings HTTP {status}: {e}")
+        return None
     except Exception as e:
         print(f"[api] Failed to fetch device settings: {e}")
         return None

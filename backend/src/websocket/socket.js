@@ -196,7 +196,7 @@ module.exports = (httpServer) => {
     // ── Pi → Server: emergency button triggered ──────────────
     socket.on("emergency_trigger", async (data) => {
       const deviceId = Number(data.device_id);
-      console.log(`[socket] emergency_trigger from device ${deviceId}`);
+      console.log(`[socket] emergency_trigger received from device ${deviceId}`, data);
 
       const device = await prisma.device.findUnique({
         where: { id: deviceId },
@@ -206,6 +206,7 @@ module.exports = (httpServer) => {
         console.warn(`[socket] emergency_trigger: unknown device ${deviceId}`);
         return;
       }
+      console.log(`[socket] emergency_trigger: device ${deviceId} found, group_id=${device.group_id}, memberships=${device.groups?.length || 0}`);
 
       // Collect all group IDs this device belongs to
       const groupIds = new Set();
@@ -217,6 +218,7 @@ module.exports = (httpServer) => {
         console.warn(`[socket] emergency_trigger: device ${deviceId} has no groups`);
         return;
       }
+      console.log(`[socket] emergency_trigger: affecting groups [${Array.from(groupIds).join(", ")}]`);
 
       // Update each group's signage_state to EMERGENCY
       for (const gid of groupIds) {
@@ -227,6 +229,7 @@ module.exports = (httpServer) => {
           console.error(`[socket] failed to set group ${gid} to EMERGENCY:`, e.message);
         });
       }
+      console.log(`[socket] emergency_trigger: updated ${groupIds.size} group(s) to EMERGENCY`);
 
       // Broadcast emergency_mode_start to ALL online devices in those groups
       const devicesInGroups = await prisma.device.findMany({
@@ -240,7 +243,9 @@ module.exports = (httpServer) => {
         },
         select: { id: true },
       });
+      console.log(`[socket] emergency_trigger: found ${devicesInGroups.length} online device(s) in affected groups`);
 
+      let broadcastCount = 0;
       for (const d of devicesInGroups) {
         const targetSocketId = deviceSockets.get(d.id);
         if (targetSocketId) {
@@ -248,9 +253,12 @@ module.exports = (httpServer) => {
             triggered_by: deviceId,
             groups: Array.from(groupIds),
           });
+          broadcastCount++;
+        } else {
+          console.warn(`[socket] emergency_trigger: device ${d.id} is online but has no active socket`);
         }
       }
-      console.log(`[socket] emergency_mode_start broadcast to ${devicesInGroups.length} devices in groups [${Array.from(groupIds).join(", ")}]`);
+      console.log(`[socket] emergency_mode_start broadcast to ${broadcastCount}/${devicesInGroups.length} devices in groups [${Array.from(groupIds).join(", ")}]`);
     });
 
     // ── Disconnect: mark offline ──────────────────────────────

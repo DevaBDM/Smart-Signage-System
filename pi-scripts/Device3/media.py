@@ -18,6 +18,7 @@ _state = {
     "current_idx": 0,      # index in the active rotation
     "last_change": 0,      # timestamp when current post started
     "current_post": None,  # the post currently on screen
+    "emergency_active": False,  # True when emergency mode is active
 }
 
 def _now():
@@ -131,10 +132,19 @@ def remove_post(post_id):
         _state["posts"] = [p for p in _state["posts"] if p.get("post_id") != post_id]
     save_playlist()
 
+def is_emergency():
+    with _state_lock:
+        return _state["emergency_active"]
+
+def set_emergency(active):
+    with _state_lock:
+        _state["emergency_active"] = active
+
 def clear_all():
     with _state_lock:
         _state["posts"] = []
-        _state["current_post"] = None
+        if not _state["emergency_active"]:
+            _state["current_post"] = None
     save_playlist()
 
 def _is_active(post):

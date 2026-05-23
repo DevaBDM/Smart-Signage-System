@@ -82,7 +82,7 @@ router.put("/:id", auth(["admin"]), asyncHandler(async (req, res) => {
     });
 
     if (parsedState && parsedState !== existing.signage_state) {
-      await refreshGroupDevices(req.app, groupId);
+      await refreshGroupDevices(req.app, groupId, parsedState, existing.signage_state);
     }
 
     res.json(updated);

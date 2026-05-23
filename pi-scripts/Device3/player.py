@@ -120,7 +120,8 @@ def play_emergency(path):
         print(f"[player] Emergency file not found: {path}")
         return False
     ensure_mpv_running()
-    mpv.loadfile(path, {"loop-file": "inf"})
+    mpv.loadfile(path)
+    mpv.set_property("loop-file", "inf")
     mpv.show_text("EMERGENCY ALERT", 5000)
     print(f"[player] Emergency playback started: {path}")
     return True

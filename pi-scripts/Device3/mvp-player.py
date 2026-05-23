@@ -9,7 +9,7 @@ import api
 import socket_client
 import scheduler
 import sensors
-from config import SYNC_INTERVAL
+from config import SYNC_INTERVAL, EMERGENCY_FALLBACK
 
 def sync_loop():
     """Background thread: periodic sync with server.
@@ -45,6 +45,27 @@ def sync_loop():
 
             # Also sync the emergency asset from server
             api.sync_emergency_asset()
+
+            # Check group states to auto-clear or auto-enter emergency
+            device = api.fetch_device_settings()
+            if device:
+                groups = []
+                if device.get("group"):
+                    groups.append(device["group"])
+                for dg in device.get("groups", []):
+                    g = dg.get("group")
+                    if g:
+                        groups.append(g)
+                any_emergency = any(g.get("signage_state") == "EMERGENCY" for g in groups)
+
+                if any_emergency and not media.is_emergency():
+                    print("[sync] Server group in EMERGENCY — entering emergency mode")
+                    media.set_emergency(True)
+                    player.play_emergency(EMERGENCY_FALLBACK)
+                elif not any_emergency and media.is_emergency():
+                    print("[sync] Server groups all NORMAL — clearing emergency mode")
+                    media.set_emergency(False)
+                    scheduler.request_jump(direction="next")
         except Exception as e:
             print(f"[sync] Loop error: {e}")
             wait_time = 10

@@ -183,6 +183,9 @@ def on_playlist_update(data):
 
 @sio.on("refresh_display")
 def on_refresh_display(data):
+    if media.is_emergency():
+        print("[socket] Refresh blocked: emergency mode active")
+        return
     print("[socket] Refresh display requested")
     player.ensure_mpv_running()
     # Force reload of current media by resetting last_change
@@ -193,6 +196,9 @@ def on_refresh_display(data):
 
 @sio.on("restart_display")
 def on_restart_display(data):
+    if media.is_emergency():
+        print("[socket] Restart blocked: emergency mode active")
+        return
     print("[socket] Restart display requested")
     player.stop_mpv()
     time.sleep(1)
@@ -201,8 +207,40 @@ def on_restart_display(data):
 
 @sio.on("emergency_mode_start")
 def on_emergency_mode_start(data):
+    if media.is_emergency():
+        print("[socket] Emergency already active, ignoring duplicate start")
+        return
     print(f"[socket] Emergency mode started by device {data.get('triggered_by')} for groups {data.get('groups')}")
+    media.set_emergency(True)
     player.play_emergency(EMERGENCY_FALLBACK)
+
+
+@sio.on("emergency_mode_end")
+def on_emergency_mode_end(data):
+    print(f"[socket] Emergency mode ended for group {data.get('group_id')} (cleared by {data.get('cleared_by')})")
+
+    # Check ALL device groups before clearing — stay emergency if any group still emergency
+    try:
+        device = api.fetch_device_settings()
+        if device:
+            groups = []
+            if device.get("group"):
+                groups.append(device["group"])
+            for dg in device.get("groups", []):
+                g = dg.get("group")
+                if g:
+                    groups.append(g)
+            any_emergency = any(g.get("signage_state") == "EMERGENCY" for g in groups)
+            if any_emergency:
+                print(f"[socket] {sum(1 for g in groups if g.get('signage_state') == 'EMERGENCY')} other group(s) still EMERGENCY — staying in emergency mode")
+                return
+    except Exception as e:
+        print(f"[socket] Failed to check group states: {e}")
+        return
+
+    media.set_emergency(False)
+    # Force scheduler to resume normal content immediately
+    scheduler.request_jump(direction="next")
 
 
 @sio.on("auth_error")
