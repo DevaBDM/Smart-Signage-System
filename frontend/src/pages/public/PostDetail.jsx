@@ -234,7 +234,13 @@ export default function PostDetail() {
         </div>
       </div>
 
-      <PostAIChat postId={post.id} descriptionMarkdown={post.description_markdown} attachments={post.attachments} />
+      <PostAIChat
+        postId={post.id}
+        descriptionMarkdown={post.description_markdown}
+        attachments={post.attachments}
+        status={post.status}
+        allowedOnFeed={post.allowed_on_feed}
+      />
     </div>
   );
 }

@@ -14,7 +14,7 @@ const MAX_W = 900;
 const MIN_H = 360;
 const MAX_H = 900;
 
-export default function PostAIChat({ postId, descriptionMarkdown, attachments = [] }) {
+export default function PostAIChat({ postId, descriptionMarkdown, attachments = [], status, allowedOnFeed }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -134,7 +134,8 @@ export default function PostAIChat({ postId, descriptionMarkdown, attachments = 
     }
   };
 
-  if (!hasContext || aiChecking || !aiStatus?.ok) return null;
+  const isPublic = status === "published" && allowedOnFeed;
+  if (!hasContext || !isPublic || aiChecking || !aiStatus?.ok) return null;
 
   if (!isOpen) {
     return (
