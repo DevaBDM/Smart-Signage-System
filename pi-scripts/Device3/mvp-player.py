@@ -42,6 +42,9 @@ def sync_loop():
             else:
                 # Sync failed — retry sooner
                 wait_time = 10
+
+            # Also sync the emergency asset from server
+            api.sync_emergency_asset()
         except Exception as e:
             print(f"[sync] Loop error: {e}")
             wait_time = 10

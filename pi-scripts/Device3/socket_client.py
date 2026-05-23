@@ -6,7 +6,7 @@ import api
 import media
 import player
 import scheduler
-from config import SERVER_URL, DEVICE_ID, DEVICE_NAME, LOCATION
+from config import SERVER_URL, DEVICE_ID, DEVICE_NAME, LOCATION, EMERGENCY_FALLBACK
 
 # Event to wake the sync loop immediately after token handshake
 sync_event = threading.Event()
@@ -197,6 +197,12 @@ def on_restart_display(data):
     player.stop_mpv()
     time.sleep(1)
     player.start_mpv()
+
+
+@sio.on("emergency_mode_start")
+def on_emergency_mode_start(data):
+    print(f"[socket] Emergency mode started by device {data.get('triggered_by')} for groups {data.get('groups')}")
+    player.play_emergency(EMERGENCY_FALLBACK)
 
 
 @sio.on("auth_error")

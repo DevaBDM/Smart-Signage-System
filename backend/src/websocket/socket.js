@@ -193,6 +193,66 @@ module.exports = (httpServer) => {
       }
     });
 
+    // ── Pi → Server: emergency button triggered ──────────────
+    socket.on("emergency_trigger", async (data) => {
+      const deviceId = Number(data.device_id);
+      console.log(`[socket] emergency_trigger from device ${deviceId}`);
+
+      const device = await prisma.device.findUnique({
+        where: { id: deviceId },
+        include: { group: true, groups: { include: { group: true } } },
+      });
+      if (!device) {
+        console.warn(`[socket] emergency_trigger: unknown device ${deviceId}`);
+        return;
+      }
+
+      // Collect all group IDs this device belongs to
+      const groupIds = new Set();
+      if (device.group_id) groupIds.add(device.group_id);
+      for (const dg of device.groups || []) {
+        if (dg.group_id) groupIds.add(dg.group_id);
+      }
+      if (groupIds.size === 0) {
+        console.warn(`[socket] emergency_trigger: device ${deviceId} has no groups`);
+        return;
+      }
+
+      // Update each group's signage_state to EMERGENCY
+      for (const gid of groupIds) {
+        await prisma.group.update({
+          where: { id: gid },
+          data: { signage_state: "EMERGENCY" },
+        }).catch((e) => {
+          console.error(`[socket] failed to set group ${gid} to EMERGENCY:`, e.message);
+        });
+      }
+
+      // Broadcast emergency_mode_start to ALL online devices in those groups
+      const devicesInGroups = await prisma.device.findMany({
+        where: {
+          is_approved: true,
+          status: "online",
+          OR: [
+            { group_id: { in: Array.from(groupIds) } },
+            { groups: { some: { group_id: { in: Array.from(groupIds) } } } },
+          ],
+        },
+        select: { id: true },
+      });
+
+      for (const d of devicesInGroups) {
+        const targetSocketId = deviceSockets.get(d.id);
+        if (targetSocketId) {
+          io.to(targetSocketId).emit("emergency_mode_start", {
+            triggered_by: deviceId,
+            groups: Array.from(groupIds),
+          });
+        }
+      }
+      console.log(`[socket] emergency_mode_start broadcast to ${devicesInGroups.length} devices in groups [${Array.from(groupIds).join(", ")}]`);
+    });
+
     // ── Disconnect: mark offline ──────────────────────────────
     socket.on("disconnect", async () => {
       if (socket.deviceId) {

@@ -100,6 +100,13 @@ def on_restart(data):
     subprocess.run(["sudo", "systemctl", "restart", "anthias"])
 
 
+@sio.on("emergency_mode_start")
+def on_emergency_mode_start(data):
+    print(f"[socket] Emergency mode started by device {data.get('triggered_by')} for groups {data.get('groups')}")
+    # Trigger local emergency content immediately
+    _push_local_emergency()
+
+
 @sio.on("signage_command")
 def on_signage_command(data):
     print(f"[socket] Signage command: {data}")
@@ -271,6 +278,55 @@ def sensor_loop():
         print(f"[sensor_loop] {e}")
 
 
+def _sync_emergency_asset():
+    """Download the device's emergency asset from the server to local cache."""
+    import requests
+    fallback = "/home/pi/emergency_fallback.mp4"
+    etag_file = "/home/pi/emergency_fallback.etag"
+    try:
+        headers = {}
+        if _current_token:
+            headers["Authorization"] = f"Bearer {_current_token}"
+        r = requests.get(
+            f"{SERVER_URL}/devices/{DEVICE_ID}",
+            headers=headers,
+            timeout=15,
+        )
+        r.raise_for_status()
+        device = r.json()
+        asset_url = device.get("emergency_asset_path")
+        if not asset_url:
+            return
+        if asset_url.startswith("/"):
+            base = SERVER_URL.split("/api")[0].rstrip("/")
+            asset_url = base + asset_url
+        # Check if changed using HEAD
+        remote_etag = ""
+        try:
+            hr = requests.head(asset_url, timeout=10)
+            remote_etag = hr.headers.get("etag", "")
+        except Exception:
+            pass
+        local_etag = ""
+        if os.path.exists(etag_file):
+            with open(etag_file, "r") as f:
+                local_etag = f.read().strip()
+        if remote_etag and remote_etag == local_etag and os.path.exists(fallback):
+            return
+        print(f"[emergency_sync] Downloading asset: {asset_url}")
+        dr = requests.get(asset_url, timeout=120, stream=True)
+        dr.raise_for_status()
+        with open(fallback, "wb") as f:
+            for chunk in dr.iter_content(chunk_size=8192):
+                f.write(chunk)
+        if remote_etag:
+            with open(etag_file, "w") as f:
+                f.write(remote_etag)
+        print(f"[emergency_sync] Cached to {fallback}")
+    except Exception as e:
+        print(f"[emergency_sync] {e}")
+
+
 def content_sync_loop():
     try:
         from content_sync import sync
@@ -291,10 +347,13 @@ def content_sync_loop():
                             "signage_asset_synced",
                             {"device_id": DEVICE_ID, **result},
                         )
-            
+
+            # Also sync emergency asset from server
+            _sync_emergency_asset()
+
             # If server was unreachable, sleep longer before retrying to avoid spamming logs
             if pushed_assets == [] and not sio.connected:
-                time.sleep(120) 
+                time.sleep(120)
                 continue
 
         except Exception as e:

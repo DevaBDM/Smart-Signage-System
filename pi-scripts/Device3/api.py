@@ -69,3 +69,75 @@ def sync_deployments(ensure_cached_callback):
     except Exception as e:
         print(f"[api] Sync failed: {e}")
         return None
+
+
+def fetch_device_settings():
+    """Fetch this device's settings from the server (including emergency_asset_path)."""
+    token = load_token()
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    try:
+        r = requests.get(
+            f"{SERVER_URL}/devices/{DEVICE_ID}",
+            headers=headers,
+            timeout=15,
+        )
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        print(f"[api] Failed to fetch device settings: {e}")
+        return None
+
+
+def download_file(url, dest, timeout=120):
+    """Download a remote file to a local path."""
+    try:
+        r = requests.get(url, timeout=timeout, stream=True)
+        r.raise_for_status()
+        Path(dest).parent.mkdir(parents=True, exist_ok=True)
+        with open(dest, "wb") as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                f.write(chunk)
+        return True
+    except Exception as e:
+        print(f"[api] Download failed for {url}: {e}")
+        return False
+
+
+def sync_emergency_asset(fallback_path="/home/pi/emergency_fallback.mp4"):
+    """Check server for emergency_asset_path and download it locally if needed."""
+    device = fetch_device_settings()
+    if not device:
+        return False
+    asset_url = device.get("emergency_asset_path")
+    if not asset_url:
+        return False
+    # Convert relative paths to absolute URLs
+    if asset_url.startswith("/"):
+        base = SERVER_URL.split("/api")[0].rstrip("/")
+        asset_url = base + asset_url
+    # Only download if changed or missing
+    import hashlib
+    import os
+    remote_hash = None
+    try:
+        hr = requests.head(asset_url, timeout=10)
+        remote_etag = hr.headers.get("etag", "")
+    except Exception:
+        remote_etag = ""
+    local_etag_file = str(Path(fallback_path).with_suffix(".etag"))
+    local_etag = ""
+    if os.path.exists(local_etag_file):
+        with open(local_etag_file, "r") as f:
+            local_etag = f.read().strip()
+    if remote_etag and remote_etag == local_etag and os.path.exists(fallback_path):
+        return True  # Already up to date
+    print(f"[api] Downloading emergency asset: {asset_url}")
+    if download_file(asset_url, fallback_path):
+        if remote_etag:
+            with open(local_etag_file, "w") as f:
+                f.write(remote_etag)
+        print(f"[api] Emergency asset cached to {fallback_path}")
+        return True
+    return False
