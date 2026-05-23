@@ -10,6 +10,18 @@ TOKEN_FILE = os.path.join(os.path.dirname(__file__), ".device_token")
 
 _current_token = DEVICE_TOKEN or ""
 
+# Emergency mode state (like Device3's media.is_emergency())
+_emergency_active = False
+
+
+def _is_emergency():
+    return _emergency_active
+
+
+def _set_emergency(active):
+    global _emergency_active
+    _emergency_active = active
+
 
 def _load_token():
     global _current_token
@@ -55,6 +67,9 @@ def disconnect():
 
 @sio.on("playlist_update")
 def on_playlist_update(data):
+    if _is_emergency():
+        print("[socket] Playlist update blocked: emergency mode active")
+        return
     print(f"[socket] New playlist: {data}")
     try:
         from content_sync import push_to_anthias
@@ -88,6 +103,9 @@ def on_playlist_update(data):
 
 @sio.on("refresh_display")
 def on_refresh(data):
+    if _is_emergency():
+        print("[socket] Refresh blocked: emergency mode active")
+        return
     import subprocess
 
     subprocess.run(["pkill", "-HUP", "anthias"])
@@ -95,6 +113,9 @@ def on_refresh(data):
 
 @sio.on("restart_display")
 def on_restart(data):
+    if _is_emergency():
+        print("[socket] Restart blocked: emergency mode active")
+        return
     import subprocess
 
     subprocess.run(["sudo", "systemctl", "restart", "anthias"])
@@ -102,14 +123,43 @@ def on_restart(data):
 
 @sio.on("emergency_mode_start")
 def on_emergency_mode_start(data):
+    if _is_emergency():
+        print("[socket] Emergency already active, ignoring duplicate start")
+        return
     print(f"[socket] Emergency mode started by device {data.get('triggered_by')} for groups {data.get('groups')}")
-    # Trigger local emergency content immediately
+    _set_emergency(True)
     _push_local_emergency()
 
 
 @sio.on("emergency_mode_end")
 def on_emergency_mode_end(data):
     print(f"[socket] Emergency mode ended for group {data.get('group_id')} (cleared by {data.get('cleared_by')})")
+
+    # Check ALL device groups before clearing — stay emergency if any group still emergency
+    try:
+        import requests
+        headers = {}
+        if _current_token:
+            headers["Authorization"] = f"Bearer {_current_token}"
+        r = requests.get(f"{SERVER_URL}/devices/me", headers=headers, timeout=15)
+        r.raise_for_status()
+        device = r.json()
+        groups = []
+        if device.get("group"):
+            groups.append(device["group"])
+        for dg in device.get("groups", []):
+            g = dg.get("group")
+            if g:
+                groups.append(g)
+        any_emergency = any(g.get("signage_state") == "EMERGENCY" for g in groups)
+        if any_emergency:
+            print(f"[socket] {sum(1 for g in groups if g.get('signage_state') == 'EMERGENCY')} other group(s) still EMERGENCY — staying in emergency mode")
+            return
+    except Exception as e:
+        print(f"[socket] Failed to check group states: {e}")
+        return
+
+    _set_emergency(False)
     # Refresh Anthias so it resumes normal playlist cycling
     import subprocess
     subprocess.run(["pkill", "-HUP", "anthias"], capture_output=True)
@@ -117,6 +167,9 @@ def on_emergency_mode_end(data):
 
 @sio.on("signage_command")
 def on_signage_command(data):
+    if _is_emergency():
+        print("[socket] Signage command blocked: emergency mode active")
+        return {"ok": False, "error": "Emergency mode active"}
     print(f"[socket] Signage command: {data}")
     try:
         from content_sync import (
@@ -209,6 +262,7 @@ _emu1 = {"triggered": False}
 
 def _push_local_emergency():
     """Push a locally cached emergency asset to Anthias immediately."""
+    _set_emergency(True)
     fallback = EMERGENCY_FALLBACK
     print(f"[emergency] Pushing local emergency asset from: {fallback}")
     print(f"[emergency] File exists: {os.path.exists(fallback)}")
@@ -261,6 +315,7 @@ def sensor_loop():
                 if emergency_raw == "1" and not _emu1["triggered"]:
                     print("[sensor_loop] EMERGENCY BUTTON DETECTED — attempting emit + local push")
                     _emu1["triggered"] = True
+                    _set_emergency(True)
                     # Notify server immediately
                     if sio.connected:
                         try:
@@ -312,7 +367,7 @@ def _sync_emergency_asset():
         device = r.json()
         asset_url = device.get("emergency_asset_path")
         if not asset_url:
-            return
+            return device
         if asset_url.startswith("/"):
             base = SERVER_URL.split("/api")[0].rstrip("/")
             asset_url = base + asset_url
@@ -339,6 +394,7 @@ def _sync_emergency_asset():
             with open(etag_file, "w") as f:
                 f.write(remote_etag)
         print(f"[emergency_sync] Cached to {fallback}")
+        return device
     except requests.exceptions.HTTPError as e:
         status = e.response.status_code if e.response else "?"
         if status == 401:
@@ -350,6 +406,7 @@ def _sync_emergency_asset():
             print(f"[emergency_sync] HTTP {status}: {e}")
     except Exception as e:
         print(f"[emergency_sync] {e}")
+    return None
 
 
 def content_sync_loop():
@@ -361,20 +418,42 @@ def content_sync_loop():
 
     while True:
         try:
-            pushed_assets = sync()
-            # sync() returns None if server is down (after my previous fix)
-            # but wait, let me check my previous edit.
-            # actually sync() returns [] if server is down.
-            if pushed_assets and sio.connected:
-                for result in pushed_assets:
-                    if result.get("ok"):
-                        sio.emit(
-                            "signage_asset_synced",
-                            {"device_id": DEVICE_ID, **result},
-                        )
+            pushed_assets = None
+            if not _is_emergency():
+                pushed_assets = sync()
+                if pushed_assets and sio.connected:
+                    for result in pushed_assets:
+                        if result.get("ok"):
+                            sio.emit(
+                                "signage_asset_synced",
+                                {"device_id": DEVICE_ID, **result},
+                            )
+            else:
+                print("[content_sync_loop] Skipping normal sync: emergency mode active")
 
             # Also sync emergency asset from server
-            _sync_emergency_asset()
+            device = _sync_emergency_asset()
+
+            # Check group states to auto-enter/exit emergency
+            if device:
+                groups = []
+                if device.get("group"):
+                    groups.append(device["group"])
+                for dg in device.get("groups", []):
+                    g = dg.get("group")
+                    if g:
+                        groups.append(g)
+                any_emergency = any(g.get("signage_state") == "EMERGENCY" for g in groups)
+
+                if any_emergency and not _is_emergency():
+                    print("[content_sync_loop] Server group in EMERGENCY — entering emergency mode")
+                    _set_emergency(True)
+                    _push_local_emergency()
+                elif not any_emergency and _is_emergency():
+                    print("[content_sync_loop] Server groups all NORMAL — clearing emergency mode")
+                    _set_emergency(False)
+                    import subprocess
+                    subprocess.run(["pkill", "-HUP", "anthias"], capture_output=True)
 
             # If server was unreachable, sleep longer before retrying to avoid spamming logs
             if pushed_assets == [] and not sio.connected:
