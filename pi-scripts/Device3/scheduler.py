@@ -80,9 +80,19 @@ def scheduler_loop():
             if not active:
                 _state, _lock = media.get_state()
                 with _lock:
-                    if _state["current_post"] and not media.is_emergency():
+                    # If we were showing something other than the no-content placeholder,
+                    # switch to it now. This handles emergency-end → no-content transition.
+                    if _state.get("current_post", {}).get("post_id") != "__no_content__":
                         _state["current_post"] = None
-                        player.mpv.stop()
+                        _state["last_change"] = time.time()
+                        player.play_no_content()
+                        _state["current_post"] = {
+                            "post_id": "__no_content__",
+                            "title": "No Content",
+                            "local_path": "",
+                            "media_type": "IMAGE",
+                            "is_enabled": True,
+                        }
                 time.sleep(2)
                 continue
 

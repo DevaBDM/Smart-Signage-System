@@ -3,8 +3,66 @@ import json
 import socket
 import time
 import subprocess
+import struct
+
+from config import NO_CONTENT_IMAGE
 
 MPV_SOCKET = "/tmp/mpv-socket"
+
+
+def _ensure_no_content_image():
+    """Generate a minimal black BMP if the no-content image is missing.
+
+    Tries PIL first for a nicer result; falls back to a solid-black BMP.
+    """
+    if os.path.exists(NO_CONTENT_IMAGE):
+        return True
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+        img = Image.new("RGB", (1280, 720), color="black")
+        draw = ImageDraw.Draw(img)
+        # Try to load a font; fall back to default if unavailable
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 72)
+        except Exception:
+            font = ImageFont.load_default()
+        text = "NO CONTENT"
+        bbox = draw.textbbox((0, 0), text, font=font)
+        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        x = (1280 - tw) // 2
+        y = (720 - th) // 2
+        draw.text((x, y), text, fill="white", font=font)
+        img.save(NO_CONTENT_IMAGE, "PNG")
+        print(f"[player] Generated no-content image: {NO_CONTENT_IMAGE}")
+        return True
+    except Exception:
+        pass
+
+    # Fallback: solid-black 640x480 BMP (no external deps)
+    try:
+        w, h = 640, 480
+        row_size = (w * 3 + 3) & ~3
+        pixel_data = bytes(row_size * h)
+        file_size = 54 + len(pixel_data)
+        header = struct.pack(
+            "<2sIHHI",
+            b"BM",
+            file_size,
+            0,
+            54,
+            40,
+        )
+        dib = struct.pack(
+            "<IiiHHIIiiII",
+            40, w, h, 1, 24, 0, len(pixel_data), 2835, 2835, 0, 0,
+        )
+        with open(NO_CONTENT_IMAGE, "wb") as f:
+            f.write(header + dib + pixel_data)
+        print(f"[player] Generated fallback black BMP: {NO_CONTENT_IMAGE}")
+        return True
+    except Exception as e:
+        print(f"[player] Failed to generate no-content image: {e}")
+        return False
 
 class MpvController:
     """Talk to MPV over its Unix IPC socket."""
@@ -136,4 +194,18 @@ def play_disconnection(path):
     mpv.set_property("loop-file", "inf")
     mpv.show_text("SERVER DISCONNECTED — Content Cleared", 5000)
     print(f"[player] Disconnection image displayed: {path}")
+    return True
+
+
+def play_no_content():
+    """Display the 'no content' placeholder when there is nothing to show."""
+    _ensure_no_content_image()
+    if not os.path.exists(NO_CONTENT_IMAGE):
+        print("[player] No-content image missing; stopping MPV to show black screen")
+        mpv.stop()
+        return False
+    ensure_mpv_running()
+    mpv.loadfile(NO_CONTENT_IMAGE)
+    mpv.set_property("loop-file", "inf")
+    print(f"[player] No-content image displayed: {NO_CONTENT_IMAGE}")
     return True

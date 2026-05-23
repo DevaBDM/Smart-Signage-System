@@ -37,3 +37,6 @@ EMERGENCY_FALLBACK = os.path.join(os.path.dirname(__file__), "emergency_fallback
 # and display the disconnection image
 DISCONNECTION_TIMEOUT_HOURS = 72  # 3 days
 DISCONNECTION_IMAGE = os.path.join(os.path.dirname(__file__), "disconnection.png")
+
+# Default image shown when the device has no scheduled content
+NO_CONTENT_IMAGE = os.path.join(os.path.dirname(__file__), "no_content.png")

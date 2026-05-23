@@ -1,38 +1,50 @@
 # pi-scripts/brightness_control.py
-import time, subprocess, os
+import os
+import shutil
+import subprocess
+import time
 
 # This script reads the light sensor value from a shared file
-# (written by socket_client.py) and adjusts the display brightness.
+# (written by socket_client.py) and adjusts the display brightness
+# using brightnessctl (Debian 13 compatible, no X11 required).
 
 SENSOR_FILE = "/tmp/signage_sensors"
+MIN_PCT = 5   # never go completely black
+MAX_PCT = 100
+
+
+def _has_brightnessctl():
+    return shutil.which("brightnessctl") is not None
 
 
 def set_brightness(level):
-    """level: 0 to 1023 (from light sensor)"""
-    # Map 0-1023 to 0.3-1.0 for xrandr
-    # level 0 (dark) -> 0.3 brightness
-    # level 1023 (bright) -> 1.0 brightness
-    brightness = 0.3 + (level / 1023.0) * 0.7
-    brightness = round(min(1.0, max(0.3, brightness)), 2)
+    """Map Arduino LDR value (0-1023) to a brightnessctl percentage."""
+    pct = MIN_PCT + int((level / 1023.0) * (MAX_PCT - MIN_PCT))
+    pct = max(MIN_PCT, min(MAX_PCT, pct))
 
     try:
-        # Find the connected display output (usually HDMI-1 or HDMI-2)
-        # We use DISPLAY=:0 as most signage runs on the primary X server
-        env = {"DISPLAY": ":0", "XAUTHORITY": "/home/pi/.Xauthority"}
-        cmd = "xrandr | grep ' connected' | cut -f1 -d' '"
-        output = subprocess.check_output(cmd, shell=True, env=env).decode().strip()
-
-        if output:
-            subprocess.run(
-                ["xrandr", "--output", output, "--brightness", str(brightness)], env=env
-            )
-            print(f"[brightness] Set to {brightness} (sensor: {level})")
+        subprocess.run(
+            ["brightnessctl", "set", f"{pct}%"],
+            check=True,
+            capture_output=True,
+        )
+        print(f"[brightness] Set to {pct}% (sensor: {level})")
+    except subprocess.CalledProcessError as e:
+        err = e.stderr.decode().strip() if e.stderr else str(e)
+        print(f"[brightness] brightnessctl failed: {err}")
     except Exception as e:
         print(f"[brightness] Error: {e}")
 
 
 def run():
-    print("[brightness] Starting auto-brightness control...")
+    if not _has_brightnessctl():
+        print(
+            "[brightness] WARNING: brightnessctl not found. "
+            "Install with: sudo apt install brightnessctl"
+        )
+        return
+
+    print("[brightness] Starting auto-brightness control (using brightnessctl)...")
     last_val = -1
 
     while True:
