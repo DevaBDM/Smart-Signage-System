@@ -13,8 +13,8 @@ const RELAY_PROCESSES = new Map(); // streamId -> child
 let nms = null;
 
 function getRelayUrl(streamId) {
-  const base = process.env.PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
-  return `${base}/streams/${streamId}/index.m3u8`;
+  // Return a relative path so the device/frontend can prepend its own base URL.
+  return `/streams/${streamId}/index.m3u8`;
 }
 
 function ensureStreamDir(id) {

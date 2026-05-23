@@ -26,8 +26,8 @@ function getStatus(id) {
 }
 
 function buildRelayUrl(id) {
-  const base = process.env.PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
-  return `${base}/streams/${id}/index.m3u8`;
+  // Return a relative path so the device/frontend can prepend its own base URL.
+  return `/streams/${id}/index.m3u8`;
 }
 
 /** Start an FFmpeg HLS relay for any input URL. */
