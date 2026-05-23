@@ -8,10 +8,32 @@ const client = new OpenAI({
 const MODEL = process.env.AI_MODEL;
 
 /**
- * Build combined context from post description and attachment texts.
+ * Check if AI service is configured and reachable.
  */
-function buildContext(descriptionMarkdown, attachments = []) {
+async function checkHealth() {
+  const configured = !!(process.env.AI_API_KEY && process.env.AI_MODEL);
+  if (!configured) {
+    return { ok: false, configured: false, reachable: false, model: null };
+  }
+  try {
+    // Lightweight models list call to verify connectivity
+    await client.models.list();
+    return { ok: true, configured: true, reachable: true, model: MODEL };
+  } catch (err) {
+    console.error("[aiService] Health check failed:", err.message);
+    return { ok: false, configured: true, reachable: false, model: MODEL };
+  }
+}
+
+/**
+ * Build combined context from post title, description and attachment texts.
+ */
+function buildContext(title, descriptionMarkdown, attachments = []) {
   const parts = [];
+
+  if (title) {
+    parts.push(`Post title: ${title}`);
+  }
 
   if (descriptionMarkdown) {
     parts.push(`Post description:\n---\n${descriptionMarkdown}\n---`);
@@ -34,23 +56,26 @@ function buildContext(descriptionMarkdown, attachments = []) {
  * Ask the AI a question about a post.
  *
  * @param {string} question - The user's question.
+ * @param {string} title - The post title.
  * @param {string} descriptionMarkdown - The post's description_markdown.
  * @param {Array} attachments - PostAttachment records with extracted_text.
+ * @param {Array} history - Previous conversation messages {role, content}[].
  * @returns {Promise<string>} - The AI's answer.
  */
-async function askAboutPost(question, descriptionMarkdown, attachments = []) {
+async function askAboutPost(question, title, descriptionMarkdown, attachments = [], history = []) {
   const systemPrompt =
     "You are a helpful assistant. Answer the user's question based ONLY on the following post content and attached documents. " +
     "If the answer is not in the content, say so. Keep answers concise and helpful.";
 
-  const context = buildContext(descriptionMarkdown, attachments);
+  const context = buildContext(title, descriptionMarkdown, attachments);
 
   const messages = [
-    { role: "system", content: systemPrompt },
     {
-      role: "user",
-      content: `Context:\n${context}\n\nQuestion: ${question}`,
+      role: "system",
+      content: `${systemPrompt}\n\nContext:\n${context}`,
     },
+    ...history,
+    { role: "user", content: question },
   ];
 
   try {
@@ -68,4 +93,4 @@ async function askAboutPost(question, descriptionMarkdown, attachments = []) {
   }
 }
 
-module.exports = { askAboutPost };
+module.exports = { askAboutPost, checkHealth };

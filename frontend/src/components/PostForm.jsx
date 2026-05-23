@@ -137,7 +137,7 @@ export default function PostForm({
                         whiteSpace: "nowrap",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
-                        maxWidth: 220,
+                        maxWidth: 160,
                       }}
                       title={att.file_name}
                     >
@@ -146,6 +146,38 @@ export default function PostForm({
                     <span style={{ fontSize: 11, color: "#9ca3af", flexShrink: 0 }}>
                       {fmtBytes(att.file_size)}
                     </span>
+                    {/* Extraction status badge */}
+                    {att.extracted_text != null ? (
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 600,
+                          color: "#16a34a",
+                          background: "#dcfce7",
+                          borderRadius: 10,
+                          padding: "2px 8px",
+                          flexShrink: 0,
+                        }}
+                        title="Text extracted for AI context"
+                      >
+                        Extracted
+                      </span>
+                    ) : (
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 600,
+                          color: "#9ca3af",
+                          background: "#f3f4f6",
+                          borderRadius: 10,
+                          padding: "2px 8px",
+                          flexShrink: 0,
+                        }}
+                        title="No text could be extracted (unsupported format or binary file)"
+                      >
+                        No text
+                      </span>
+                    )}
                   </div>
                   {editingId && onAttachmentDelete && (
                     <button

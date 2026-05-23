@@ -7,6 +7,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import api from "../api/axios";
+import { checkAIStatus, askQuestion } from "../api/ai";
 
 const MIN_W = 320;
 const MAX_W = 900;
@@ -20,11 +21,22 @@ export default function PostAIChat({ postId, descriptionMarkdown, attachments = 
   const [loading, setLoading] = useState(false);
   const [dims, setDims] = useState({ w: 380, h: 520 });
   const [copiedIdx, setCopiedIdx] = useState(null);
+  const [aiStatus, setAiStatus] = useState(null);
+  const [aiChecking, setAiChecking] = useState(true);
   const messagesEndRef = useRef(null);
   const abortRef = useRef(null);
   const resizeRef = useRef({ dragging: false, startX: 0, startY: 0, startW: 0, startH: 0 });
 
   const hasContext = !!(descriptionMarkdown || attachments.length > 0);
+
+  useEffect(() => {
+    let mounted = true;
+    checkAIStatus()
+      .then((s) => { if (mounted) setAiStatus(s); })
+      .catch(() => { if (mounted) setAiStatus({ ok: false }); })
+      .finally(() => { if (mounted) setAiChecking(false); });
+    return () => { mounted = false; };
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -38,6 +50,7 @@ export default function PostAIChat({ postId, descriptionMarkdown, attachments = 
     if (!input.trim() || loading) return;
 
     const question = input.trim();
+    const history = [...messages]; // conversation so far
     setInput("");
     setMessages((prev) => [...prev, { role: "user", content: question }]);
     setLoading(true);
@@ -46,14 +59,10 @@ export default function PostAIChat({ postId, descriptionMarkdown, attachments = 
     abortRef.current = controller;
 
     try {
-      const res = await api.post(
-        "/ai/ask",
-        { post_id: postId, question },
-        { signal: controller.signal }
-      );
+      const data = await askQuestion(postId, question, history, controller.signal);
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: res.data.answer },
+        { role: "assistant", content: data.answer },
       ]);
     } catch (err) {
       if (api.isCancel?.(err) || err.name === "CanceledError") {
@@ -125,7 +134,7 @@ export default function PostAIChat({ postId, descriptionMarkdown, attachments = 
     }
   };
 
-  if (!hasContext) return null;
+  if (!hasContext || aiChecking || !aiStatus?.ok) return null;
 
   if (!isOpen) {
     return (
