@@ -184,6 +184,7 @@ model Device {
   pending_ip            String?
   pending_location      String?
   device_token          String?
+  emergency_asset_path  String?
   control_lock_user_id  Int?
   control_lock_priority Int?
   control_lock_until    DateTime?

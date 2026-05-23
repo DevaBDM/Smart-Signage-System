@@ -89,7 +89,7 @@ async function rejectDevice(deviceId) {
 }
 
 async function updateDeviceSettings(deviceId, body) {
-  const { device_name, ip_address, group_id, location } = body;
+  const { device_name, ip_address, group_id, location, emergency_asset_path } = body;
   const groupIds =
     body.group_ids !== undefined ? parseGroupIds(body.group_ids) : null;
 
@@ -105,6 +105,9 @@ async function updateDeviceSettings(deviceId, body) {
         ...(device_name !== undefined && { device_name }),
         ...(ip_address !== undefined && { ip_address }),
         ...(location !== undefined && { location: location || null }),
+        ...(emergency_asset_path !== undefined && {
+          emergency_asset_path: emergency_asset_path || null,
+        }),
         ...(body.all_groups !== undefined && {
           all_groups: toBool(body.all_groups),
         }),

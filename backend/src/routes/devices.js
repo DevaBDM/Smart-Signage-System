@@ -1,4 +1,6 @@
 const router = require("express").Router();
+const multer = require("multer");
+const path = require("path");
 const prisma = require("../db/prisma");
 const auth = require("../middleware/auth");
 const asyncHandler = require("../middleware/asyncHandler");
@@ -11,6 +13,33 @@ const {
   removeDevice,
 } = require("../services/deviceService");
 const { getActorGroupIds } = require("../utils/permissions");
+const { processImage, processVideo, TEMP_DIR, isImageMime, isVideoMime } = require("../utils/mediaProcessor");
+
+const emergencyUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, TEMP_DIR),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+    },
+  }),
+  limits: { fileSize: 200 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const mime = file.mimetype || "";
+    if (isImageMime(mime) || isVideoMime(mime)) return cb(null, true);
+    return cb(new Error("Only image or video files are allowed"));
+  },
+});
+
+function handleEmergencyUpload(req, res, next) {
+  emergencyUpload.single("asset")(req, res, (err) => {
+    if (!err) return next();
+    const message = err.code === "LIMIT_FILE_SIZE"
+      ? "Asset must be 200 MB or smaller"
+      : err.message || "Emergency asset upload failed";
+    return res.status(400).json({ error: message });
+  });
+}
 
 // List devices. Admins see all; creators see displays in their group or all groups.
 router.get("/", auth(["admin", "creator"]), async (req, res) => {
@@ -89,5 +118,31 @@ router.delete("/:id", auth(["admin"]), asyncHandler(async (req, res) => {
   const result = await removeDevice(Number(req.params.id));
   res.json(result);
 }));
+
+// Upload emergency asset (image or video) for a device.
+router.post(
+  "/:id/emergency-asset",
+  auth(["admin"]),
+  handleEmergencyUpload,
+  asyncHandler(async (req, res) => {
+    const deviceId = Number(req.params.id);
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+    const mime = req.file.mimetype || "";
+    let result;
+    if (isImageMime(mime)) {
+      result = await processImage(req.file.path, null);
+    } else if (isVideoMime(mime)) {
+      result = await processVideo(req.file.path, null);
+    } else {
+      return res.status(400).json({ error: "Unsupported file type" });
+    }
+    const updated = await updateDeviceSettings(deviceId, {
+      emergency_asset_path: result.image_path,
+    });
+    res.json({ emergency_asset_path: result.image_path, device: updated });
+  })
+);
 
 module.exports = router;
