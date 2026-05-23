@@ -2,12 +2,14 @@ import { useState, useRef, useEffect } from "react";
 import { MessageCircle, X, Send, Bot, User } from "lucide-react";
 import api from "../api/axios";
 
-export default function PostAIChat({ postId, descriptionMarkdown }) {
+export default function PostAIChat({ postId, descriptionMarkdown, attachments = [] }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
+
+  const hasContext = !!(descriptionMarkdown || attachments.length > 0);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -53,6 +55,8 @@ export default function PostAIChat({ postId, descriptionMarkdown }) {
       handleSend();
     }
   };
+
+  if (!hasContext) return null;
 
   if (!isOpen) {
     return (

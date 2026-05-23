@@ -8,6 +8,7 @@ const { createPost, updatePost, removePost, bulkAction } = require("../services/
 const { getActor, getActorGroupIds, canManagePost } = require("../utils/permissions");
 const { toBool } = require("../utils/parsers");
 const { resolvePublicPath } = require("../utils/mediaProcessor");
+const { extractText } = require("../utils/textExtractor");
 const piBridge = require("../services/piBridge");
 const fs = require("fs");
 const path = require("path");
@@ -177,6 +178,7 @@ router.post(
     const created = [];
     for (const file of files) {
       const publicPath = `/uploads/attachments/${path.basename(file.path)}`;
+      const extracted = await extractText(file.path, file.mimetype);
       const record = await prisma.postAttachment.create({
         data: {
           post_id: postId,
@@ -184,6 +186,7 @@ router.post(
           file_name: file.originalname,
           mime_type: file.mimetype || "application/octet-stream",
           file_size: file.size || 0,
+          extracted_text: extracted,
         },
       });
       created.push(record);

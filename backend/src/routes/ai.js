@@ -30,7 +30,12 @@ router.post(
       return res.status(403).json({ error: "This post is not available for questions" });
     }
 
-    const answer = await askAboutPost(question, post.description_markdown);
+    const attachments = await prisma.postAttachment.findMany({
+      where: { post_id: Number(post_id) },
+      select: { file_name: true, extracted_text: true },
+    });
+
+    const answer = await askAboutPost(question, post.description_markdown, attachments);
     res.json({ answer });
   }),
 );

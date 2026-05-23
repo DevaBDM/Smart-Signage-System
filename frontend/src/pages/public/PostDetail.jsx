@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { FileText, Download } from "lucide-react";
+import { FileText, Download, Bot } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
@@ -170,7 +170,29 @@ export default function PostDetail() {
 
         {/* Content */}
         <div style={s.content}>
-          <h1 style={s.title}>{post.title}</h1>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+            <h1 style={s.title}>{post.title}</h1>
+            {post.attachments?.some((a) => a.extracted_text) && (
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: "#2563eb",
+                  background: "#eff6ff",
+                  border: "1px solid #bfdbfe",
+                  borderRadius: 20,
+                  padding: "4px 12px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                }}
+                title="AI can answer questions using content from attached documents"
+              >
+                <Bot size={14} />
+                AI-enhanced
+              </span>
+            )}
+          </div>
           {post.description_markdown ? (
             <div className="markdown-body">
               <ReactMarkdown
@@ -232,7 +254,7 @@ export default function PostDetail() {
         </div>
       </div>
 
-      <PostAIChat postId={post.id} descriptionMarkdown={post.description_markdown} />
+      <PostAIChat postId={post.id} descriptionMarkdown={post.description_markdown} attachments={post.attachments} />
     </div>
   );
 }
