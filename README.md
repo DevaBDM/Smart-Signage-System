@@ -14,12 +14,14 @@ A LAN-based digital content distribution and monitoring platform for university 
 6. [Running the System](#running-the-system)
 7. [First-Time Configuration](#first-time-configuration)
 8. [Live Streaming](#live-streaming)
-9. [Arduino Sensor Firmware](#arduino-sensor-firmware)
-10. [Raspberry Pi Agent Setup](#raspberry-pi-agent-setup)
-11. [Environment Variables Reference](#environment-variables-reference)
-12. [API Reference](#api-reference)
-13. [Testing](#testing)
-14. [Troubleshooting](#troubleshooting)
+9. [Emergency Mode](#emergency-mode)
+10. [Disconnection Timeout](#disconnection-timeout)
+11. [Arduino Sensor Firmware](#arduino-sensor-firmware)
+12. [Raspberry Pi Agent Setup](#raspberry-pi-agent-setup)
+13. [Environment Variables Reference](#environment-variables-reference)
+14. [API Reference](#api-reference)
+15. [Testing](#testing)
+16. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -150,15 +152,30 @@ WebServerSignage/
 │   └── package.json
 │
 ├── pi-scripts/
-│   ├── Device1/                 ← Per-device agent scripts
+│   ├── Device1/                 ← Anthias-based Pi agent
 │   │   ├── config.py
-│   │   ├── socket_client.py     ← Main agent (heartbeat, sensors, commands)
+│   │   ├── socket_client.py     ← Main agent (heartbeat, sensors, commands, emergency, disconnection)
 │   │   ├── content_sync.py      ← Anthias asset sync + LIVE_STREAM support
 │   │   ├── brightness_control.py
 │   │   ├── Arduino_connection.py
+│   │   ├── emergency_fallback.mp4
+│   │   ├── disconnection.png
 │   │   ├── socket-signage.service
 │   │   └── content-sync.service
-│   └── Device2/                 ← Duplicate for second Pi
+│   ├── Device2/                 ← Duplicate for second Pi
+│   │   ├── (same as Device1)
+│   └── Device3/                 ← Standalone MPV player (no Anthias)
+│       ├── mvp-player.py        ← Main orchestrator (scheduler + sync + MPV IPC)
+│       ├── media.py             ← Playlist state, caching, emergency/disconnection tracking
+│       ├── player.py            ← MPV process control via Unix socket
+│       ├── socket_client.py     ← Socket.IO client (commands, events)
+│       ├── scheduler.py         ← Post rotation loop
+│       ├── api.py               ← REST API wrapper for deployments
+│       ├── sensors.py           ← Arduino serial reader
+│       ├── config.py
+│       ├── emergency_fallback.mp4
+│       ├── disconnection.png
+│       └── mvp-player.service   ← systemd unit
 │
 └── README.md
 ```
@@ -350,6 +367,59 @@ For RTMP ingest streams, click **Rotate Key** in the Live Streams UI to invalida
 
 ---
 
+## Emergency Mode
+
+Emergency mode overrides all normal content and displays an emergency asset across all devices in the affected group(s).
+
+### Triggering Emergency Mode
+
+| Method | Action |
+|--------|--------|
+| **Hardware button** | Press the emergency button wired to Arduino Pin 2. The Pi detects it via serial and triggers group-wide emergency. |
+| **Admin dashboard** | Admin can set a group's signage state to `EMERGENCY`. All devices in that group enter emergency mode. |
+
+### How it works
+
+1. When triggered, the server broadcasts `emergency_mode_start` to all devices in the group(s).
+2. Each device immediately plays its locally cached `emergency_fallback.mp4` (or image).
+3. **Device1/2 (Anthias)**: The emergency asset is pushed to Anthias as the only active asset. Normal sync, refresh, restart, and playlist updates are blocked.
+4. **Device3 (MPV)**: MPV is forced to play the emergency file with infinite loop. The scheduler skips all post rotation.
+5. Devices check **all their groups** before exiting emergency. If any group is still in `EMERGENCY`, the device stays in emergency mode.
+6. When the last group is cleared, devices exit emergency and resume normal content.
+
+### Emergency Asset Setup
+
+1. **Admin Dashboard** → Devices → select a device → upload an emergency asset (image or video, max 200 MB).
+2. The server processes and stores it. Each Pi syncs it to `emergency_fallback.mp4` in its script directory.
+3. Place a local fallback file manually if the server is unreachable.
+
+---
+
+## Disconnection Timeout
+
+If a device loses contact with the server for longer than `DISCONNECTION_TIMEOUT_HOURS` (default: **72 hours / 3 days**), it automatically purges all content and displays a disconnection timeout image.
+
+### Behavior
+
+| Device Type | Disconnection Action |
+|-------------|----------------------|
+| **Device1/2 (Anthias)** | Clears all Anthias assets via `clear_all_assets()`, then registers `disconnection.png` as the only asset. |
+| **Device3 (MPV)** | Purges the `downloads/` cache and playlist, then plays `disconnection.png` via MPV. Scheduler stops rotating posts. |
+
+### Recovery
+
+When the server comes back online:
+- Any successful sync or Socket.IO heartbeat resets the disconnection timer.
+- The device exits disconnection mode and resumes normal content sync automatically.
+
+### State Priority
+
+1. **Emergency mode** (highest) — emergency video plays
+2. **Disconnection mode** — disconnection image displays
+3. **Normal mode** — regular playlist rotation
+
+---
+
 ## Arduino Sensor Firmware
 
 **Location:** `arduino/sensors/sensors.ino`
@@ -380,61 +450,90 @@ Flash the `.ino` to the Arduino Mega, then connect it to the Pi via USB.
 
 ## Raspberry Pi Agent Setup
 
+### Supported Device Types
+
+| Device | Player Engine | Entry Point | Use Case |
+|--------|--------------|-------------|----------|
+| **Device1 / Device2** | Anthias (web viewer) | `socket_client.py` | Standard signage with Anthias asset management |
+| **Device3** | MPV (native media player) | `mvp-player.py` | Standalone player without Anthias — see `pi-scripts/Device3/README.md` |
+
 ### Install Dependencies
 
+**Device1/2 (Anthias):**
 ```bash
 sudo apt update
 sudo apt install python3-pip python3-serial -y
 pip3 install requests pyserial python-socketio[client] websocket-client
 ```
 
+**Device3 (MPV):**
+```bash
+sudo apt update
+sudo apt install -y mpv python3-requests python3-python-socketio python3-serial python3-setuptools
+```
+
 ### Configure the Agent
 
-Edit `pi-scripts/Device1/config.py`:
+Edit `pi-scripts/Device1/config.py` (or `Device2`, `Device3`):
 
 ```python
 SERVER_URL = "http://YOUR_SERVER_IP:5000/api"   # ← your backend IP
-ANTHIAS_URL = "http://localhost"                 # Anthias runs on the Pi
+ANTHIAS_URL = "http://localhost"                 # Anthias runs on the Pi (Device1/2 only)
 DEVICE_NAME = "Pi-Display-1"
 LOCATION = "Floor 1"
 SERIAL_PORT = "/dev/ttyUSB0"                     # or /dev/ttyACM0 for real Arduino
 BAUD_RATE = 9600
 DEVICE_ID = 1                                      # ← must match the approved device ID in DB
 DEVICE_TOKEN = ""                                  # auto-populated after first registration
+
+# Emergency & disconnection assets (all devices)
+EMERGENCY_FALLBACK = os.path.join(os.path.dirname(__file__), "emergency_fallback.mp4")
+DISCONNECTION_IMAGE = os.path.join(os.path.dirname(__file__), "disconnection.png")
+DISCONNECTION_TIMEOUT_HOURS = 72                   # purge content after 72h of no server contact
 ```
 
 > **Important:** After approving the Pi in the web UI, note the assigned `DEVICE_ID` and update `config.py`.
 
 ### Start the Agent
 
-The `socket_client.py` is the **main entry point**. It starts three background threads:
-- **Heartbeat** — every 10s (registers device, keeps online status)
-- **Sensor loop** — reads Arduino serial, forwards to server
-- **Content sync** — every 60s, pulls deployments and syncs to Anthias
-
+**Device1/2:**
 ```bash
 cd pi-scripts/Device1
 python3 socket_client.py
 ```
 
+**Device3:**
+```bash
+cd pi-scripts/Device3
+python3 mvp-player.py
+```
+
+The main script starts background threads:
+- **Heartbeat** — every 10s (registers device, keeps online status)
+- **Sensor loop** — reads Arduino serial, forwards to server
+- **Content sync** — every 60s, pulls deployments and syncs assets
+- **Socket.IO events** — handles emergency mode, refresh, restart, signage commands
+
 ### Auto-Start on Boot (systemd)
 
-Copy the service files and update paths:
-
+**Device1/2:**
 ```bash
 sudo cp pi-scripts/Device1/socket-signage.service /etc/systemd/system/
 sudo cp pi-scripts/Device1/content-sync.service /etc/systemd/system/
-
-# Edit the service files to point to your actual script directory:
-# WorkingDirectory=/home/pi/signage
-# ExecStart=/usr/bin/python3 /home/pi/signage/socket_client.py
-
 sudo systemctl daemon-reload
 sudo systemctl enable socket-signage.service
 sudo systemctl start socket-signage.service
 ```
 
-> **Note:** `content-sync.service` is optional because `socket_client.py` already runs the content sync loop internally. Use it only if you want to run `content_sync.py` standalone.
+**Device3:**
+```bash
+sudo cp pi-scripts/Device3/mvp-player.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable mvp-player.service
+sudo systemctl start mvp-player.service
+```
+
+> **Note:** `content-sync.service` is optional for Device1/2 because `socket_client.py` already runs the content sync loop internally.
 
 ---
 
@@ -498,8 +597,19 @@ sudo systemctl start socket-signage.service
 | GET | `/api/devices` | List devices |
 | POST | `/api/devices/register` | Register a new device |
 | POST | `/api/devices/:id/approve` | Approve pending device |
+| GET | `/api/devices/me` | Device-authenticated settings (token required) |
 | PUT | `/api/devices/:id` | Update device settings |
 | DELETE | `/api/devices/:id` | Remove device |
+| POST | `/api/devices/:id/emergency-asset` | Upload emergency asset (image/video, max 200 MB) |
+
+### Groups
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/groups` | List groups |
+| POST | `/api/groups` | Create group |
+| PUT | `/api/groups/:id` | Update group (includes `signage_state`: `NORMAL` or `EMERGENCY`) |
+| DELETE | `/api/groups/:id` | Remove group |
 
 ### Signage
 
@@ -569,6 +679,8 @@ The smoke test auto-starts a test backend on port 5001. Do **not** run your real
 | Pi not appearing in device list | Check `SERVER_URL` in `config.py` matches the backend IP; verify firewall |
 | Live stream not showing on Pi | Check Pi can reach the HLS URL; verify `allowed_on_signage: true` on the post |
 | Anthias asset sync fails | Check Anthias is running (`docker ps`); verify `ANTHIAS_URL` in `config.py` |
+| Emergency mode not clearing after admin resets | Admin must clear **all** groups the device belongs to. Device checks every group via `/devices/me` before exiting emergency. |
+| Device stuck on disconnection image | Verify the server is reachable from the Pi. Any successful sync or heartbeat resets the 72-hour timer. |
 | Tests fail with `UNABLE_TO_VERIFY_LEAF_SIGNATURE` | Run with `$env:NODE_TLS_REJECT_UNAUTHORIZED="0"` (Windows) or `NODE_TLS_REJECT_UNAUTHORIZED=0` (Linux) |
 
 ---
