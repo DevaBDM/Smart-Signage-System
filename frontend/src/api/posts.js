@@ -27,3 +27,18 @@ export const bulkAction = (payload) => api.post("/posts/bulk-action", payload);
 
 export const togglePostField = (post, field) =>
   api.put(`/posts/${post.id}`, { [field]: !post[field] });
+
+export const listAttachments = (postId) =>
+  api.get(`/posts/${postId}/attachments`).then((r) => r.data);
+
+export const uploadAttachments = (postId, files) => {
+  const fd = new FormData();
+  for (const f of files) fd.append("attachments", f);
+  return api.post(`/posts/${postId}/attachments`, fd, {
+    headers: { "Content-Type": "multipart/form-data" },
+    timeout: 120000,
+  }).then((r) => r.data);
+};
+
+export const deleteAttachment = (postId, attachmentId) =>
+  api.delete(`/posts/${postId}/attachments/${attachmentId}`).then((r) => r.data);

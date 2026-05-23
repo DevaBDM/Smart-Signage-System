@@ -49,6 +49,29 @@ router.get("/videos/:filename", uploadCors, (req, res) =>
 router.get("/images/:filename", uploadCors, (req, res) =>
   sendUploadFile("images", req.params.filename, res),
 );
+router.get("/attachments/:filename", uploadCors, (req, res) => {
+  const safe = path.basename(String(req.params.filename || ""));
+  if (!safe) return res.status(400).send("Bad filename");
+
+  const subdirRoot = path.resolve(UPLOADS_DIR, "attachments");
+  const filePath = path.resolve(subdirRoot, safe);
+
+  if (!isPathInside(filePath, subdirRoot) || !fs.existsSync(filePath)) {
+    return res.status(404).send("Not found");
+  }
+
+  // Set Content-Disposition for download (unless ?preview=1)
+  if (!req.query.preview) {
+    const downloadName = req.query.filename ? String(req.query.filename) : safe;
+    res.setHeader("Content-Disposition", `attachment; filename="${downloadName}"`);
+  }
+
+  return res.sendFile(filePath, (err) => {
+    if (err && !res.headersSent) {
+      res.status(500).send("Failed to send file");
+    }
+  });
+});
 
 router.use(
   "/",

@@ -77,6 +77,8 @@ export default function CreatorPosts() {
   );
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
+  const [attachments, setAttachments] = useState([]);
+  const [attachmentLoading, setAttachmentLoading] = useState(false);
 
   const load = () => {
     const params = {};
@@ -216,6 +218,7 @@ export default function CreatorPosts() {
     setMsg("");
     clearForm();
     clearMediaItems();
+    setAttachments([]);
   };
 
   const startEdit = (post) => {
@@ -251,6 +254,7 @@ export default function CreatorPosts() {
         previewUrl: mediaSrc(img),
       })),
     );
+    setAttachments(post.attachments || []);
     setMsg(`Editing: ${post.title}`);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -325,6 +329,38 @@ export default function CreatorPosts() {
       setMsg(`❌ ${errMsg}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAttachmentUpload = async (files) => {
+    if (!editingId) return;
+    setAttachmentLoading(true);
+    setMsg("");
+    try {
+      const res = await postsApi.uploadAttachments(editingId, files);
+      setAttachments((prev) => [...prev, ...res.created]);
+      setMsg(`✅ Added ${res.count} attachment${res.count > 1 ? "s" : ""}.`);
+    } catch (err) {
+      const errMsg = err.response?.data?.error || err.message || "Upload failed.";
+      setMsg(`❌ ${errMsg}`);
+    } finally {
+      setAttachmentLoading(false);
+    }
+  };
+
+  const handleAttachmentDelete = async (attachmentId) => {
+    if (!editingId) return;
+    if (!confirm("Remove this attachment?")) return;
+    setAttachmentLoading(true);
+    try {
+      await postsApi.deleteAttachment(editingId, attachmentId);
+      setAttachments((prev) => prev.filter((a) => a.id !== attachmentId));
+      setMsg("✅ Attachment removed.");
+    } catch (err) {
+      const errMsg = err.response?.data?.error || err.message || "Delete failed.";
+      setMsg(`❌ ${errMsg}`);
+    } finally {
+      setAttachmentLoading(false);
     }
   };
 
@@ -409,6 +445,10 @@ export default function CreatorPosts() {
             managedGroupIds={managed_group_ids}
             signageStateOptions={signageStateOptions}
             maxSignageStateLabel={SIGNAGE_STATE_LABELS[max_signage_state]}
+            attachments={attachments}
+            attachmentLoading={attachmentLoading}
+            onAttachmentUpload={handleAttachmentUpload}
+            onAttachmentDelete={handleAttachmentDelete}
           />
 
           <PostList

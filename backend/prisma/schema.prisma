@@ -93,6 +93,7 @@ model Post {
   signage_metadata     SignageMetadata?
   live_stream_id       Int?
   live_stream          LiveStream? @relation("PostLiveStream", fields: [live_stream_id], references: [id], onDelete: SetNull)
+  attachments          PostAttachment[]
 
   @@index([status])
   @@index([group_id])
@@ -134,6 +135,20 @@ model PostImage {
   order_index      Int       @default(0)
   created_at       DateTime  @default(now())
   post             Post      @relation(fields: [post_id], references: [id], onDelete: Cascade)
+}
+
+model PostAttachment {
+  id             Int      @id @default(autoincrement())
+  post_id        Int
+  file_path      String
+  file_name      String
+  mime_type      String
+  file_size      Int      @default(0)
+  extracted_text String?  @db.Text
+  created_at     DateTime @default(now())
+  post           Post     @relation(fields: [post_id], references: [id], onDelete: Cascade)
+
+  @@index([post_id])
 }
 
 model SignageMetadata {

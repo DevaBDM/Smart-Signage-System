@@ -3,10 +3,14 @@ const prisma = require("../db/prisma");
 const auth = require("../middleware/auth");
 const asyncHandler = require("../middleware/asyncHandler");
 const { uploadMedia } = require("../middleware/upload");
+const { uploadAttachments } = require("../middleware/uploadAttachment");
 const { createPost, updatePost, removePost, bulkAction } = require("../services/postService");
-const { getActor, getActorGroupIds } = require("../utils/permissions");
+const { getActor, getActorGroupIds, canManagePost } = require("../utils/permissions");
 const { toBool } = require("../utils/parsers");
+const { resolvePublicPath } = require("../utils/mediaProcessor");
 const piBridge = require("../services/piBridge");
+const fs = require("fs");
+const path = require("path");
 
 // GET all posts
 // Public listing is restricted to the feed channel; everything else requires auth and group scoping.
@@ -63,6 +67,7 @@ router.get("/", async (req, res, next) => {
       signage_deployments: true,
       live_stream: true,
       group: true,
+      attachments: { orderBy: { created_at: "asc" } },
     },
     orderBy: { created_at: "desc" },
   });
@@ -97,7 +102,7 @@ router.get("/meta/group-creators", auth(["admin", "creator"]), async (req, res) 
 router.get("/:id", async (req, res, next) => {
   const post = await prisma.post.findUnique({
     where: { id: Number(req.params.id) },
-    include: { author: true, images: true, signage_metadata: true, signage_deployments: true, live_stream: true },
+    include: { author: true, images: true, signage_metadata: true, signage_deployments: true, live_stream: true, attachments: true },
   });
   if (!post) return res.status(404).json({ error: "Not found" });
 
@@ -143,5 +148,112 @@ router.post("/bulk-action", auth(["admin", "creator"]), asyncHandler(async (req,
   const result = await bulkAction(actor, req.body, piBridge.getEmitter());
   res.json(result);
 }));
+
+// ─── ATTACHMENTS ────────────────────────────────────────────────────────────
+
+// POST upload attachments to a post (admin/creator who can manage the post)
+router.post(
+  "/:id/attachments",
+  auth(["admin", "creator"]),
+  uploadAttachments,
+  asyncHandler(async (req, res) => {
+    const postId = Number(req.params.id);
+    const post = await prisma.post.findUnique({ where: { id: postId } });
+    if (!post) return res.status(404).json({ error: "Post not found" });
+    if (!canManagePost(req.user, post)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const existingCount = await prisma.postAttachment.count({ where: { post_id: postId } });
+    const files = req.files || [];
+    if (existingCount + files.length > 5) {
+      // Clean up rejected temp files
+      for (const f of files) {
+        if (fs.existsSync(f.path)) fs.unlinkSync(f.path);
+      }
+      return res.status(400).json({ error: "Max 5 attachments per post" });
+    }
+
+    const created = [];
+    for (const file of files) {
+      const publicPath = `/uploads/attachments/${path.basename(file.path)}`;
+      const record = await prisma.postAttachment.create({
+        data: {
+          post_id: postId,
+          file_path: publicPath,
+          file_name: file.originalname,
+          mime_type: file.mimetype || "application/octet-stream",
+          file_size: file.size || 0,
+        },
+      });
+      created.push(record);
+    }
+
+    res.json({ created, count: created.length });
+  }),
+);
+
+// GET attachments for a post
+// Public for published feed posts; otherwise requires auth + group scope
+router.get("/:id/attachments", async (req, res, next) => {
+  const post = await prisma.post.findUnique({
+    where: { id: Number(req.params.id) },
+    select: { status: true, allowed_on_feed: true, group_id: true },
+  });
+  if (!post) return res.status(404).json({ error: "Post not found" });
+
+  // Public access
+  if (post.status === "published" && post.allowed_on_feed) return next();
+
+  // Otherwise auth required
+  return auth(["admin", "creator"])(req, res, next);
+}, asyncHandler(async (req, res) => {
+  if (req.user && req.user.role !== "admin") {
+    const allowedGroupIds = getActorGroupIds(req.user);
+    const post = await prisma.post.findUnique({
+      where: { id: Number(req.params.id) },
+      select: { group_id: true },
+    });
+    if (!allowedGroupIds.includes(post.group_id)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+  }
+
+  const attachments = await prisma.postAttachment.findMany({
+    where: { post_id: Number(req.params.id) },
+    orderBy: { created_at: "asc" },
+  });
+  res.json(attachments);
+}));
+
+// DELETE an attachment (admin/creator who can manage the post)
+router.delete(
+  "/:id/attachments/:attachment_id",
+  auth(["admin", "creator"]),
+  asyncHandler(async (req, res) => {
+    const postId = Number(req.params.id);
+    const attachmentId = Number(req.params.attachment_id);
+    const post = await prisma.post.findUnique({ where: { id: postId } });
+    if (!post) return res.status(404).json({ error: "Post not found" });
+    if (!canManagePost(req.user, post)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const attachment = await prisma.postAttachment.findUnique({
+      where: { id: attachmentId },
+    });
+    if (!attachment || attachment.post_id !== postId) {
+      return res.status(404).json({ error: "Attachment not found" });
+    }
+
+    const absPath = resolvePublicPath(attachment.file_path);
+    if (absPath && fs.existsSync(absPath)) {
+      try { fs.unlinkSync(absPath); } catch { /* ignore */ }
+    }
+
+    await prisma.postAttachment.delete({ where: { id: attachmentId } });
+    res.json({ deleted: true });
+  }),
+);
 
 module.exports = router;

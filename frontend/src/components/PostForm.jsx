@@ -1,8 +1,18 @@
+import { useRef, useState } from "react";
+import { FileUp, X, FileText, Trash2 } from "lucide-react";
 import MediaUploadField from "./MediaUploadField";
 import LiveStreamPicker from "./LiveStreamPicker";
 import SignagePanel from "./SignagePanel";
 import { Card, Message } from "./ui";
 import * as S from "../styles";
+
+const fmtBytes = (b) => {
+  if (!b || b < 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let i = 0;
+  while (b >= 1024 && i < units.length - 1) { b /= 1024; i++; }
+  return `${b.toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
+};
 
 export default function PostForm({
   form,
@@ -21,6 +31,10 @@ export default function PostForm({
   managedGroupIds,
   signageStateOptions,
   maxSignageStateLabel,
+  attachments = [],
+  attachmentLoading = false,
+  onAttachmentUpload,
+  onAttachmentDelete,
 }) {
   const setField = (patch) => onChange({ ...form, ...patch });
 
@@ -67,6 +81,86 @@ export default function PostForm({
           onChange={(e) => setField({ description_markdown: e.target.value })}
           placeholder="## Announcement&#10;Write your **markdown** here..."
         />
+
+        {/* Attachments */}
+        <div style={{ border: "1px dashed #d1d5db", borderRadius: 10, padding: 14, background: "#f9fafb" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <FileUp size={18} color="#6b7280" />
+            <span style={{ fontWeight: 600, fontSize: 14, color: "#374151" }}>
+              Attachments
+            </span>
+            <span style={{ fontSize: 12, color: "#9ca3af" }}>
+              {editingId ? "PDF, Word, Excel, etc. (max 5)" : "Save post first to add attachments"}
+            </span>
+          </div>
+
+          {editingId && (
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", marginBottom: 10 }}>
+              <input
+                type="file"
+                multiple
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.csv"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const files = Array.from(e.target.files);
+                  if (files.length && onAttachmentUpload) onAttachmentUpload(files);
+                  e.target.value = "";
+                }}
+              />
+              <span style={{ ...S.btn, padding: "6px 12px", fontSize: 13 }}>
+                {attachmentLoading ? "Uploading..." : "Add Files"}
+              </span>
+            </label>
+          )}
+
+          {attachments.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
+              {attachments.map((att) => (
+                <div
+                  key={att.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    background: "#fff",
+                    border: "1px solid #e5e7eb",
+                    borderRadius: 8,
+                    padding: "8px 12px",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, overflow: "hidden" }}>
+                    <FileText size={18} color="#2563eb" />
+                    <span
+                      style={{
+                        fontSize: 13,
+                        color: "#374151",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        maxWidth: 220,
+                      }}
+                      title={att.file_name}
+                    >
+                      {att.file_name}
+                    </span>
+                    <span style={{ fontSize: 11, color: "#9ca3af", flexShrink: 0 }}>
+                      {fmtBytes(att.file_size)}
+                    </span>
+                  </div>
+                  {editingId && onAttachmentDelete && (
+                    <button
+                      onClick={() => onAttachmentDelete(att.id)}
+                      style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}
+                      title="Remove"
+                    >
+                      <Trash2 size={16} color="#ef4444" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div style={{ display: "flex", gap: 12, marginBottom: 4 }}>
           <label style={{ fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>

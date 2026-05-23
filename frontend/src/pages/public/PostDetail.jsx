@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { FileText, Download } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
@@ -172,8 +173,8 @@ export default function PostDetail() {
           <h1 style={s.title}>{post.title}</h1>
           {post.description_markdown ? (
             <div className="markdown-body">
-              <ReactMarkdown 
-                remarkPlugins={[remarkGfm, remarkMath, remarkWikiLink]} 
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm, remarkMath, remarkWikiLink]}
                 rehypePlugins={[rehypeRaw, rehypeKatex]}
                 components={{
                   blockquote: CustomBlockquote
@@ -187,6 +188,47 @@ export default function PostDetail() {
               No description provided.
             </p>
           )}
+
+          {/* Attachments */}
+          {post.attachments && post.attachments.length > 0 && (
+            <div style={{ marginTop: 28, paddingTop: 20, borderTop: "1px solid #e5e7eb" }}>
+              <h3 style={{ fontSize: 16, fontWeight: 600, color: "#1a1a2e", marginBottom: 12 }}>
+                Downloads
+              </h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {post.attachments.map((att) => (
+                  <a
+                    key={att.id}
+                    href={`${att.file_path}?filename=${encodeURIComponent(att.file_name)}`}
+                    download={att.file_name}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      padding: "10px 14px",
+                      background: "#f9fafb",
+                      border: "1px solid #e5e7eb",
+                      borderRadius: 10,
+                      textDecoration: "none",
+                      color: "#374151",
+                      transition: "background 0.2s",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "#f3f4f6")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "#f9fafb")}
+                  >
+                    <FileText size={20} color="#2563eb" />
+                    <span style={{ flex: 1, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {att.file_name}
+                    </span>
+                    <span style={{ fontSize: 12, color: "#9ca3af", flexShrink: 0 }}>
+                      {fmtBytes(att.file_size)}
+                    </span>
+                    <Download size={18} color="#6b7280" />
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -194,6 +236,14 @@ export default function PostDetail() {
     </div>
   );
 }
+
+const fmtBytes = (b) => {
+  if (!b || b < 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let i = 0;
+  while (b >= 1024 && i < units.length - 1) { b /= 1024; i++; }
+  return `${b.toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
+};
 
 const markdownCss = `
   .markdown-body {
