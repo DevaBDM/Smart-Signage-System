@@ -1,6 +1,7 @@
 // Pin Assignments
 const int LDR_PIN = A0;       // Real LDR Analog output
 const int RAIN_POT = A1;      // Potentiometer simulating rain volume
+const int EMERGENCY_BTN = 2;  // Physical emergency button (pull-down resistor)
 
 // Ultrasonic Sensors (On the Mega's double-row digital block)
 const int TRIG_1 = 22; const int ECHO_1 = 23; // Front
@@ -11,11 +12,12 @@ const int PROXIMITY_THRESHOLD_CM = 100; // Trigger distance ceiling
 
 void setup() {
   Serial.begin(9600); // Must match python config file BAUD_RATE
-  
+
   // Initialize hardware input paths
   pinMode(LDR_PIN, INPUT);
   pinMode(RAIN_POT, INPUT);
-  
+  pinMode(EMERGENCY_BTN, INPUT); // Emergency button
+
   pinMode(TRIG_1, OUTPUT); pinMode(ECHO_1, INPUT);
   pinMode(TRIG_2, OUTPUT); pinMode(ECHO_2, INPUT);
   pinMode(TRIG_3, OUTPUT); pinMode(ECHO_3, INPUT);
@@ -53,12 +55,16 @@ void loop() {
   int lightVal = analogRead(LDR_PIN);
   int rainVal = analogRead(RAIN_POT);
 
+  // Read emergency button (HIGH = pressed with pull-down resistor)
+  int emergencyVal = digitalRead(EMERGENCY_BTN);
+
   // Send structured string packet out to the Python Serial handler
-  // Format required: SENSOR:motion:1,brightness:742,rain:0
+  // Format required: SENSOR:motion:1,brightness:742,rain:0,emergency:1
   String msg = "SENSOR:motion:" + String(motionVal) +
                ",brightness:" + String(lightVal) +
-               ",rain:" + String(rainVal);
-  
+               ",rain:" + String(rainVal) +
+               ",emergency:" + String(emergencyVal);
+
   Serial.println(msg);
   delay(2000); // Transmit loop cadence data packet every 2 seconds
 }

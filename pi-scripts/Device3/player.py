@@ -113,3 +113,14 @@ def stop_mpv():
     if _mpv_process:
         _mpv_process.terminate()
         _mpv_process = None
+
+def play_emergency(path):
+    """Force-play an emergency file, bypassing the normal playlist."""
+    if not path or not os.path.exists(path):
+        print(f"[player] Emergency file not found: {path}")
+        return False
+    ensure_mpv_running()
+    mpv.loadfile(path, {"loop-file": "inf"})
+    mpv.show_text("EMERGENCY ALERT", 5000)
+    print(f"[player] Emergency playback started: {path}")
+    return True

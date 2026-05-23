@@ -27,3 +27,6 @@ SYNC_INTERVAL = 60
 
 # Default duration for live streams if not specified (seconds)
 LIVE_STREAM_DURATION = 3600
+
+# Local emergency fallback asset path (used when hardware button is pressed)
+EMERGENCY_FALLBACK = "/home/pi/emergency_fallback.mp4"

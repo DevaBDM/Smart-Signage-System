@@ -190,6 +190,34 @@ def get_local_ip():
 # ── Pi → Server: sensor loop (reads from Arduino serial) ─────
 
 
+_emu2 = {"triggered": False}
+
+def _push_local_emergency():
+    """Push a locally cached emergency asset to Anthias immediately."""
+    fallback = "/home/pi/emergency_fallback.mp4"
+    if not os.path.exists(fallback):
+        print("[emergency] No local fallback asset found")
+        return
+    try:
+        from content_sync import register_anthias_asset
+        payload = {
+            "name": f"EMERGENCY ALERT (Device {DEVICE_ID})",
+            "uri": fallback,
+            "mimetype": "video" if fallback.lower().endswith((".mp4", ".webm", ".mov")) else "image",
+            "duration": 0,
+            "is_enabled": True,
+            "skip_asset_check": True,
+        }
+        res = register_anthias_asset(payload)
+        if res.get("ok"):
+            print(f"[emergency] Local emergency asset pushed to Anthias")
+            import subprocess
+            subprocess.run(["pkill", "-HUP", "anthias"], capture_output=True)
+        else:
+            print(f"[emergency] Failed to push emergency asset: {res.get('error')}")
+    except Exception as e:
+        print(f"[emergency] Local emergency push failed: {e}")
+
 def sensor_loop():
     try:
         import serial
@@ -200,7 +228,7 @@ def sensor_loop():
             line = ser.readline().decode("utf-8").strip()
             if not line.startswith("SENSOR:"):
                 continue
-            # SENSOR:motion:1,brightness:742,rain:0
+            # SENSOR:motion:1,brightness:742,rain:0,emergency:1
             try:
                 _, payload = line.split(":", 1)
                 # Write to temp file for other scripts (like brightness_control.py)
@@ -208,6 +236,24 @@ def sensor_loop():
                     f.write(payload)
 
                 values = dict(p.split(":") for p in payload.split(","))
+
+                # Emergency button detection
+                emergency_raw = values.get("emergency", "0")
+                if emergency_raw == "1" and not _emu2["triggered"]:
+                    print("[sensor_loop] EMERGENCY BUTTON DETECTED")
+                    _emu2["triggered"] = True
+                    # Notify server immediately
+                    if sio.connected:
+                        try:
+                            sio.emit("emergency_trigger", {"device_id": DEVICE_ID})
+                            print("[sensor_loop] emergency_trigger emitted")
+                        except Exception as e:
+                            print(f"[sensor_loop] emergency_trigger emit failed: {e}")
+                    # Local fail-safe: push cached emergency asset to Anthias
+                    _push_local_emergency()
+                elif emergency_raw == "0" and _emu2["triggered"]:
+                    _emu2["triggered"] = False
+
                 if sio.connected:
                     sio.emit(
                         "sensor_update",

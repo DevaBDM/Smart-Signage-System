@@ -19,6 +19,16 @@ def test_connection():
                 line = ser.readline().decode("utf-8").rstrip()
                 print(f"Received: {line}")
 
+                # Parse emergency flag if present
+                if line.startswith("SENSOR:"):
+                    try:
+                        _, payload = line.split(":", 1)
+                        values = dict(p.split(":") for p in payload.split(","))
+                        if values.get("emergency") == "1":
+                            print("[Arduino] EMERGENCY BUTTON PRESSED")
+                    except Exception:
+                        pass
+
                 # Send a confirmation back to the Arduino
                 ser.write(b"ACK from Pi\n")
 
