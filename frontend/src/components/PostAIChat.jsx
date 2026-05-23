@@ -1,16 +1,28 @@
 import { useState, useRef, useEffect } from "react";
-import { MessageCircle, X, Send, Bot, User } from "lucide-react";
+import {
+  MessageCircle, X, Send, Bot, User, Copy, Check, Square,
+  GripVertical
+} from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import api from "../api/axios";
+
+const MIN_W = 320;
+const MAX_W = 900;
+const MIN_H = 360;
+const MAX_H = 900;
 
 export default function PostAIChat({ postId, descriptionMarkdown, attachments = [] }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [dims, setDims] = useState({ w: 380, h: 520 });
+  const [copiedIdx, setCopiedIdx] = useState(null);
   const messagesEndRef = useRef(null);
+  const abortRef = useRef(null);
+  const resizeRef = useRef({ dragging: false, startX: 0, startY: 0, startW: 0, startH: 0 });
 
   const hasContext = !!(descriptionMarkdown || attachments.length > 0);
 
@@ -30,26 +42,80 @@ export default function PostAIChat({ postId, descriptionMarkdown, attachments = 
     setMessages((prev) => [...prev, { role: "user", content: question }]);
     setLoading(true);
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
-      const res = await api.post("/ai/ask", {
-        post_id: postId,
-        question,
-      });
+      const res = await api.post(
+        "/ai/ask",
+        { post_id: postId, question },
+        { signal: controller.signal }
+      );
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: res.data.answer },
       ]);
     } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: "Sorry, I couldn't get an answer right now. Please try again.",
-        },
-      ]);
+      if (api.isCancel?.(err) || err.name === "CanceledError") {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "Stopped." },
+        ]);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: "Sorry, I couldn't get an answer right now. Please try again.",
+          },
+        ]);
+      }
     } finally {
       setLoading(false);
+      abortRef.current = null;
     }
+  };
+
+  const handleStop = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+  };
+
+  const handleCopy = async (text, idx) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedIdx(idx);
+      setTimeout(() => setCopiedIdx(null), 1500);
+    } catch {
+      // ignore
+    }
+  };
+
+  const startResize = (e) => {
+    e.preventDefault();
+    resizeRef.current = {
+      dragging: true,
+      startX: e.clientX,
+      startY: e.clientY,
+      startW: dims.w,
+      startH: dims.h,
+    };
+    document.addEventListener("mousemove", onResizeMove);
+    document.addEventListener("mouseup", onResizeUp);
+  };
+
+  const onResizeMove = (e) => {
+    const r = resizeRef.current;
+    if (!r.dragging) return;
+    const newW = Math.min(MAX_W, Math.max(MIN_W, r.startW - (e.clientX - r.startX)));
+    const newH = Math.min(MAX_H, Math.max(MIN_H, r.startH - (e.clientY - r.startY)));
+    setDims({ w: newW, h: newH });
+  };
+
+  const onResizeUp = () => {
+    resizeRef.current.dragging = false;
+    document.removeEventListener("mousemove", onResizeMove);
+    document.removeEventListener("mouseup", onResizeUp);
   };
 
   const handleKeyDown = (e) => {
@@ -77,7 +143,7 @@ export default function PostAIChat({ postId, descriptionMarkdown, attachments = 
   return (
     <div style={s.overlay}>
       <style>{aiMarkdownCss}</style>
-      <div style={s.panel}>
+      <div style={{ ...s.panel, width: dims.w, height: dims.h }}>
         {/* Header */}
         <div style={s.header}>
           <div style={s.headerTitle}>
@@ -105,6 +171,7 @@ export default function PostAIChat({ postId, descriptionMarkdown, attachments = 
               style={{
                 ...s.messageRow,
                 justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
+                position: "relative",
               }}
             >
               {msg.role === "assistant" && (
@@ -117,6 +184,7 @@ export default function PostAIChat({ postId, descriptionMarkdown, attachments = 
                   ...s.messageBubble,
                   background: msg.role === "user" ? "#2563eb" : "#f3f4f6",
                   color: msg.role === "user" ? "#fff" : "#374151",
+                  position: "relative",
                 }}
               >
                 {msg.role === "assistant" ? (
@@ -131,6 +199,30 @@ export default function PostAIChat({ postId, descriptionMarkdown, attachments = 
                 ) : (
                   msg.content
                 )}
+                {/* Copy button */}
+                <button
+                  onClick={() => handleCopy(msg.content, i)}
+                  title="Copy"
+                  style={{
+                    position: "absolute",
+                    bottom: 2,
+                    right: 4,
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    padding: 2,
+                    opacity: 0.4,
+                    transition: "opacity 0.2s",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
+                  onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.4")}
+                >
+                  {copiedIdx === i ? (
+                    <Check size={12} color={msg.role === "user" ? "#bfdbfe" : "#6b7280"} />
+                  ) : (
+                    <Copy size={12} color={msg.role === "user" ? "#bfdbfe" : "#6b7280"} />
+                  )}
+                </button>
               </div>
               {msg.role === "user" && (
                 <div style={{ ...s.avatar, background: "#dbeafe" }}>
@@ -162,17 +254,47 @@ export default function PostAIChat({ postId, descriptionMarkdown, attachments = 
             placeholder="Type your question..."
             style={s.input}
           />
-          <button
-            onClick={handleSend}
-            disabled={!input.trim() || loading}
-            style={{
-              ...s.sendBtn,
-              opacity: !input.trim() || loading ? 0.5 : 1,
-              cursor: !input.trim() || loading ? "not-allowed" : "pointer",
-            }}
-          >
-            <Send size={18} color="#fff" />
-          </button>
+          {loading ? (
+            <button
+              onClick={handleStop}
+              title="Stop"
+              style={{ ...s.stopBtn }}
+            >
+              <Square size={14} color="#fff" fill="#fff" />
+            </button>
+          ) : (
+            <button
+              onClick={handleSend}
+              disabled={!input.trim()}
+              style={{
+                ...s.sendBtn,
+                opacity: !input.trim() ? 0.5 : 1,
+                cursor: !input.trim() ? "not-allowed" : "pointer",
+              }}
+            >
+              <Send size={18} color="#fff" />
+            </button>
+          )}
+        </div>
+
+        {/* Resize handle */}
+        <div
+          onMouseDown={startResize}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: 20,
+            height: 20,
+            cursor: "nwse-resize",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            opacity: 0.4,
+          }}
+          title="Resize"
+        >
+          <GripVertical size={14} color="#9ca3af" />
         </div>
       </div>
     </div>
@@ -242,9 +364,9 @@ const s = {
     zIndex: 1000,
   },
   panel: {
-    width: 380,
+    position: "relative",
     maxWidth: "calc(100vw - 48px)",
-    height: 520,
+    maxHeight: "calc(100vh - 48px)",
     background: "#fff",
     borderRadius: 16,
     boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
@@ -343,5 +465,18 @@ const s = {
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+    cursor: "pointer",
+  },
+  stopBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: "50%",
+    background: "#ef4444",
+    border: "none",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    cursor: "pointer",
   },
 };
