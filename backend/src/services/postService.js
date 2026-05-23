@@ -10,6 +10,7 @@ const {
   validateSignageState,
   buildSignageMeta,
 } = require("../validators/postValidator");
+const { rankOf, STATE_RANK, SIGNAGE_STATES } = require("../utils/signageStates");
 const {
   processMediaFiles,
   deleteMediaFile,
@@ -562,4 +563,72 @@ async function bulkAction(actor, body, emitter) {
   return { ok: true, count: validIds.length };
 }
 
-module.exports = { createPost, updatePost, removePost, bulkAction };
+/**
+ * When a user's max_signage_state is downgraded, automatically downgrade
+ * all their posts that exceed the new maximum and re-deploy to affected
+ * signage devices so priority is lowered immediately.
+ */
+async function syncPostsToMaxSignageState(userId, newMaxState, emitter) {
+  const newRank = rankOf(newMaxState);
+
+  // States that are MORE urgent than the new max (lower rank number)
+  const disallowedStates = SIGNAGE_STATES.filter(
+    (state) => STATE_RANK[state] < newRank
+  );
+
+  if (disallowedStates.length === 0) {
+    return { count: 0 };
+  }
+
+  const posts = await prisma.post.findMany({
+    where: {
+      created_by: userId,
+      signage_state: { in: disallowedStates },
+    },
+    include: {
+      images: true,
+      signage_metadata: true,
+      live_stream: true,
+      signage_deployments: { include: { device: true } },
+    },
+  });
+
+  if (posts.length === 0) {
+    return { count: 0 };
+  }
+
+  await prisma.post.updateMany({
+    where: { id: { in: posts.map((p) => p.id) } },
+    data: { signage_state: newMaxState },
+  });
+
+  const adminActor = { role: "admin" };
+
+  for (const post of posts) {
+    const deviceIds = post.signage_deployments.map((d) => d.device_id);
+    if (deviceIds.length === 0) continue;
+
+    const onlineIds = await getOnlineDeviceIdSet(prisma, deviceIds);
+    const targetDevices = post.signage_deployments
+      .map((d) => d.device)
+      .filter((d) => onlineIds.has(d.id));
+
+    if (targetDevices.length > 0 && emitter) {
+      const updatedPost = { ...post, signage_state: newMaxState };
+      await deployPostToDevices(
+        emitter,
+        adminActor,
+        updatedPost,
+        targetDevices,
+        post.signage_metadata || {}
+      );
+    }
+  }
+
+  console.log(
+    `[syncPostsToMaxSignageState] Downgraded ${posts.length} posts for user ${userId} to ${newMaxState}`
+  );
+  return { count: posts.length };
+}
+
+module.exports = { createPost, updatePost, removePost, bulkAction, syncPostsToMaxSignageState };

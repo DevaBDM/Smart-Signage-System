@@ -1,6 +1,7 @@
 const userRepo = require("../repositories/userRepo");
-const { parseSignageState } = require("../utils/signageStates");
+const { parseSignageState, rankOf } = require("../utils/signageStates");
 const { parseGroupIds } = require("../utils/parsers");
+const { syncPostsToMaxSignageState } = require("./postService");
 
 const userListSelect = {
   id: true,
@@ -21,7 +22,7 @@ async function listUsers() {
   return userRepo.findUsers(userListSelect);
 }
 
-async function updateUser(id, body) {
+async function updateUser(id, body, emitter = null) {
   const {
     role,
     group_id,
@@ -51,7 +52,11 @@ async function updateUser(id, body) {
 
   const managedGroupIds = parseGroupIds(body.managed_group_ids);
 
-  return userRepo.transaction(async (tx) => {
+  // Capture old max_signage_state before transaction so we can detect downgrades after.
+  const userBefore = await userRepo.findUserById(id, { max_signage_state: true });
+  const oldMaxState = userBefore?.max_signage_state || "NORMAL";
+
+  const result = await userRepo.transaction(async (tx) => {
     const me = await tx.user.findUnique({
       where: { id },
       select: { id: true, role: true, creator_priority: true },
@@ -135,6 +140,13 @@ async function updateUser(id, body) {
 
     return tx.user.findUnique({ where: { id }, select: userListSelect });
   });
+
+  // Permission-Post Sync: if max_signage_state was downgraded, clean up the user's posts.
+  if (parsedMaxState && rankOf(parsedMaxState) > rankOf(oldMaxState)) {
+    await syncPostsToMaxSignageState(id, parsedMaxState, emitter);
+  }
+
+  return result;
 }
 
 async function removeUser(id, currentUserId) {
