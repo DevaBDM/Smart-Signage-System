@@ -1,5 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { MessageCircle, X, Send, Bot, User } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 import api from "../api/axios";
 
 export default function PostAIChat({ postId, descriptionMarkdown, attachments = [] }) {
@@ -73,6 +76,7 @@ export default function PostAIChat({ postId, descriptionMarkdown, attachments = 
 
   return (
     <div style={s.overlay}>
+      <style>{aiMarkdownCss}</style>
       <div style={s.panel}>
         {/* Header */}
         <div style={s.header}>
@@ -115,7 +119,18 @@ export default function PostAIChat({ postId, descriptionMarkdown, attachments = 
                   color: msg.role === "user" ? "#fff" : "#374151",
                 }}
               >
-                {msg.content}
+                {msg.role === "assistant" ? (
+                  <div className="ai-markdown">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      rehypePlugins={[rehypeRaw]}
+                    >
+                      {msg.content}
+                    </ReactMarkdown>
+                  </div>
+                ) : (
+                  msg.content
+                )}
               </div>
               {msg.role === "user" && (
                 <div style={{ ...s.avatar, background: "#dbeafe" }}>
@@ -163,6 +178,40 @@ export default function PostAIChat({ postId, descriptionMarkdown, attachments = 
     </div>
   );
 }
+
+const aiMarkdownCss = `
+  .ai-markdown { font-size: 14px; line-height: 1.5; }
+  .ai-markdown h1, .ai-markdown h2, .ai-markdown h3 {
+    margin: 8px 0 4px; font-weight: 700; color: inherit;
+  }
+  .ai-markdown h1 { font-size: 1.15em; }
+  .ai-markdown h2 { font-size: 1.05em; }
+  .ai-markdown h3 { font-size: 0.95em; }
+  .ai-markdown p { margin: 0 0 8px; }
+  .ai-markdown ul, .ai-markdown ol { padding-left: 1.4em; margin: 4px 0; }
+  .ai-markdown li { margin-bottom: 2px; }
+  .ai-markdown code {
+    background: rgba(0,0,0,0.06); padding: 2px 5px; border-radius: 4px;
+    font-family: monospace; font-size: 0.9em;
+  }
+  .ai-markdown pre {
+    background: rgba(0,0,0,0.06); padding: 8px 10px; border-radius: 8px;
+    overflow-x: auto; margin: 6px 0;
+  }
+  .ai-markdown pre code { background: none; padding: 0; }
+  .ai-markdown blockquote {
+    border-left: 3px solid rgba(0,0,0,0.15); padding-left: 10px;
+    margin: 6px 0; color: rgba(0,0,0,0.7);
+  }
+  .ai-markdown a { color: #2563eb; }
+  .ai-markdown table {
+    border-collapse: collapse; width: 100%; font-size: 13px; margin: 6px 0;
+  }
+  .ai-markdown th, .ai-markdown td {
+    border: 1px solid rgba(0,0,0,0.1); padding: 4px 8px; text-align: left;
+  }
+  .ai-markdown hr { border: none; border-top: 1px solid rgba(0,0,0,0.1); margin: 8px 0; }
+`;
 
 const s = {
   fab: {
