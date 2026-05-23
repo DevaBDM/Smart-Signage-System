@@ -89,8 +89,7 @@ def fetch_device_settings():
     except requests.exceptions.HTTPError as e:
         status = e.response.status_code if e.response else "?"
         if status == 401:
-            print(f"[api] fetch_device_settings 401 — token invalid, clearing for re-auth")
-            save_token("")
+            print(f"[api] fetch_device_settings 401 — token invalid. Will retry with existing token; if persistent, admin must reset device token via dashboard.")
         else:
             print(f"[api] Failed to fetch device settings HTTP {status}: {e}")
         return None

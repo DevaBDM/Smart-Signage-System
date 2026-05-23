@@ -252,8 +252,10 @@ def on_emergency_mode_end(data):
 @sio.on("auth_error")
 def on_auth_error(data):
     print(f"[socket] Auth error from server: {data}")
-    # Clear token so next reconnect re-registers
-    api.save_token("")
+    # Do NOT clear the local token here. The backend requires the exact
+    # token stored in the DB; clearing it would cause an infinite loop of
+    # "no token presented" → auth_error → reconnect without token.
+    # If the token is truly invalid, an admin must reset it via dashboard.
     sync_event.set()
 
 def heartbeat_loop():
