@@ -1,3 +1,5 @@
+import os
+
 # ~/signage/config.py
 
 SERVER_URL = "http://192.168.56.1:5000/api"  # Change this to your server's IP
@@ -11,3 +13,6 @@ DEVICE_ID = 1
 # Server-assigned token (populated automatically after first Socket.IO heartbeat).
 # Keep this secret — do not commit production values.
 DEVICE_TOKEN = ""
+
+# Local emergency fallback asset path (relative to this script's directory)
+EMERGENCY_FALLBACK = os.path.join(os.path.dirname(__file__), "emergency_fallback.mp4")

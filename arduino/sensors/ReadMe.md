@@ -46,14 +46,14 @@ Where emergency assets live in the system:
 | Location | Path / Mechanism | Notes |
 |----------|-----------------|-------|
 | **Server storage** | `/uploads/images/` or `/uploads/videos/` (processed) | Uploaded via Admin Dashboard → `POST /api/devices/:id/emergency-asset`. Max 200 MB. |
-| **Device3 (MPV player)** | `/home/pi/emergency_fallback.mp4` | Downloaded from server via `api.sync_emergency_asset()` on every sync loop. ETag-based change detection avoids redundant downloads. |
-| **Device1 / Device2 (Anthias)** | `/home/pi/emergency_fallback.mp4` | Downloaded from server via `_sync_emergency_asset()` inside `content_sync_loop`. |
-| **Local fallback (all Pis)** | Place a file at `/home/pi/emergency_fallback.mp4` manually | If the server is unreachable, the Pi will use whatever is already cached at this path. |
+| **Device3 (MPV player)** | Same directory as `mvp-player.py` → `emergency_fallback.mp4` | Downloaded from server via `api.sync_emergency_asset()` on every sync loop. ETag-based change detection avoids redundant downloads. |
+| **Device1 / Device2 (Anthias)** | Same directory as `socket_client.py` → `emergency_fallback.mp4` | Downloaded from server via `_sync_emergency_asset()` inside `content_sync_loop`. |
+| **Local fallback (all Pis)** | Place a file named `emergency_fallback.mp4` next to the main Python script manually | If the server is unreachable, the Pi will use whatever is already cached at this relative path. |
 
 ### To set up emergency assets:
 1. **Admin Dashboard** → Devices → select a device → "Emergency Asset" panel → upload an image or video.
 2. The server processes it (Sharp for images, FFmpeg for videos) and stores it.
-3. Each Pi syncs its own device settings during the normal content sync loop, downloads the asset to `/home/pi/emergency_fallback.mp4`, and caches it locally.
+3. Each Pi syncs its own device settings during the normal content sync loop, downloads the asset to `emergency_fallback.mp4` in the same folder as the running Python script, and caches it locally.
 4. When the **hardware emergency button** is pressed (or the admin triggers emergency mode), the Pi immediately plays this cached file.
 
 ---

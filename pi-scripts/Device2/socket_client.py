@@ -1,7 +1,7 @@
 import os
 import socket
 import socketio, time, threading
-from config import DEVICE_ID, DEVICE_NAME, LOCATION, SERVER_URL, SERIAL_PORT, BAUD_RATE, DEVICE_TOKEN
+from config import DEVICE_ID, DEVICE_NAME, LOCATION, SERVER_URL, SERIAL_PORT, BAUD_RATE, DEVICE_TOKEN, EMERGENCY_FALLBACK
 
 RAIN_THRESHOLD = 500
 
@@ -200,7 +200,7 @@ _emu2 = {"triggered": False}
 
 def _push_local_emergency():
     """Push a locally cached emergency asset to Anthias immediately."""
-    fallback = "/home/pi/emergency_fallback.mp4"
+    fallback = EMERGENCY_FALLBACK
     if not os.path.exists(fallback):
         print("[emergency] No local fallback asset found")
         return

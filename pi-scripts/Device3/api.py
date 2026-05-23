@@ -1,6 +1,6 @@
 import requests
 from pathlib import Path
-from config import SERVER_URL, DEVICE_ID, DEVICE_TOKEN
+from config import SERVER_URL, DEVICE_ID, DEVICE_TOKEN, EMERGENCY_FALLBACK
 
 SCRIPT_DIR = Path(__file__).parent.resolve()
 TOKEN_FILE = SCRIPT_DIR / ".device_token"
@@ -105,7 +105,7 @@ def download_file(url, dest, timeout=120):
         return False
 
 
-def sync_emergency_asset(fallback_path="/home/pi/emergency_fallback.mp4"):
+def sync_emergency_asset(fallback_path=EMERGENCY_FALLBACK):
     """Check server for emergency_asset_path and download it locally if needed."""
     device = fetch_device_settings()
     if not device:
