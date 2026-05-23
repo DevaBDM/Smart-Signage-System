@@ -186,6 +186,9 @@ def on_refresh_display(data):
     if media.is_emergency():
         print("[socket] Refresh blocked: emergency mode active")
         return
+    if media.is_disconnected_mode():
+        print("[socket] Refresh blocked: disconnection mode active")
+        return
     print("[socket] Refresh display requested")
     player.ensure_mpv_running()
     # Force reload of current media by resetting last_change
@@ -198,6 +201,9 @@ def on_refresh_display(data):
 def on_restart_display(data):
     if media.is_emergency():
         print("[socket] Restart blocked: emergency mode active")
+        return
+    if media.is_disconnected_mode():
+        print("[socket] Restart blocked: disconnection mode active")
         return
     print("[socket] Restart display requested")
     player.stop_mpv()

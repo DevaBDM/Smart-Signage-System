@@ -69,6 +69,11 @@ def scheduler_loop():
                 time.sleep(1)
                 continue
 
+            # Disconnected mode: do nothing, let disconnection image stay
+            if media.is_disconnected_mode():
+                time.sleep(1)
+                continue
+
             player.ensure_mpv_running()
             active = media.get_active_posts()
 

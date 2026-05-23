@@ -125,3 +125,15 @@ def play_emergency(path):
     mpv.show_text("EMERGENCY ALERT", 5000)
     print(f"[player] Emergency playback started: {path}")
     return True
+
+def play_disconnection(path):
+    """Display the disconnection timeout image."""
+    if not path or not os.path.exists(path):
+        print(f"[player] Disconnection image not found: {path}")
+        return False
+    ensure_mpv_running()
+    mpv.loadfile(path)
+    mpv.set_property("loop-file", "inf")
+    mpv.show_text("SERVER DISCONNECTED — Content Cleared", 5000)
+    print(f"[player] Disconnection image displayed: {path}")
+    return True

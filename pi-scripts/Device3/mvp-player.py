@@ -9,7 +9,7 @@ import api
 import socket_client
 import scheduler
 import sensors
-from config import SYNC_INTERVAL, EMERGENCY_FALLBACK
+from config import SYNC_INTERVAL, EMERGENCY_FALLBACK, DISCONNECTION_IMAGE
 
 def sync_loop():
     """Background thread: periodic sync with server.
@@ -17,8 +17,28 @@ def sync_loop():
     while True:
         wait_time = SYNC_INTERVAL
         try:
+            # ── Disconnection timeout check ──────────────────────────
+            if media.check_disconnection_timeout() and not media.is_disconnected_mode():
+                print("[sync] Server unreachable for >72 hours — entering disconnection mode")
+                media.purge_all()
+                media.set_disconnected(True)
+                player.play_disconnection(DISCONNECTION_IMAGE)
+                wait_time = 10
+                socket_client.sync_event.wait(timeout=wait_time)
+                socket_client.sync_event.clear()
+                continue
+
+            if media.is_disconnected_mode():
+                # We were disconnected; try to recover by syncing
+                print("[sync] Attempting to recover from disconnection mode...")
+
             new_posts = api.sync_deployments(media.ensure_cached)
             if new_posts is not None:
+                # Successful server contact — mark it and clear disconnected state
+                media.mark_server_contact()
+                if media.is_disconnected_mode():
+                    print("[sync] Server back online — exiting disconnection mode")
+                    media.set_disconnected(False)
                 media.update_posts(new_posts)
                 print(f"[sync] Stored {len(new_posts)} posts")
                 # Emit sync confirmations like Device1's content_sync_loop
@@ -45,6 +65,8 @@ def sync_loop():
 
             # Also sync the emergency asset from server
             api.sync_emergency_asset()
+            # Mark contact if emergency sync succeeded (even if deployments failed)
+            media.mark_server_contact()
 
             # Check group states to auto-clear or auto-enter emergency
             device = api.fetch_device_settings()

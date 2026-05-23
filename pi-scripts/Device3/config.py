@@ -32,3 +32,8 @@ LIVE_STREAM_DURATION = 3600
 
 # Local emergency fallback asset path (relative to this script's directory)
 EMERGENCY_FALLBACK = os.path.join(os.path.dirname(__file__), "emergency_fallback.mp4")
+
+# Disconnection timeout: if no server contact for this many hours, purge content
+# and display the disconnection image
+DISCONNECTION_TIMEOUT_HOURS = 72  # 3 days
+DISCONNECTION_IMAGE = os.path.join(os.path.dirname(__file__), "disconnection.png")

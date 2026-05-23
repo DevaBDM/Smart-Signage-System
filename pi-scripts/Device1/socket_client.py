@@ -1,7 +1,7 @@
 import os
 import socket
 import socketio, time, threading
-from config import DEVICE_ID, DEVICE_NAME, LOCATION, SERVER_URL, SERIAL_PORT, BAUD_RATE, DEVICE_TOKEN, EMERGENCY_FALLBACK
+from config import DEVICE_ID, DEVICE_NAME, LOCATION, SERVER_URL, SERIAL_PORT, BAUD_RATE, DEVICE_TOKEN, EMERGENCY_FALLBACK, DISCONNECTION_TIMEOUT_HOURS, DISCONNECTION_IMAGE
 
 RAIN_THRESHOLD = 500
 
@@ -13,6 +13,10 @@ _current_token = DEVICE_TOKEN or ""
 # Emergency mode state (like Device3's media.is_emergency())
 _emergency_active = False
 
+# Disconnection timeout tracking
+_disconnected_active = False
+_last_server_contact = time.time()
+
 
 def _is_emergency():
     return _emergency_active
@@ -21,6 +25,28 @@ def _is_emergency():
 def _set_emergency(active):
     global _emergency_active
     _emergency_active = active
+
+
+def _mark_server_contact():
+    """Record that we successfully contacted the server."""
+    global _last_server_contact, _disconnected_active
+    _last_server_contact = time.time()
+    _disconnected_active = False
+
+
+def _is_disconnected():
+    return _disconnected_active
+
+
+def _set_disconnected(active):
+    global _disconnected_active
+    _disconnected_active = active
+
+
+def _check_disconnection_timeout():
+    """Return True if server has been unreachable for longer than DISCONNECTION_TIMEOUT_HOURS."""
+    elapsed = time.time() - _last_server_contact
+    return elapsed > (DISCONNECTION_TIMEOUT_HOURS * 3600)
 
 
 def _load_token():
@@ -290,6 +316,37 @@ def _push_local_emergency():
     except Exception as e:
         print(f"[emergency] Local emergency push failed: {e}")
 
+def _push_disconnection_image():
+    """Push the disconnection timeout image to Anthias and clear other assets."""
+    _set_disconnected(True)
+    img = DISCONNECTION_IMAGE
+    print(f"[disconnection] Pushing disconnection image from: {img}")
+    print(f"[disconnection] File exists: {os.path.exists(img)}")
+    if not os.path.exists(img):
+        print("[disconnection] No disconnection image found — cannot push to Anthias")
+        return
+    try:
+        from content_sync import clear_all_assets, register_anthias_asset
+        # Clear all existing assets first
+        clear_all_assets()
+        payload = {
+            "name": f"SERVER DISCONNECTED (Device {DEVICE_ID})",
+            "uri": img,
+            "mimetype": "image",
+            "duration": 0,
+            "is_enabled": True,
+            "skip_asset_check": True,
+        }
+        res = register_anthias_asset(payload)
+        if res.get("ok"):
+            print("[disconnection] Disconnection image pushed to Anthias")
+            import subprocess
+            subprocess.run(["pkill", "-HUP", "anthias"], capture_output=True)
+        else:
+            print(f"[disconnection] Failed to push image: {res.get('error')}")
+    except Exception as e:
+        print(f"[disconnection] Push failed: {e}")
+
 def sensor_loop():
     try:
         import serial
@@ -418,8 +475,18 @@ def content_sync_loop():
 
     while True:
         try:
+            # ── Disconnection timeout check ──────────────────────────
+            if _check_disconnection_timeout() and not _is_disconnected():
+                print("[content_sync_loop] Server unreachable for >72 hours — entering disconnection mode")
+                _push_disconnection_image()
+                time.sleep(10)
+                continue
+
+            if _is_disconnected():
+                print("[content_sync_loop] Attempting to recover from disconnection mode...")
+
             pushed_assets = None
-            if not _is_emergency():
+            if not _is_emergency() and not _is_disconnected():
                 pushed_assets = sync()
                 if pushed_assets and sio.connected:
                     for result in pushed_assets:
@@ -428,11 +495,21 @@ def content_sync_loop():
                                 "signage_asset_synced",
                                 {"device_id": DEVICE_ID, **result},
                             )
+                    _mark_server_contact()
+            elif _is_disconnected():
+                print("[content_sync_loop] Skipping normal sync: disconnection mode active")
             else:
                 print("[content_sync_loop] Skipping normal sync: emergency mode active")
 
             # Also sync emergency asset from server
             device = _sync_emergency_asset()
+            if device:
+                _mark_server_contact()
+                if _is_disconnected():
+                    print("[content_sync_loop] Server back online — exiting disconnection mode")
+                    _set_disconnected(False)
+                    import subprocess
+                    subprocess.run(["pkill", "-HUP", "anthias"], capture_output=True)
 
             # Check group states to auto-enter/exit emergency
             if device:

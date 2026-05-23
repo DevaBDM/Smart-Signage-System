@@ -4,7 +4,7 @@ import threading
 import requests
 from pathlib import Path
 from datetime import datetime, timezone
-from config import CACHE_DIR, SERVER_URL
+from config import CACHE_DIR, SERVER_URL, DISCONNECTION_TIMEOUT_HOURS
 
 SCRIPT_DIR = Path(__file__).parent.resolve()
 CACHE_PATH = SCRIPT_DIR / CACHE_DIR
@@ -19,6 +19,8 @@ _state = {
     "last_change": 0,      # timestamp when current post started
     "current_post": None,  # the post currently on screen
     "emergency_active": False,  # True when emergency mode is active
+    "disconnected_active": False,  # True when server disconnected for too long
+    "last_server_contact": time.time(),  # timestamp of last successful server contact
 }
 
 def _now():
@@ -143,8 +145,45 @@ def set_emergency(active):
 def clear_all():
     with _state_lock:
         _state["posts"] = []
-        if not _state["emergency_active"]:
+        if not _state["emergency_active"] and not _state["disconnected_active"]:
             _state["current_post"] = None
+    save_playlist()
+
+# ── Disconnection timeout helpers ─────────────────────────────
+
+def mark_server_contact():
+    """Record that we successfully contacted the server."""
+    with _state_lock:
+        _state["last_server_contact"] = time.time()
+        _state["disconnected_active"] = False
+
+def is_disconnected_mode():
+    with _state_lock:
+        return _state["disconnected_active"]
+
+def set_disconnected(active):
+    with _state_lock:
+        _state["disconnected_active"] = active
+
+def check_disconnection_timeout():
+    """Return True if server has been unreachable for longer than DISCONNECTION_TIMEOUT_HOURS."""
+    with _state_lock:
+        elapsed = time.time() - _state["last_server_contact"]
+    return elapsed > (DISCONNECTION_TIMEOUT_HOURS * 3600)
+
+def purge_all():
+    """Clear all cached content, playlist, and downloaded files."""
+    with _state_lock:
+        _state["posts"] = []
+        _state["current_idx"] = 0
+        _state["current_post"] = None
+    try:
+        for f in CACHE_PATH.iterdir():
+            if f.is_file():
+                f.unlink()
+        print("[media] Purged cache directory")
+    except Exception as e:
+        print(f"[media] Cache purge error: {e}")
     save_playlist()
 
 def _is_active(post):
