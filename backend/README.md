@@ -1,304 +1,304 @@
-# Smart Digital Signage — Backend
+# Smart Signage — Backend
 
-A production-grade **Node.js / Express** backend for a university-campus digital signage system. It powers content management, multi-device synchronization, real-time socket communication, live streaming (RTMP/HLS), AI-assisted content queries, and emergency override systems.
-
----
-
-## Table of Contents
-
-1. [Overview](#overview)
-2. [Tech Stack](#tech-stack)
-3. [Features](#features)
-4. [Architecture](#architecture)
-5. [Database Schema](#database-schema)
-6. [Project Structure](#project-structure)
-7. [Environment Variables](#environment-variables)
-8. [Authentication & Authorization](#authentication--authorization)
-9. [REST API Reference](#rest-api-reference)
-10. [Socket.IO Events](#socketio-events)
-11. [Media Processing Pipeline](#media-processing-pipeline)
-12. [Live Streaming](#live-streaming)
-13. [Emergency Mode](#emergency-mode)
-14. [AI Integration](#ai-integration)
-15. [Setup & Installation](#setup--installation)
-16. [Testing](#testing)
-17. [Troubleshooting](#troubleshooting)
+The backend is the **central command and data hub** of the Smart Signage System. Written in **Node.js** with **Express.js**, it exposes a REST API, manages a PostgreSQL database via Prisma, maintains persistent Socket.IO connections to Raspberry Pi display agents, processes media with Sharp and FFmpeg, relays live video streams, and integrates with OpenAI for content Q&A.
 
 ---
 
-## Overview
+## What the Backend Is
 
-The backend is the central hub of the Smart Digital Signage system. It:
+The backend is a single Node.js process that serves three distinct consumers simultaneously:
 
-- Manages **users**, **groups**, **posts**, and **devices** with role-based access control (RBAC)
-- Serves a **REST API** consumed by a React/Vite frontend and Raspberry Pi agents
-- Maintains **persistent WebSocket connections** to field devices via Socket.IO
-- Processes and stores **images** (Sharp) and **videos** (FFmpeg)
-- Proxies **live streams** (HLS, RTMP, RTSP, YouTube) with automatic health monitoring
-- Provides an **AI Q&A endpoint** powered by OpenAI for content inquiries
+1. **React Admin Dashboard** — Content creators and administrators use a web UI to write posts, assign content to devices, approve new devices, manage groups, start live streams, and trigger emergency broadcasts.
+2. **Raspberry Pi Display Agents** — Field devices poll the REST API for their deployment playlists, push sensor data via Socket.IO, and receive real-time commands (play next, emergency start, refresh display) from the server.
+3. **Public Feed Consumers** — Anonymous visitors browse a public content feed and ask AI-powered questions about published posts.
 
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|------------|
-| Runtime | Node.js 18+ |
-| Framework | Express.js 5 |
-| ORM | Prisma 5 (PostgreSQL) |
-| Real-time | Socket.IO 4 |
-| Auth | JWT (jsonwebtoken) + bcryptjs |
-| Media | Sharp (images), FFmpeg (videos), fluent-ffmpeg |
-| Streaming | node-media-server (RTMP ingest), FFmpeg relay (HLS) |
-| AI | OpenAI API |
-| Testing | Jest + Supertest |
-| Linting | ESLint + Prettier |
+Every piece of signage content, every device heartbeat, every sensor reading, every emergency trigger, and every live stream passes through this backend.
 
 ---
 
-## Features
+## What the Backend Does
 
-### Content Management
-- **Posts** with rich markdown descriptions, multiple images/videos, and attachments
-- **Groups** to organize users, devices, and content
-- **Playlists** for ordered content sequencing
-- **Draft / Published** workflow with admin approval gates
-- **Feed channel** (public consumption) vs **Signage channel** (device-only)
+The backend performs six core functions:
 
-### Device Management
-- Device registration, approval, and token-based authentication
-- Per-device emergency asset upload (image/video, max 200 MB)
-- Device grouping with multi-group membership
-- Online/offline status tracking via 30-second heartbeat timeout
-- Sensor data ingestion (motion, brightness, rain)
+### 1. Content Lifecycle Management
 
-### Signage Operations
-- Publish posts to specific devices with scheduling (`start_date`, `end_date`, `duration_seconds`)
-- Priority-based deployment ordering
-- Playback controls (`next`, `previous`, `start`) via Socket.IO
-- Asset hide/show without deletion
-- Signage state hierarchy: `EMERGENCY` > `SECURITY_RISK` > `BREAKING_NEWS` > `NORMAL`
+Posts are the atomic unit of content. A post can contain:
+- A title, markdown description, and URL slug
+- Multiple images and videos (uploaded, cropped, transcoded)
+- PDF, DOCX, and PPTX attachments with full-text extraction for AI context
+- A linked live stream
+- Scheduling metadata (`start_date`, `end_date`, `duration_seconds`, `priority`)
+- A `signage_state` (NORMAL, BREAKING_NEWS, SECURITY_RISK, EMERGENCY)
 
-### Live Streaming
-- **HLS** (pull from external URL)
-- **RTMP** (push to local ingest server)
-- **RTSP** (camera relay)
-- **YouTube** (HLS proxy)
-- Stream key rotation for RTMP
-- Health monitoring with auto-restart
+Posts move through a **draft → published** workflow. Only published posts with `allowed_on_signage = true` can be deployed to devices. The feed channel (`allowed_on_feed`) is separate from the signage channel.
 
-### AI Integration
-- `POST /api/ai/ask` — Q&A about published posts using OpenAI
-- Contextual answers from post title, description, and attachment text
-- Per-IP rate limiting (20 requests / 60s)
+### 2. Device Registry & Command Center
 
-### Security
-- JWT-based user auth with role enforcement (`admin`, `creator`, `viewer`)
-- Per-device token auth for Pi agents
-- Socket.IO handshake token validation
-- Device ID mismatch detection and disconnection
-- Path traversal protection on media resolution
-- Control locks to prevent conflicting admin actions on the same device
+Devices must be **pre-registered** by an admin before they can connect. Upon first heartbeat, the device receives a **64-character hex token** via Socket.IO. This token binds the physical Pi to its database record.
+
+The backend tracks:
+- Online/offline status (30-second heartbeat timeout)
+- IP address, location, and pending change requests
+- Multi-group membership (`DeviceGroup` join table)
+- Sensor logs (motion, brightness, rain)
+- Per-device error logs
+
+Admins can send **playback controls** (`next`, `previous`, `start`), **refresh** displays, or trigger **emergency mode** across entire groups.
+
+### 3. Real-Time Socket.IO Bus
+
+Socket.IO is not just a notification channel — it is the **primary control plane** for devices. The server maintains a `deviceSockets` Map (`device_id → socket.id`) to target individual devices.
+
+Inbound events from Pi:
+- `heartbeat` — registration, status, token handshake
+- `sensor_update` — environmental data ingestion
+- `emergency_trigger` — hardware button → group-wide emergency broadcast
+- `signage_asset_synced` — confirmation that Anthias received an asset
+- `error_log` — remote error collection
+
+Outbound events to Pi:
+- `device_token` — assign/re-assign auth token
+- `signage_command` — publish, hide, show, delete, next, previous, start
+- `emergency_mode_start` / `emergency_mode_end` — enter/exit emergency
+- `refresh_display` / `restart_display` — display control
+
+### 4. Signage Deployment Engine
+
+When a post is published to a device, a `SignageDeployment` record is created. The Pi polls `GET /api/signage/device/:id/deployments` every 60 seconds. The backend returns a filtered, ordered list of active posts based on:
+- Current date within `start_date`–`end_date` window
+- Post status = `published`
+- `is_enabled = true`
+- Priority ordering
+
+For Anthias devices, the Pi's `content_sync.py` then uploads assets to Anthias. For MPV devices, the agent downloads files directly to local cache.
+
+### 5. Media Processing Pipeline
+
+All uploads are processed before storage:
+
+- **Images** (Sharp): auto-orient, optional percentage-based crop, compress to WebP (quality 88), save to `uploads/images/`
+- **Videos** (FFmpeg/fluent-ffmpeg): probe metadata, optional temporal trim + spatial crop, transcode to H.264/AAC MP4 with faststart, save to `uploads/videos/`
+- **Attachments** (PDF/DOCX/PPTX): text extraction via `mammoth`/`pdf-parse-fork` for AI context
+
+Static files are served from `/uploads/*` and `/streams/*`.
+
+### 6. Live Stream Relay
+
+Four stream types are supported:
+
+| Type | Ingest | Relay |
+|------|--------|-------|
+| HLS | External `.m3u8` URL | Direct proxy + segment caching |
+| RTSP | Camera URL | FFmpeg → HLS segments |
+| YouTube | YouTube HLS URL | Proxy + segment caching |
+| RTMP | OBS/Encoder push to `rtmp://server:1935/live/<key>` | FFmpeg → HLS segments |
+
+A `node-media-server` RTMP ingest server runs on port 1935. FFmpeg child processes relay incoming streams to HLS segments in `streams/{id}/`. A health monitor restarts crashed relays automatically. Stream keys can be rotated for security.
 
 ---
 
-## Architecture
-
-### High-Level System Diagram
+## Where the Backend Fits
 
 ```mermaid
 flowchart TB
     subgraph Clients
-        A[React Frontend]
-        B[Pi Device 1 / Anthias]
-        C[Pi Device 2 / Anthias]
-        D[Pi Device 3 / MPV]
+        F[React Admin<br/>Dashboard]
+        P1[Pi Device 1<br/>Anthias]
+        P2[Pi Device 2<br/>Anthias]
+        P3[Pi Device 3<br/>MPV]
+        U[Public Users<br/>Feed + AI Q&A]
     end
 
     subgraph Backend
-        E[Express HTTP Server]
-        F[Socket.IO Server]
-        G[Prisma ORM]
-        H[Media Processor]
-        I[Stream Relay]
-        J[AI Service]
+        E[Express HTTP<br/>REST API]
+        S[Socket.IO<br/>Real-Time Bus]
+        M[Media Processor<br/>Sharp + FFmpeg]
+        R[Stream Relay<br/>RTMP/HLS]
+        A[AI Service<br/>OpenAI API]
     end
 
-    subgraph Storage
-        K[(PostgreSQL)]
-        L[File System<br/>uploads/ + streams/]
+    subgraph Data
+        DB[(PostgreSQL<br/>Prisma ORM)]
+        FS[File System<br/>uploads/ + streams/]
     end
 
-    A -->|REST API| E
-    B -->|REST + Socket.IO| E
-    C -->|REST + Socket.IO| E
-    D -->|REST + Socket.IO| E
-    E --> F
-    E --> G
-    G --> K
-    E --> H
-    H --> L
-    E --> I
-    I --> L
-    E --> J
-    J -->|OpenAI API| M[(OpenAI)]
+    F -->|JWT Auth| E
+    P1 -->|Device Token| E
+    P1 <-->|Socket.IO| S
+    P2 -->|Device Token| E
+    P2 <-->|Socket.IO| S
+    P3 -->|Device Token| E
+    P3 <-->|Socket.IO| S
+    U -->|Public| E
+    E --> M
+    M --> FS
+    E --> R
+    R --> FS
+    E --> A
+    E --> DB
+    S --> DB
 ```
 
-### Request Flow Diagram
+The backend sits at the center of the topology. It is the **single source of truth** for:
+- All content (posts, images, videos, streams)
+- All device state (online, offline, emergency, deployments)
+- All user and group permissions
+- All sensor and error logs
+
+The Pi agents cache content locally, but the backend decides **what** they should cache. The frontend renders content, but the backend decides **which** content the user is allowed to see.
+
+---
+
+## Who Uses the Backend
+
+| Consumer | Authentication | Primary Operations |
+|----------|---------------|-------------------|
+| **Admin** | JWT (`role: admin`) | Full CRUD on users, groups, devices, posts, streams. Approve devices. Trigger emergency. Manage all content. |
+| **Creator** | JWT (`role: creator`) | Create/edit own group posts. Publish to assigned devices. Control signage playback. View scoped devices. |
+| **Viewer** | JWT (`role: viewer`) | Read-only access to feed and signage content (frontend-enforced). |
+| **Pi Agent** | Device token (Socket.IO + REST) | Heartbeat, pull deployments, push sensor data, receive commands, report errors. |
+| **Public User** | None (rate-limited) | Browse public feed, ask AI questions about published posts. |
+
+---
+
+## How the Backend Is Built
+
+### Design Philosophy
+
+- **Layered architecture** — Routes → Middleware → Services → Repositories → Prisma → PostgreSQL. Each layer has a single responsibility.
+- **Separation of concerns** — Business logic lives in `services/`. Data access is abstracted in `repositories/`. HTTP concerns stay in `routes/`.
+- **Stateless REST, stateful sockets** — HTTP requests are stateless (JWT/device token in headers). Socket.IO connections are stateful (tracked in memory via `deviceSockets`).
+- **Offline-first devices** — The backend tells devices what to play, but devices cache content and fallback assets locally. The backend never directly controls the display; it issues commands.
+- **Approval workflow** — Devices must be pre-registered and approved. Changes to approved devices (name, IP, location) are staged as "pending" until an admin approves them.
+
+### Tech Stack
+
+| Layer | Technology | Why |
+|-------|-----------|-----|
+| Runtime | Node.js 18+ | Event-driven, non-blocking I/O for high-concurrency Socket.IO |
+| Framework | Express.js 5 | Mature, minimal, middleware-based routing |
+| ORM | Prisma 5 | Type-safe queries, automatic migrations, excellent PostgreSQL support |
+| Database | PostgreSQL 14+ | ACID compliance, JSON support, robust for relational signage data |
+| Real-time | Socket.IO 4 | Bidirectional event bus with room targeting and ack support |
+| Auth | jsonwebtoken + bcryptjs | Industry-standard JWT with secure password hashing |
+| Images | Sharp | Fast WebP conversion, cropping, auto-orientation |
+| Video | fluent-ffmpeg + FFmpeg | Transcoding, metadata probing, stream relay |
+| Streaming | node-media-server | RTMP ingest server with minimal config |
+| AI | OpenAI API | GPT-based Q&A with contextual post content |
+| Testing | Jest + Supertest | Unit tests, HTTP integration tests, WebSocket tests |
+
+### Request Flow
+
+```mermaid
+sequenceDiagram
+    participant C as Client (React / Pi)
+    participant R as Express Router
+    participant M as Middleware
+    participant S as Service
+    participant Repo as Repository
+    participant P as Prisma ORM
+    participant DB as PostgreSQL
+
+    C->>R: HTTP Request
+    R->>M: auth / authDevice / asyncHandler
+    M->>P: Verify JWT or device token
+    P->>DB: SELECT user/device
+    DB-->>P: Record
+    P-->>M: Valid
+    M-->>R: req.user / req.device
+    R->>S: Call business logic
+    S->>Repo: Query/Command
+    Repo->>P: Prisma findMany / create / update
+    P->>DB: SQL
+    DB-->>P: Result
+    P-->>Repo: Typed result
+    Repo-->>S: Data
+    S-->>R: Response payload
+    R-->>C: JSON Response
+```
+
+### Socket.IO Device Lifecycle
 
 ```mermaid
 sequenceDiagram
     participant Pi as Raspberry Pi
     participant IO as Socket.IO Server
-    participant Express as Express Router
-    participant MW as Middleware
-    participant Svc as Service
-    participant Prisma as Prisma ORM
     participant DB as PostgreSQL
 
-    Pi->>IO: heartbeat + device token
-    IO->>Prisma: find device by token
-    Prisma->>DB: SELECT device
-    DB-->>Prisma: device record
-    Prisma-->>IO: device
-    IO-->>Pi: emit device_token (if new)
+    Pi->>IO: connect (no token)
+    IO-->>Pi: connection accepted
+    Pi->>IO: heartbeat { device_id: 1, ... }
+    IO->>DB: SELECT device WHERE id=1
+    DB-->>IO: Device registered, no token
+    IO->>DB: UPDATE device_token = <new>
+    IO-->>Pi: device_token { token }
 
-    Pi->>Express: GET /api/signage/device/:id/deployments
-    Express->>MW: authDevice middleware
-    MW->>Prisma: verify token
-    Prisma-->>MW: device
-    MW-->>Express: req.device
-    Express->>Svc: fetch deployments
-    Svc->>Prisma: findMany with filters
-    Prisma->>DB: query
-    DB-->>Prisma: results
-    Prisma-->>Svc: deployments
-    Svc-->>Express: visible posts
-    Express-->>Pi: JSON response
+    Note over Pi,IO: Next connection
+
+    Pi->>IO: connect (auth.token)
+    IO->>DB: SELECT device WHERE device_token = ?
+    DB-->>IO: Device found
+    IO-->>Pi: connection accepted (verified)
+
+    loop Every 10 seconds
+        Pi->>IO: heartbeat { device_id: 1, token, ... }
+        IO->>DB: UPDATE last_seen, status = online
+    end
+
+    Pi->>IO: disconnect
+    IO->>DB: UPDATE status = offline
 ```
 
-### Layered Architecture
+### Emergency Mode Broadcast
 
-```
-┌─────────────────────────────────────────────┐
-│  Routes (Express routers)                    │  ← HTTP entry points, parameter validation
-├─────────────────────────────────────────────┤
-│  Middleware (auth, authDevice, asyncHandler)   │  ← JWT/device verification, error wrapping
-├─────────────────────────────────────────────┤
-│  Services (business logic)                     │  ← DeviceService, AuthService, PostService, ...
-├─────────────────────────────────────────────┤
-│  Repositories (data access)                  │  ← Thin Prisma wrappers for queries
-├─────────────────────────────────────────────┤
-│  Utilities (helpers)                         │  ← MediaProcessor, Permissions, SignageAssets
-├─────────────────────────────────────────────┤
-│  Prisma ORM → PostgreSQL                     │  ← Schema-migrated relational DB
-└─────────────────────────────────────────────┘
+```mermaid
+sequenceDiagram
+    participant Pi as Pi (Button Pressed)
+    participant IO as Socket.IO Server
+    participant DB as PostgreSQL
+    participant Targets as Other Pis in Group
+
+    Pi->>IO: emergency_trigger { device_id: 3 }
+    IO->>DB: SELECT groups for device 3
+    DB-->>IO: Group IDs [2, 5]
+    IO->>DB: UPDATE groups SET signage_state = EMERGENCY
+    IO->>DB: SELECT online devices in groups [2, 5]
+    DB-->>IO: Device IDs [1, 2, 3, 4]
+
+    IO->>Targets: emergency_mode_start { triggered_by: 3, groups: [2,5] }
+    IO-->>Pi: emergency_mode_start
 ```
 
 ---
 
-## Database Schema
+## Why These Design Choices
 
-### Entity Relationship Diagram (Prisma)
+### Why PostgreSQL + Prisma
 
-```
-┌──────────────┐       ┌──────────────┐       ┌──────────────┐
-│    Group     │1────N │    User      │N────1 │   UserGroup  │
-├──────────────┤       ├──────────────┤       ├──────────────┤
-│ id (PK)      │       │ id (PK)      │       │ id (PK)      │
-│ name (UQ)    │       │ username(UQ) │       │ user_id (FK) │
-│ signage_state│       │ password_hash│       │ group_id(FK) │
-│ description  │       │ role         │       └──────────────┘
-└──────────────┘       │ group_id(FK) │
-       │ 1             └──────────────┘
-       │
-       │ N
-┌──────────────┐       ┌──────────────┐       ┌──────────────┐
-│   Device     │N────1 │ DeviceGroup  │1────N │    Group     │
-├──────────────┤       ├──────────────┤       └──────────────┘
-│ id (PK)      │       │ id (PK)      │
-│ device_name  │       │ device_id(FK)│
-│ group_id(FK) │       │ group_id(FK) │
-│ ip_address   │       └──────────────┘
-│ status       │
-│ is_approved  │
-│ device_token │       ┌──────────────┐       ┌──────────────┐
-│ emergency_.. │       │  SensorLog   │       │   ErrorLog   │
-│ control_lock │       ├──────────────┤       ├──────────────┤
-└──────────────┘       │ id (PK)      │       │ id (PK)      │
-       │               │ device_id(FK)│       │ device_id(FK)│
-       │ N             │ motion       │       │ error_type   │
-       │               │ brightness   │       │ message      │
-       │               │ rain         │       └──────────────┘
-       │               └──────────────┘
-       │
-       │ 1
-┌──────────────┐
-│SignageDeploym│
-├──────────────┤
-│ id (PK)      │
-│ device_id(FK)│
-│ post_id (FK) │
-│ duration_sec │
-│ start_date   │
-│ end_date     │
-│ priority     │
-│ status       │
-└──────────────┘
-       │
-       │ N
-┌──────────────┐       ┌──────────────┐       ┌──────────────┐
-│     Post     │1────1│SignageMetada │       │  PostImage   │
-├──────────────┤       ├──────────────┤       ├──────────────┤
-│ id (PK)      │       │ id (PK)      │       │ id (PK)      │
-│ title        │       │ post_id (FK) │       │ post_id (FK) │
-│ slug (UQ)    │       │ duration_sec │       │ image_path   │
-│ group_id(FK) │       │ start_date   │       │ media_type   │
-│ created_by(FK)│      │ end_date     │       │ order_index  │
-│ status       │       │ priority     │       └──────────────┘
-│ signage_state│       └──────────────┘
-│ allowed_on.. │
-│ live_stream  │       ┌──────────────┐       ┌──────────────┐
-└──────────────┘       │SignageAsset  │       │  Playlist    │
-       │               ├──────────────┤       ├──────────────┤
-       │               │ id (PK)      │       │ id (PK)      │
-       │               │ device_id(FK)│       │ group_id(FK) │
-       │               │ post_id (FK) │       │ name         │
-       │               │ asset_id     │       └──────────────┘
-       │               │ image_url    │
-       │               │ mimetype     │       ┌──────────────┐
-       │               │ is_enabled   │       │PlaylistItem  │
-       │               └──────────────┘       ├──────────────┤
-       │                                       │ id (PK)      │
-       │                                       │ playlist(FK) │
-       │ N                                     │ post_id (FK) │
-       │                                       └──────────────┘
-       │
-┌──────────────┐       ┌──────────────┐
-│  LiveStream  │       │PostAttachment│
-├──────────────┤       ├──────────────┤
-│ id (PK)      │       │ id (PK)      │
-│ title        │       │ post_id (FK) │
-│ stream_type  │       │ file_path    │
-│ source_url   │       │ file_name    │
-│ relay_url    │       │ mime_type    │
-│ stream_key   │       │ file_size    │
-│ status       │       │ extracted_text
-│ group_id(FK) │       └──────────────┘
-│ created_by   │
-└──────────────┘
-```
+The data model is deeply relational: users belong to groups, groups contain devices and posts, posts have images and deployments, deployments link posts to devices. Prisma provides type-safe queries, schema migrations, and excellent developer experience. PostgreSQL ensures ACID compliance for critical operations like emergency state changes and device token generation.
 
-### Key Enums
+### Why Socket.IO over raw WebSockets
 
-| Enum | Values |
-|------|--------|
-| `Role` | `admin`, `creator`, `viewer` |
-| `PostStatus` | `draft`, `published` |
-| `SignageState` | `EMERGENCY`, `SECURITY_RISK`, `BREAKING_NEWS`, `NORMAL` |
-| `LiveStreamType` | `HLS`, `RTSP`, `YOUTUBE`, `RTMP` |
-| `LiveStreamStatus` | `idle`, `starting`, `online`, `offline`, `error` |
-| `MediaType` | `IMAGE`, `VIDEO`, `LIVE_STREAM` |
+Socket.IO provides automatic reconnection, room-based broadcasting, acknowledgements (ack), and fallback transports. The `emitToDeviceAck` helper uses timeouts to confirm a Pi received a command — essential for signage control where "fire and forget" is not acceptable.
+
+### Why Layered Architecture
+
+- **Routes** handle HTTP semantics (status codes, JSON serialization) and delegate to services
+- **Services** encapsulate business rules (e.g., "a creator can only publish to devices in their group")
+- **Repositories** isolate Prisma queries, making testing easier and allowing query optimization in one place
+- **Middleware** enforces cross-cutting concerns (auth, error handling) without polluting business logic
+
+### Why Dual Auth (JWT + Device Token)
+
+Users and devices are fundamentally different security principals. Users log in with passwords and receive time-limited JWTs. Devices receive perpetual tokens generated server-side. Separating the auth middleware (`auth.js` for users, `authDevice.js` for Pis) prevents token confusion and allows different validation rules.
+
+### Why Control Locks
+
+When multiple admins might control the same device simultaneously, `control_lock` prevents race conditions. A lock records the user, priority, action, and expiration time. Lower-priority users cannot override higher-priority locks.
+
+### Why State Hierarchy
+
+Signage states have a strict priority: `EMERGENCY` > `SECURITY_RISK` > `BREAKING_NEWS` > `NORMAL`. This ensures that a campus-wide emergency broadcast cannot be accidentally overridden by a routine announcement.
 
 ---
 
@@ -307,471 +307,118 @@ sequenceDiagram
 ```
 backend/
 ├── prisma/
-│   └── schema.prisma          # Database schema definition
+│   └── schema.prisma          # Database schema (models, enums, indexes, relations)
 ├── src/
-│   ├── index.js               # Entry point: HTTP + Socket.IO server bootstrap
-│   ├── app.js                 # Express app config, routes, static files
+│   ├── index.js               # Bootstrap: HTTP server, Socket.IO, stream relay, RTMP
+│   ├── app.js                 # Express config: routes, CORS, static files, error handler
 │   ├── db/
-│   │   └── prisma.js          # PrismaClient singleton (test DB aware)
-│   ├── routes/
+│   │   └── prisma.js          # PrismaClient singleton (switches to TEST_DATABASE_URL in test)
+│   ├── routes/                # 12 Express routers (HTTP entry points)
 │   │   ├── auth.js            # Login, register, /me
-│   │   ├── users.js           # User CRUD
+│   │   ├── users.js           # User list (admin only)
 │   │   ├── groups.js          # Group CRUD + signage_state management
 │   │   ├── posts.js           # Post CRUD, publish, attachments
 │   │   ├── devices.js         # Device CRUD, approve, emergency asset upload
-│   │   ├── signage.js         # Publish to devices, deployments, playback controls
-│   │   ├── liveStreams.js     # Stream CRUD, start/stop, key rotation
-│   │   ├── media.js           # Media upload endpoint
+│   │   ├── signage.js         # Publish, deployments, playback controls, asset hide/show/delete
+│   │   ├── liveStreams.js     # Stream CRUD, start/stop, key rotation, logs
+│   │   ├── media.js           # Image/video upload with crop support
 │   │   ├── playlists.js       # Playlist CRUD
 │   │   ├── sensors.js         # Sensor log query endpoint
-│   │   ├── uploads.js         # Static file serving with path protection
-│   │   └── ai.js              # AI Q&A + status
-│   ├── services/
-│   │   ├── authService.js     # Password hashing, token generation
-│   │   ├── deviceService.js   # Device registration, approval, reset, removal
-│   │   ├── postService.js     # Post create/update/delete logic
-│   │   ├── signageService.js  # Publish/unpublish/delete signage assets
-│   │   ├── liveStreamService.js # Stream business logic
-│   │   ├── aiService.js       # OpenAI integration
-│   │   ├── piBridge.js        # Socket.IO emitter wrapper for HTTP routes
+│   │   ├── uploads.js         # Static file serving with path traversal protection
+│   │   └── ai.js              # AI Q&A + status endpoint
+│   ├── services/              # Business logic layer
+│   │   ├── authService.js     # Password hashing, JWT generation/validation
+│   │   ├── userService.js     # User CRUD with group scoping
+│   │   ├── deviceService.js   # Registration, approval, reset, removal, token management
+│   │   ├── postService.js     # Post create/update/delete with image reordering
+│   │   ├── signageService.js  # Publish/unpublish, asset upsert, deployment sync
+│   │   ├── deploymentService.js # Deployment querying with date/priority filters
+│   │   ├── liveStreamService.js # Stream business logic, relay coordination
+│   │   ├── aiService.js       # OpenAI prompt building, rate limiting
+│   │   ├── piBridge.js        # Socket.IO emitter wrapper for HTTP route → Pi communication
 │   │   └── streamRelay/       # Live stream relay subsystem
 │   │       ├── index.js       # Start/stop relay orchestrator
-│       ├── rtmpServer.js      # RTMP ingest server (node-media-server)
-│       └── healthMonitor.js   # Periodic health checks
-│   ├── repositories/
-│   │   ├── userRepo.js        # User DB queries
-│   │   ├── deviceRepo.js      # Device DB queries
-│   │   ├── postRepo.js        # Post DB queries
-│   │   └── liveStreamRepo.js  # LiveStream DB queries
-│   ├── middleware/
-│   │   ├── auth.js            # JWT user auth middleware
-│   │   ├── authDevice.js      # Device token auth middleware
-│   │   ├── asyncHandler.js    # Wraps async route handlers
-│   │   ├── error.js           # Global error handler
-│   │   ├── upload.js          # Multer media upload config
-│   │   └── uploadAttachment.js # Multer attachment upload config
-│   ├── utils/
-│   │   ├── mediaProcessor.js  # Sharp image + FFmpeg video processing
-│   │   ├── permissions.js     # RBAC helpers, group scoping
-│   │   ├── signageAssets.js   # SignageAsset upsert/sync helpers
-│   │   ├── signageStates.js   # State comparison + urgency ordering
-│   │   ├── controlLock.js     # Device control lock logic
+│   │       ├── rtmpServer.js  # node-media-server RTMP ingest
+│   │       └── healthMonitor.js # Periodic FFmpeg health checks + auto-restart
+│   ├── repositories/            # Thin Prisma query wrappers
+│   │   ├── userRepo.js
+│   │   ├── deviceRepo.js
+│   │   ├── postRepo.js
+│   │   └── liveStreamRepo.js
+│   ├── middleware/              # Cross-cutting concerns
+│   │   ├── auth.js              # JWT verification → req.user
+│   │   ├── authDevice.js        # Device token verification → req.device
+│   │   ├── asyncHandler.js      # Wrap async routes to catch errors
+│   │   ├── error.js             # Global error handler (500, Prisma errors)
+│   │   ├── upload.js            # Multer config for image/video uploads
+│   │   └── uploadAttachment.js  # Multer config for PDF/DOCX/PPTX uploads
+│   ├── utils/                   # Helper modules
+│   │   ├── mediaProcessor.js    # Sharp + FFmpeg processing pipeline
+│   │   ├── permissions.js       # RBAC helpers, group scoping
+│   │   ├── signageAssets.js     # SignageAsset upsert/sync helpers
+│   │   ├── signageStates.js     # State comparison + urgency ordering
+│   │   ├── controlLock.js       # Device control lock logic
 │   │   ├── devicePermissions.js # Device access control
 │   │   ├── signagePermissions.js # Asset management permissions
-│   │   ├── refreshGroupDevices.js # Group state change → device refresh
-│   │   ├── textExtractor.js   # PDF/DOCX/PPTX text extraction
-│   │   └── parsers.js         # Boolean/string parsers
+│   │   ├── refreshGroupDevices.js # Group state change → device refresh broadcast
+│   │   ├── textExtractor.js     # PDF/DOCX/PPTX text extraction for AI context
+│   │   └── parsers.js           # Boolean/string parsers for query params
 │   ├── websocket/
-│   │   └── socket.js          # Socket.IO server: Pi connections, events, offline detection
+│   │   └── socket.js            # Socket.IO server: handshake, heartbeat, sensor, emergency, emit helpers
 │   └── validators/
 │       └── (Joi/Zod schemas if any)
-├── uploads/                   # Runtime: images/, videos/, temp/
-├── streams/                   # Runtime: HLS segment output
-├── .env                       # Environment variables (not committed)
+├── uploads/                     # Runtime: images/, videos/, temp/
+├── streams/                     # Runtime: HLS segment output
+├── tests/                       # Jest + Supertest suites
+├── .env                         # Environment variables
 ├── package.json
-└── README.md                  # This file
+└── README.md                    # This file
 ```
 
 ---
 
-## Environment Variables
-
-Create a `.env` file in the `backend/` directory:
-
-```env
-# Required
-PORT=5000
-DATABASE_URL=postgresql://signage_admin:your_password@localhost:5432/signage_db
-JWT_SECRET=your-super-secret-jwt-key-min-32-chars
-
-# Optional
-NODE_ENV=development
-TEST_DATABASE_URL=postgresql://signage_admin:your_password@localhost:5432/signage_test_db
-STREAMS_DIR=./streams
-OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-```
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `PORT` | Yes | HTTP server port (default: 5000) |
-| `DATABASE_URL` | Yes | PostgreSQL connection string |
-| `JWT_SECRET` | Yes | JWT signing secret (min 32 chars) |
-| `NODE_ENV` | No | `development`, `production`, or `test` |
-| `TEST_DATABASE_URL` | No | Separate DB for Jest tests |
-| `STREAMS_DIR` | No | HLS output directory (default: `backend/streams`) |
-| `OPENAI_API_KEY` | No | Required for `/api/ai/ask` endpoint |
-
----
-
-## Authentication & Authorization
-
-### User Authentication (JWT)
-
-1. `POST /api/auth/login` → returns `{ token, ... }`
-2. Include `Authorization: Bearer <token>` in all subsequent requests
-3. Token payload: `{ id, username, role, group_id, iat, exp }`
-
-### Role-Based Access Control
-
-| Role | Permissions |
-|------|-------------|
-| **admin** | Full system access |
-| **creator** | Create posts, manage own group content, view assigned devices, control signage |
-| **viewer** | Read-only (if implemented by frontend) |
-
-### Device Authentication
-
-- Each approved device receives a **per-device token** (64-char hex) via Socket.IO after first heartbeat
-- Pi must store the token locally and present it on every Socket.IO connection and REST request
-- The `authDevice` middleware validates the token against the `device_token` column
-
-### Socket.IO Security
-
-- Handshake verifies `auth.token` against `Device.device_token`
-- Unknown device IDs are rejected
-- Device ID mismatch (socket claims different ID than token) triggers disconnection
-
----
-
-## REST API Reference
-
-### Auth
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| POST | `/api/auth/register` | Bootstrap / Admin | Register user (first user becomes admin) |
-| POST | `/api/auth/login` | Public | Authenticate, receive JWT |
-| GET | `/api/auth/me` | JWT | Get current user profile |
-
-### Users
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/api/users` | admin | List all users |
-
-### Groups
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/api/groups` | admin/creator | List groups (scoped for creators) |
-| GET | `/api/groups/states` | Public | List signage states enum |
-| POST | `/api/groups` | admin | Create group |
-| PUT | `/api/groups/:id` | admin | Update group (triggers device refresh on state change) |
-| DELETE | `/api/groups/:id` | admin | Delete group |
-
-### Posts
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/api/posts` | Public (feed) / Auth | List posts (feed=public, otherwise scoped) |
-| GET | `/api/posts/:id` | Auth | Get single post |
-| POST | `/api/posts` | admin/creator | Create post |
-| PUT | `/api/posts/:id` | admin/creator | Update post |
-| DELETE | `/api/posts/:id` | admin/creator | Delete post |
-| POST | `/api/posts/:id/publish` | admin/creator | Publish post |
-| POST | `/api/posts/:id/unpublish` | admin/creator | Unpublish post |
-| POST | `/api/posts/:id/attachments` | admin/creator | Upload file attachments (PDF, DOCX, PPTX) |
-| GET | `/api/posts/meta/group-creators` | admin/creator | List creators in a group |
-
-### Devices
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/api/devices` | admin/creator | List devices (group-scoped for creators) |
-| GET | `/api/devices/me` | Device token | Device reads its own settings |
-| GET | `/api/devices/:id` | admin | Get single device |
-| POST | `/api/devices/register` | admin | Pre-register a device |
-| POST | `/api/devices/:id/approve` | admin | Approve pending device / apply pending changes |
-| POST | `/api/devices/:id/reject` | admin | Reject pending device |
-| PUT | `/api/devices/:id` | admin | Update device settings |
-| PUT | `/api/devices/:id/reset` | admin | Reset device to defaults |
-| DELETE | `/api/devices/:id` | admin | Remove device and clear all signage data |
-| POST | `/api/devices/:id/emergency-asset` | admin | Upload emergency image/video (max 200 MB) |
-
-### Signage
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/api/signage/device/:device_id/deployments` | Device token | Pi pulls its deployment list |
-| POST | `/api/signage/publish` | admin/creator | Publish post to device(s) |
-| GET | `/api/signage/devices/:device_id/assets` | admin/creator | List Anthias assets on a device |
-| POST | `/api/signage/devices/:device_id/control` | admin/creator | Playback control: `next` / `previous` / `start` |
-| PATCH | `/api/signage/devices/:device_id/assets/:asset_id` | admin/creator | Hide/show asset |
-| DELETE | `/api/signage/devices/:device_id/assets/:asset_id` | admin/creator | Permanently delete asset from device |
-| GET | `/api/signage/playlists` | admin | List signage playlists |
-
-### Live Streams
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/api/live-streams` | admin/creator | List streams |
-| GET | `/api/live-streams/:id` | admin/creator | Get stream details |
-| POST | `/api/live-streams` | admin/creator | Create stream |
-| PUT | `/api/live-streams/:id` | admin/creator | Update stream |
-| DELETE | `/api/live-streams/:id` | admin/creator | Delete stream |
-| POST | `/api/live-streams/:id/start` | admin/creator | Start relay |
-| POST | `/api/live-streams/:id/stop` | admin/creator | Stop relay |
-| POST | `/api/live-streams/:id/rotate-key` | admin/creator | Rotate RTMP stream key |
-| GET | `/api/live-streams/:id/logs` | admin/creator | Get relay logs |
-| POST | `/api/live-streams/:id/thumbnail` | admin/creator | Upload thumbnail |
-
-### Media
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| POST | `/api/media/upload` | admin/creator | Upload image/video with optional crop |
-
-### AI
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/api/ai/status` | Public | Check AI service health |
-| POST | `/api/ai/ask` | Public (rate-limited) | Ask a question about a published post |
-
-### Sensors
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/api/sensors` | admin | Get sensor logs (query by device, limit) |
-
-### Static / Health
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/uploads/*` | Public | Serve processed images/videos |
-| GET | `/streams/*` | Public | Serve HLS playlists/segments |
-| GET | `/api/health` | Public | Server health check |
-
----
-
-## Socket.IO Events
-
-### Pi → Server (Inbound)
-
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `heartbeat` | `{ device_id, device_name, ip_address, location, status }` | Register/refresh device online status |
-| `sensor_update` | `{ device_id, motion, brightness, rain }` | Forward Arduino sensor readings |
-| `error_log` | `{ device_id, error_type, message }` | Report Pi-side errors |
-| `playlist_ack` | `{ device_id }` | Confirm playlist receipt |
-| `signage_asset_synced` | `{ device_id, post_id, image_url, asset }` | Confirm asset synced to Anthias |
-| `emergency_trigger` | `{ device_id }` | Hardware emergency button pressed |
-
-### Server → Pi (Outbound)
-
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `device_token` | `{ device_id, token }` | Assign or re-emit device auth token |
-| `auth_error` | `{ error }` | Reject connection/heartbeat |
-| `signage_command` | `{ action, ... }` | `publish_asset`, `list`, `next`, `previous`, `start`, `hide_asset`, `show_asset`, `delete_asset` |
-| `emergency_mode_start` | `{ triggered_by, groups }` | Enter emergency playback |
-| `emergency_mode_end` | `{}` | Exit emergency playback |
-| `refresh_display` | `{}` | Refresh Anthias/MPV display |
-| `restart_display` | `{}` | Restart Anthias/MPV player |
-
-### Server Internals
-
-- **Offline detection**: Every 15 seconds, devices with `last_seen < now - 30s` are marked `offline`
-- **Socket tracking**: `deviceSockets` Map maintains `device_id → socket.id` for targeted emits
-
----
-
-## Media Processing Pipeline
-
-### Image Processing (Sharp)
-
-```
-Upload (temp) → Sharp extract/crop → Auto-rotate → WebP (quality 88)
-                                   → Save to /uploads/images/
-                                   → Return public URL: /uploads/images/<name>.webp
-```
-
-### Video Processing (FFmpeg)
-
-```
-Upload (temp) → FFprobe duration/metadata → FFmpeg transcode (H.264 AAC)
-              → Apply spatial crop if specified
-              → Save to /uploads/videos/
-              → Return public URL: /uploads/videos/<name>.mp4
-```
-
-### Supported Operations
-
-| Feature | Image | Video |
-|---------|-------|-------|
-| Upload | JPG, PNG, WebP | MP4, MOV, etc. |
-| Crop / Extract | Percentage-based crop | Temporal trim + spatial crop |
-| Output format | WebP | MP4 (H.264, faststart) |
-| Max upload | Configured via multer | Configured via multer |
-
----
-
-## Live Streaming
-
-### Stream Types
-
-| Type | Source | Ingest | Relay |
-|------|--------|--------|-------|
-| **HLS** | External `.m3u8` URL | N/A | Direct proxy + segment caching |
-| **RTSP** | Camera URL | N/A | FFmpeg → HLS segments |
-| **YouTube** | YouTube HLS URL | N/A | Proxy + segment caching |
-| **RTMP** | OBS / Encoder | `rtmp://server/live/<key>` | FFmpeg → HLS segments |
-
-### Architecture
-
-```mermaid
-flowchart LR
-    A[OBS/Encoder] -->|RTMP push| B[node-media-server<br/>rtmp://:1935]
-    B --> C[FFmpeg relay]
-    C --> D[HLS segments<br/>streams/{id}/]
-    D --> E[Express static<br/>/streams/{id}/index.m3u8]
-    E --> F[Pi / Anthias / MPV]
-```
-
-### Lifecycle
-
-1. **Create** stream record in DB (`idle`)
-2. **Start** → FFmpeg process spawned, status → `starting` → `online`
-3. **Health monitor** checks every interval; restarts on crash
-4. **Stop** → Kills FFmpeg, status → `offline`
-5. **Rotate key** (RTMP only) → Generates new `stream_key`, invalidates old one
-
----
-
-## Emergency Mode
-
-### Trigger Sources
-
-| Source | Mechanism |
-|--------|-----------|
-| Hardware button | Pi sends `emergency_trigger` → server sets group(s) to `EMERGENCY` |
-| Admin dashboard | Admin updates group `signage_state` to `EMERGENCY` |
-
-### Server-Side Flow
-
-1. Receive `emergency_trigger` from device
-2. Query all groups the device belongs to (`group_id` + `DeviceGroup` memberships)
-3. Update each group: `signage_state = "EMERGENCY"`
-4. Find all online approved devices in those groups
-5. Emit `emergency_mode_start` to each device's Socket.IO socket
-
-### Clearing Emergency
-
-- Admin sets group `signage_state` back to `NORMAL`
-- `refreshGroupDevices()` triggers `refresh_display` to affected devices
-- Devices check **all** their groups via `/devices/me` before exiting emergency mode
-- A device stays in emergency if **any** of its groups is still `EMERGENCY`
-
----
-
-## AI Integration
-
-### Endpoint
-
-`POST /api/ai/ask`
-
-### Request Body
-
-```json
-{
-  "post_id": 42,
-  "question": "What are the key points?",
-  "history": [
-    { "role": "user", "content": "What is this about?" },
-    { "role": "assistant", "content": "This post covers..." }
-  ]
-}
-```
-
-### How it works
-
-1. Validate post is `published` and `allowed_on_feed`
-2. Fetch post title, description, and attachment extracted text
-3. Build OpenAI prompt with context + question + conversation history
-4. Return the generated answer
-
-### Rate Limiting
-
-- 20 requests per IP per 60-second window
-- Returns `429 Too Many Requests` when exceeded
-
----
-
-## Setup & Installation
-
-### Prerequisites
-
-- Node.js 18+
-- PostgreSQL 14+
-- FFmpeg (for video processing and stream relay)
-
-### Install Dependencies
+## Quick Start
 
 ```bash
 cd backend
 npm install
-```
 
-### Database Setup
+# Create .env
+cat > .env <<EOF
+PORT=5000
+DATABASE_URL=postgresql://user:pass@localhost:5432/signage_db
+JWT_SECRET=your-super-secret-jwt-key-min-32-chars
+NODE_ENV=development
+EOF
 
-```bash
-# Create database
+# Database
 npx prisma migrate dev --name init
 npx prisma generate
-```
 
-### Run Development Server
-
-```bash
-npm run dev
+# Run
+npm run dev   # nodemon with auto-reload
 # or
-npm start
+npm start     # production
 ```
 
-The server will be available at `http://localhost:5000`.
+---
 
-### Production Deployment Notes
+## Component Documentation
 
-- Set `NODE_ENV=production`
-- Use a process manager (PM2, systemd)
-- Place an Nginx reverse proxy in front for SSL termination
-- Ensure `uploads/` and `streams/` directories have sufficient disk space
-- FFmpeg must be available in `$PATH` (or `@ffmpeg-installer/ffmpeg` will use its bundled binary)
+For deep-dive documentation on each subsystem, see the component guides in `docs/backend/`:
+
+| Guide | Covers |
+|-------|--------|
+| `docs/backend/architecture.md` | Layered architecture, request/response flows, design decisions |
+| `docs/backend/database.md` | Prisma schema, entity relationships, indexes, enums, data model rationale |
+| `docs/backend/api.md` | Complete REST API reference with auth requirements and payloads |
+| `docs/backend/websocket.md` | Socket.IO events, device lifecycle, real-time command flow |
+| `docs/backend/authentication.md` | JWT auth, device token auth, RBAC, control locks |
+| `docs/backend/media-processing.md` | Image/video upload pipeline, Sharp + FFmpeg configuration |
+| `docs/backend/live-streaming.md` | Stream types, relay architecture, health monitoring, RTMP ingest |
+| `docs/backend/setup.md` | Full installation, environment variables, production deployment |
+| `docs/backend/security.md` | Security model, hardening, device token validation, path protection |
 
 ---
 
-## Testing
-
-```bash
-# Run all tests
-npm test
-
-# Watch mode
-npm run test:watch
-```
-
-Test utilities include:
-- **Jest** for test runner
-- **Supertest** for HTTP endpoint testing
-- **socket.io-client** for WebSocket testing
-- `TEST_DATABASE_URL` isolation for clean test data
-
----
-
-## Troubleshooting
-
-| Problem | Solution |
-|---------|----------|
-| `FATAL: JWT_SECRET is not set` | Add `JWT_SECRET` to `.env` |
-| `FATAL: DATABASE_URL is not set` | Add `DATABASE_URL` to `.env` |
-| Prisma connection errors | Verify PostgreSQL is running and credentials are correct |
-| FFmpeg not found | Install FFmpeg system-wide or ensure `@ffmpeg-installer` resolves correctly |
-| Socket.IO connections rejected | Check device token matches `device_token` in DB; verify Pi `SERVER_URL` |
-| Live stream segments 404 | Verify `STREAMS_DIR` exists and FFmpeg relay is running |
-| RTMP ingest fails | Check port 1935 is not blocked; verify stream key matches |
-| AI endpoint 429 | Reduce request rate; check `RATE_LIMIT` / `RATE_WINDOW_MS` in `ai.js` |
-| Media upload fails | Check disk space in `uploads/temp/` and `uploads/images/`, `uploads/videos/` |
-
----
-
-_Licensed under ISC. Built for university campus digital signage environments._
+_Licensed under ISC._
