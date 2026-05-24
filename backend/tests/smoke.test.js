@@ -2,7 +2,7 @@ const fs = require("fs");
 const request = require("supertest");
 const app = require("../src/app");
 const piBridge = require("../src/services/piBridge");
-const { createGroup, createUser, createPost, createPostImage, createDevice } = require("./helpers");
+const { createGroup, createUser, createPost, createPostImage, createDevice, createLiveStream } = require("./helpers");
 
 /** Mock the socket bridge so signage routes don't fail in tests. */
 beforeAll(() => {
@@ -135,6 +135,41 @@ describe("PUT /api/posts/:id", () => {
     const imagesAfter = await prisma.postImage.findMany({ where: { post_id: post.id } });
     expect(imagesAfter.length).toBe(1);
     expect(imagesAfter[0].image_path).toBe(imgKeep.image_path);
+  });
+
+  it("detaches a live stream when sent live_stream_id='null'", async () => {
+    const group = await createGroup();
+    const { user, token } = await createUser({ role: "creator", group_id: group.id });
+    const stream = await createLiveStream({ group_id: group.id, created_by: user.id });
+    const post = await createPost({
+      group_id: group.id,
+      created_by: user.id,
+      live_stream_id: stream.id,
+    });
+    // Simulate the LIVE_STREAM PostImage row created when attaching the stream
+    await createPostImage(post.id, {
+      image_path: stream.thumbnail_path || "/uploads/images/stream-thumb.png",
+      media_type: "LIVE_STREAM",
+      duration_seconds: null,
+    });
+
+    const res = await request(app)
+      .put(`/api/posts/${post.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .field("title", post.title)
+      .field("live_stream_id", "null");
+
+    expect(res.status).toBe(200);
+    expect(res.body.live_stream_id).toBeNull();
+
+    const { prisma } = require("./helpers");
+    const refreshed = await prisma.post.findUnique({
+      where: { id: post.id },
+      include: { images: true },
+    });
+    expect(refreshed.live_stream_id).toBeNull();
+    const liveImages = refreshed.images.filter((i) => i.media_type === "LIVE_STREAM");
+    expect(liveImages.length).toBe(0);
   });
 });
 

@@ -230,8 +230,9 @@ async function updatePost(user, postId, body, files, emitter) {
   const keepPaths = new Set((keepMediaRows || []).map((m) => m.image_path));
 
   const oldImages = post.images || [];
+  const wantsNoLiveStream = live_stream_id !== undefined && isEmptyLiveStreamId(live_stream_id);
   const isSwitchingToLive = liveStream && !post.live_stream_id;
-  const isSwitchingFromLive = live_stream_id === null && post.live_stream_id;
+  const isSwitchingFromLive = wantsNoLiveStream && post.live_stream_id;
   const hasNewMedia = newMediaRows?.length > 0;
 
   if (isSwitchingToLive || isSwitchingFromLive) {
@@ -347,7 +348,7 @@ async function updatePost(user, postId, body, files, emitter) {
     data.signage_state = validateSignageState(actor, body.signage_state);
   }
   if (live_stream_id !== undefined) {
-    data.live_stream_id = live_stream_id ? Number(live_stream_id) : null;
+    data.live_stream_id = wantsNoLiveStream ? null : Number(live_stream_id);
   }
 
   const updated = await postRepo.updatePost(postId, data);

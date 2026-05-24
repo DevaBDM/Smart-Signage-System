@@ -143,6 +143,26 @@ async function createDevice({
   });
 }
 
+async function createLiveStream({
+  title = "Test Stream",
+  stream_type = "HLS",
+  source_url = "http://example.com/stream.m3u8",
+  group_id,
+  created_by,
+  thumbnail_path = null,
+} = {}) {
+  return prisma.liveStream.create({
+    data: {
+      title,
+      stream_type,
+      source_url,
+      group_id,
+      created_by,
+      thumbnail_path,
+    },
+  });
+}
+
 module.exports = {
   prisma,
   createGroup,
@@ -150,5 +170,6 @@ module.exports = {
   createPost,
   createPostImage,
   createDevice,
+  createLiveStream,
   JWT_SECRET,
 };
