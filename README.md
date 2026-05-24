@@ -111,7 +111,7 @@ WebServerSignage/
 │   ├── backend/             ← Detailed backend component docs
 │   ├── frontend/            ← Detailed frontend component docs
 │   ├── api.md               ← Full REST API reference (snapshot)
-│   └── TESTING.md           ← Backend + frontend testing guide
+│   └── TESTS.md             ← Complete test suite reference (backend + frontend)
 └── README.md                ← This file
 ```
 
