@@ -1,152 +1,314 @@
-# Smart Digital Signage — Frontend
+# Smart Signage — Frontend
 
-A modern **React 19 + Vite** single-page application (SPA) for managing a university-campus digital signage system. Provides role-based dashboards for admins and creators, a visual post designer powered by Fabric.js, live stream management, real-time device control, and AI-assisted content Q&A.
-
----
-
-## Table of Contents
-
-1. [Overview](#overview)
-2. [Tech Stack](#tech-stack)
-3. [Features](#features)
-4. [Architecture](#architecture)
-5. [Project Structure](#project-structure)
-6. [Routing & Access Control](#routing--access-control)
-7. [State Management](#state-management)
-8. [API Layer](#api-layer)
-9. [Component Inventory](#component-inventory)
-10. [Authentication Flow](#authentication-flow)
-11. [Real-Time Communication](#real-time-communication)
-12. [Visual Post Designer](#visual-post-designer)
-13. [Environment Variables](#environment-variables)
-14. [Setup & Development](#setup--development)
-15. [Testing](#testing)
-16. [Build & Production](#build--production)
-17. [Troubleshooting](#troubleshooting)
+The frontend is the **human interface** of the Smart Signage System. Built as a **React 19** single-page application (SPA) with **Vite**, it provides role-based dashboards for administrators and content creators, a visual canvas post designer, live stream management, real-time device control, and a public content feed with AI-powered Q&A.
 
 ---
 
-## Overview
+## What the Frontend Is
 
-The frontend is the primary human interface for the Smart Digital Signage system. It serves three distinct audiences:
+The frontend is a browser-based application that translates human intent into backend API calls. It serves three distinct audiences simultaneously:
 
-- **Admins** — Full system control: user management, group configuration, device approval, playlist curation, system logs
-- **Creators** — Content production: post creation with visual editor, live stream management, signage deployment to devices
-- **Public viewers** — Read-only feed of published content with AI Q&A capability
+1. **Administrators** — Manage the entire signage ecosystem: approve new devices, configure groups, control emergency states, manage users, and monitor system health.
+2. **Content Creators** — Produce and deploy content: design visual posts on a canvas, write markdown articles, upload media with crop and trim, publish to specific devices, and manage live streams.
+3. **Public Viewers** — Browse a read-only feed of published content and ask AI-powered questions about posts.
 
-The app communicates with the backend via a typed REST API layer and optionally connects via Socket.IO for real-time device events.
-
----
-
-## Tech Stack
-
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| Framework | React 19 | UI rendering with functional components + hooks |
-| Build Tool | Vite 8 | Fast dev server, HMR, optimized production builds |
-| Routing | React Router DOM 7 | Declarative route definitions with role guards |
-| State | Zustand 5 | Lightweight global store for auth, no prop drilling |
-| HTTP | Axios 1.16 | REST API client with request/response interceptors |
-| Real-time | Socket.IO Client 4.8 | WebSocket connection to backend for live device events |
-| Visual Editor | Fabric.js 5.3.0 | Canvas-based drag-and-drop post designer |
-| Media | hls.js 1.6 | In-browser HLS playback for live stream previews |
-| Markdown | react-markdown 10 | Rich text rendering with GFM, math (KaTeX), wiki-links |
-| Icons | lucide-react | Consistent SVG iconography |
-| Crop | react-easy-crop | Image upload cropping UI |
-| Testing | Playwright 1.48 | End-to-end browser automation |
-| Linting | ESLint 10 + Prettier 3 | Code quality and formatting |
+Every button click, form submission, canvas stroke, device command, and AI question originates in this frontend and flows to the Node.js backend via REST or WebSocket.
 
 ---
 
-## Features
+## What the Frontend Does
 
-### Admin Dashboard (`/admin`)
-- **Dashboard overview** — System status, device counts, recent activity
-- **User management** (`/admin/users`) — Create, edit, delete users; assign roles and managed groups
-- **Group management** (`/admin/groups`) — Create groups, set signage states (`NORMAL`, `EMERGENCY`, etc.)
-- **Device management** (`/admin/devices`) — Approve pending devices, assign groups, upload emergency assets, reset/remove devices
-- **Post oversight** (`/admin/posts`) — View all posts across groups, moderate content
-- **Playlist management** (`/admin/playlists`) — Create ordered playlists for device rotation
-- **System logs** (`/admin/logs`) — Error logs and sensor data from field devices
+The frontend performs six core functions:
 
-### Creator Dashboard (`/creator`)
-- **Dashboard overview** — Personal post count, live stream status, quick actions
-- **Post editor** (`/creator/editor`) — Visual canvas designer (Fabric.js) + markdown mode; upload images/videos with crop and trim
-- **Post management** (`/creator/posts`) — Draft, publish, unpublish, delete posts; manage signage deployments
-- **Live streams** (`/creator/live-streams`) — Create HLS/RTSP/YouTube/RTMP streams; start/stop relays, rotate stream keys, upload thumbnails
-- **Signage control** (`/creator/signage`) — View device status, publish posts to specific devices, control playback (next/previous/start), hide/show assets
+### 1. Role-Based Dashboard Interface
 
-### Public Feed (`/feed`)
-- **Public content feed** — All published posts marked `allowed_on_feed`
-- **Post detail** — Full markdown rendering with attachments, images, videos
-- **AI Q&A** — Ask questions about any published post using OpenAI integration
+The entire UI is gated by user role. The `RequireRole` component enforces that only authenticated users with matching roles can access admin or creator pages.
+
+| Role | Primary Pages |
+|------|--------------|
+| `admin` | Dashboard, Users, Groups, Devices, Posts, Playlists, Logs |
+| `creator` | Dashboard, Editor, Posts, Signage, Live Streams |
+| Public (no auth) | Feed, Post Detail |
+
+Logged-in users visiting `/login` are redirected to their role-appropriate dashboard. Unauthenticated users hitting protected routes are redirected to `/login`. Users with the wrong role are redirected to `/feed`.
+
+### 2. Content Creation & Design
+
+Posts are the atomic unit of signage content. Creators can build them in two modes:
+
+- **Visual Designer** (`Designer.jsx`) — A Fabric.js 5.3.0 canvas where users drag, drop, resize, and style text boxes, shapes, and images. Templates provide pre-built layouts. Safe-zone overlays ensure designs fit display screens. The canvas exports to PNG via `html-to-image`.
+- **Markdown Editor** — Rich text composition with live preview, supporting GitHub Flavored Markdown, math (KaTeX), and wiki-links via `react-markdown`.
+
+Media uploads (images and videos) support:
+- Percentage-based cropping (`react-easy-crop`)
+- Temporal trimming for videos (`VideoTrimSlider.jsx`)
+- Automatic WebP/MP4 conversion by the backend
+
+### 3. Device & Signage Control
+
+Creators and admins interact with field devices through the UI:
+
+- **Device List** — View all devices with real-time online/offline status, IP address, location, and group membership.
+- **Device Registration** — Admins pre-register devices by assigning a `device_id` before the Pi connects.
+- **Approval Workflow** — Pending devices appear in the admin panel; approval triggers a `refresh_display` command to the Pi.
+- **Signage Publishing** — Select a post, choose target devices, set scheduling (`start_date`, `end_date`, `priority`), and deploy.
+- **Playback Controls** — Send `next`, `previous`, and `start` commands to individual devices via the backend's Socket.IO bridge.
+- **Asset Management** — Hide/show or permanently delete assets synced to Anthias devices.
+- **Emergency Asset Upload** — Admins upload emergency image/video files (up to 200 MB) that devices display during emergency mode.
+
+### 4. Live Stream Management
+
+Creators configure and monitor four types of live streams:
+
+| Type | Ingest | Frontend Action |
+|------|--------|-----------------|
+| HLS | External URL | Paste `.m3u8` URL, preview with `hls.js` |
+| RTSP | Camera URL | Enter camera URL, backend relays to HLS |
+| YouTube | YouTube HLS | Paste YouTube URL, backend proxies |
+| RTMP | OBS push | Backend generates stream key; OBS pushes to `rtmp://server:1935/live/<key>` |
+
+The frontend displays stream status (`idle`, `starting`, `online`, `offline`, `error`), relay logs, and an `hls.js` video player for preview. Admins can rotate RTMP stream keys for security.
+
+### 5. Real-Time Device Monitoring
+
+The frontend optionally connects to the backend via Socket.IO to receive live updates:
+
+- Device connection/disconnection events
+- Emergency mode broadcasts
+- Live stream status changes
+
+The Socket.IO client is created lazily (`autoConnect: false`) and connected only on pages that need real-time data, avoiding unnecessary connections on public pages.
+
+### 6. Public Feed & AI Q&A
+
+The public-facing `/feed` and `/post/:id` routes are accessible without authentication:
+
+- **Feed** — Grid of all published posts with `allowed_on_feed = true`
+- **Post Detail** — Full markdown rendering with image/video carousel, attachment downloads, and an AI chat interface
+- **AI Q&A** — Visitors ask questions about the post content. The frontend sends the question + conversation history to `POST /api/ai/ask` and streams back the OpenAI-generated answer.
 
 ---
 
-## Architecture
-
-### High-Level Data Flow
+## Where the Frontend Fits
 
 ```mermaid
 flowchart TB
-    subgraph Browser
-        A[React Components]
-        B[Zustand Store]
-        C[Axios API Layer]
-        D[Socket.IO Client]
+    subgraph Users
+        A[Admin Browser]
+        C[Creator Browser]
+        U[Public Visitor]
+    end
+
+    subgraph Frontend
+        R[React 19 + Vite]
+        Z[Zustand Auth Store]
+        AX[Axios API Layer]
+        SO[Socket.IO Client]
+        FB[Fabric.js Designer]
+        HL[hls.js Player]
     end
 
     subgraph Backend
         E[Express REST API]
-        F[Socket.IO Server]
+        S[Socket.IO Server]
+        M[Media Processor]
+        L[Stream Relay]
     end
 
-    A -->|reads/writes| B
-    A -->|calls| C
-    C -->|HTTP| E
-    D <-->|WebSocket| F
-    B -->|provides auth token| C
-    E -->|JWT + data| C
+    A -->|Admin Routes| R
+    C -->|Creator Routes| R
+    U -->|Public Routes| R
+    R --> Z
+    Z --> AX
+    AX -->|HTTP /api| E
+    SO <-->|WebSocket| S
+    FB -->|Canvas PNG| AX
+    HL -->|HLS manifest| L
+    E --> M
 ```
 
-### Component Hierarchy
+The frontend is a **thin client** in the architectural sense. It holds no business logic beyond form validation and role-based UI gating. All authoritative state lives in the backend. The frontend's job is to:
+- **Render** backend data into human-readable interfaces
+- **Capture** human input and translate it into API calls
+- **Display** real-time updates pushed from the backend
 
-```
-App.jsx (BrowserRouter)
-├── AuthProvider (Context)
-│   └── AppRoutes (Routes)
-│       ├── /login → Login.jsx
-│       ├── /feed → Feed.jsx
-│       ├── /post/:id → PostDetail.jsx
-│       ├── /admin → AdminDashboard.jsx
-│       │   ├── /admin/devices → AdminDevices.jsx
-│       │   ├── /admin/users → AdminUsers.jsx
-│       │   ├── /admin/groups → AdminGroups.jsx
-│       │   ├── /admin/posts → AdminPosts.jsx
-│       │   ├── /admin/playlists → AdminPlaylists.jsx
-│       │   └── /admin/logs → AdminLogs.jsx
-│       └── /creator → CreatorDashboard.jsx
-│           ├── /creator/posts → CreatorPosts.jsx
-│           ├── /creator/editor → CreatorEditor.jsx
-│           ├── /creator/signage → CreatorSignage.jsx
-│           └── /creator/live-streams → CreatorLiveStreams.jsx
+---
+
+## Who Uses the Frontend
+
+| Consumer | Authentication | Primary Interface |
+|----------|---------------|-------------------|
+| **Admin** | JWT (`role: admin`) | Full system control via `/admin/*` routes |
+| **Creator** | JWT (`role: creator`) | Content production via `/creator/*` routes |
+| **Public Viewer** | None | Read-only feed and AI Q&A via `/feed` and `/post/:id` |
+
+---
+
+## How the Frontend Is Built
+
+### Design Philosophy
+
+- **Role-first routing** — The URL structure mirrors the RBAC model. `/admin/*` is for admins, `/creator/*` is for creators, and `/feed` is public.
+- **Thin client, thick backend** — The frontend renders what the backend provides. No business rules are hard-coded beyond form validation and role guards.
+- **Local-first auth state** — JWTs and profile data are persisted to `localStorage` so users stay logged in across reloads. Expired tokens are auto-purged on boot.
+- **Lazy real-time connections** — Socket.IO connects only when needed (admin/creator pages), not on public routes.
+- **Design token consistency** — Colors, spacing, radii, and typography are centralized in `tokens.js` and composed in `styles.js` for a uniform UI.
+
+### Tech Stack
+
+| Layer | Technology | Why |
+|-------|-----------|-----|
+| Framework | React 19 | Concurrent features, latest hooks API, modern JSX transform |
+| Build Tool | Vite 8 | Instant HMR, optimized production builds, native ESM |
+| Routing | React Router DOM 7 | Declarative routes, nested layouts, programmatic navigation |
+| State | Zustand 5 | Minimal boilerplate, no reducers/actions ceremony, localStorage sync |
+| HTTP | Axios 1.16 | Request/response interceptors, multipart uploads, timeout handling |
+| Real-time | Socket.IO Client 4.8 | Auto-reconnection, room-based events, ack support |
+| Visual Editor | Fabric.js 5.3.0 | Canvas manipulation, text/shape objects, template system |
+| Media Player | hls.js 1.6 | HLS playback in browsers without native support |
+| Markdown | react-markdown 10 | GFM, math, wiki-links with modular plugin architecture |
+| Icons | lucide-react | Tree-shakeable SVG icons, consistent stroke width |
+| Crop | react-easy-crop | Touch-friendly crop UI with zoom and rotation |
+| Testing | Playwright 1.48 | Real browser E2E tests, auto-wait, screenshot comparison |
+
+### Request Flow
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant C as React Component
+    participant S as Zustand Store
+    participant A as Axios API
+    participant B as Backend
+
+    U->>C: Click "Publish Post"
+    C->>S: Read auth token
+    S-->>C: token
+    C->>A: signage.publish({ post_id, device_ids })
+    A->>A: Attach Authorization: Bearer <token>
+    A->>B: POST /api/signage/publish
+    B-->>A: 200 OK { deployments_created }
+    A-->>C: Success
+    C->>U: Show success message
 ```
 
-### Layered Architecture
+### Authentication Flow
 
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant L as Login.jsx
+    participant AC as AuthContext
+    participant ZS as useAuthStore
+    participant API as api/auth.js
+    participant B as Backend
+
+    U->>L: Enter credentials
+    L->>AC: login(username, password)
+    AC->>API: POST /auth/login
+    API->>B: credentials
+    B-->>API: { token, role, group_id, ... }
+    API-->>AC: Response
+    AC->>ZS: setAuth(token, role, group_id, profile)
+    ZS->>ZS: Decode JWT, persist to localStorage
+    AC->>API: GET /auth/me
+    API-->>AC: Full profile
+    AC->>ZS: Update with fresh fields
+    AC-->>L: Success
+    L->>U: Redirect to /admin or /creator
 ```
-┌─────────────────────────────────────────────┐
-│  Pages (Route-level views)                   │  ← Data fetching, layout composition
-├─────────────────────────────────────────────┤
-│  Components (Reusable UI blocks)             │  ← Forms, lists, editors, modals
-├─────────────────────────────────────────────┤
-│  API Modules (Axios wrappers)                  │  ← Typed endpoint functions
-├─────────────────────────────────────────────┤
-│  Store (Zustand) + Context (AuthProvider)    │  ← Global auth state, localStorage sync
-├─────────────────────────────────────────────┤
-│  Config / Utils / Constants / Styles         │  ← Environment, tokens, helpers
-└─────────────────────────────────────────────┘
+
+### Component Architecture
+
+```mermaid
+flowchart TB
+    subgraph Entry
+        M[main.jsx] --> A[App.jsx]
+        A --> R[BrowserRouter]
+        R --> AP[AuthProvider]
+        AP --> AR[AppRoutes]
+    end
+
+    subgraph Pages
+        AR --> Login[Login.jsx]
+        AR --> Feed[Feed.jsx]
+        AR --> Admin[AdminDashboard.jsx]
+        AR --> Creator[CreatorDashboard.jsx]
+    end
+
+    subgraph Components
+        Admin --> AD[AdminSidebar.jsx]
+        Admin --> DL[DeviceList.jsx]
+        Admin --> DRF[DeviceRegisterForm.jsx]
+        Creator --> D[Designer.jsx]
+        Creator --> PF[PostForm.jsx]
+        Creator --> MUF[MediaUploadField.jsx]
+        Creator --> SPL[SignagePanel.jsx]
+        Creator --> SPF[SignagePublishForm.jsx]
+        Creator --> LS[LiveStreamForm.jsx]
+        Feed --> PL[PostList.jsx]
+        Feed --> PD[PostDetail.jsx]
+        PD --> PA[PostAIChat.jsx]
+    end
+
+    subgraph Data
+        AP --> Z[Zustand Store]
+        PL --> API[api/posts.js]
+        DL --> API2[api/devices.js]
+        D --> API3[api/media.js]
+        PA --> API4[api/ai.js]
+    end
 ```
+
+### Design Tokens
+
+All visual styling flows from centralized tokens:
+
+```mermaid
+flowchart LR
+    T[tokens.js] --> S[styles.js]
+    S --> C[Components]
+    T --> C
+```
+
+| Token Category | Examples |
+|----------------|----------|
+| `colors` | Primary `#2563eb`, success `#16a34a`, error `#dc2626`, page bg `#f4f6f9` |
+| `spacing` | `xs: 4`, `sm: 8`, `md: 12`, `lg: 16`, `xl: 20`, `page: 32px 36px` |
+| `radii` | `sm: 6`, `md: 8`, `lg: 10`, `xl: 12`, `pill: 99` |
+| `fontSize` | `xs: 11`, `sm: 12`, `md: 13`, `lg: 14`, `xl: 24` |
+| `shadows` | `card: 0 1px 6px rgba(0,0,0,0.07)` |
+
+---
+
+## Why These Design Choices
+
+### Why Zustand over Redux/Context
+
+The auth state is simple (a single user object) but accessed by nearly every component. Zustand provides:
+- No prop drilling (unlike Context)
+- No reducers or action types (unlike Redux)
+- Built-in localStorage persistence
+- Tiny bundle size (~1 KB)
+
+### Why Axios over Fetch
+
+Axios provides request/response interceptors for attaching JWTs and handling 401 redirects globally. It also handles multipart uploads (emergency assets, media) with progress tracking and automatic JSON serialization.
+
+### Why Vite over Create React App
+
+Vite uses native ESM in development (no bundling step), resulting in sub-second cold starts and instant HMR. Production builds use Rollup for optimized tree-shaking and code splitting.
+
+### Why Fabric.js for the Designer
+
+Fabric.js provides an object model on top of HTML5 Canvas, allowing users to interactively manipulate text, shapes, and images. The `StaticCanvas` mode is used for export-quality rendering without the overhead of interactive events in the final image.
+
+### Why Role-First Routing
+
+By splitting admin and creator into separate route namespaces (`/admin/*` vs `/creator/*`), the frontend can:
+- Lazy-load role-specific code chunks
+- Apply route-level role guards in one place (`RequireRole`)
+- Render role-appropriate sidebars and navigation
 
 ---
 
@@ -156,23 +318,23 @@ App.jsx (BrowserRouter)
 frontend/
 ├── public/                        # Static assets (favicon, etc.)
 ├── src/
-│   ├── api/                       # Backend API wrappers (per-domain modules)
-│   │   ├── axios.js               # Axios instance with auth interceptor + 401 handler
+│   ├── api/                       # Per-domain Axios wrappers
+│   │   ├── axios.js               # Axios instance: auth interceptor + 401 redirect
 │   │   ├── auth.js                # login, me
-│   │   ├── devices.js             # list, register, approve, update, emergency-asset upload
-│   │   ├── groups.js              # list, create, update, delete, states
-│   │   ├── liveStreams.js         # CRUD, start/stop, rotate-key, thumbnail, logs
-│   │   ├── media.js               # image/video upload endpoint
-│   │   ├── playlists.js         # list, create, update, delete
-│   │   ├── posts.js               # CRUD, publish, unpublish, attachments
-│   │   ├── signage.js             # publish, deployments, asset list, playback controls
+│   │   ├── devices.js             # list, register, approve, emergency-asset
+│   │   ├── groups.js              # CRUD, states
+│   │   ├── liveStreams.js         # CRUD, start/stop, rotate-key, logs
+│   │   ├── media.js               # image/video upload
+│   │   ├── playlists.js           # list, create, update, delete
+│   │   ├── posts.js               # CRUD, publish, attachments, bulk actions
+│   │   ├── signage.js             # publish, deployments, controls, assets
 │   │   ├── users.js               # list users
-│   │   └── ai.js                  # AI status, ask question
+│   │   └── ai.js                  # status, ask
 │   │
 │   ├── assets/                    # Static images, fonts
 │   ├── components/                # Reusable React components
 │   │   ├── ui/                    # Primitive UI kit (Button, Card, Badge, Message)
-│   │   ├── designer/              # Fabric.js designer sub-components
+│   │   ├── designer/              # Fabric.js sub-components
 │   │   │   ├── DesignerCanvas.jsx
 │   │   │   ├── DesignerToolbar.jsx
 │   │   │   ├── SafeZoneOverlay.jsx
@@ -180,20 +342,20 @@ frontend/
 │   │   │   └── designerConstants.js
 │   │   ├── AdminSidebar.jsx       # Admin navigation sidebar
 │   │   ├── CreatorSidebar.jsx     # Creator navigation sidebar
-│   │   ├── Designer.jsx           # Full Fabric.js visual post editor
+│   │   ├── Designer.jsx           # Full visual post editor (orchestrator)
 │   │   ├── DeviceList.jsx         # Device table with status/actions
-│   │   ├── DeviceRegisterForm.jsx # Form to pre-register a new Pi
+│   │   ├── DeviceRegisterForm.jsx # Pre-register a new Pi device
 │   │   ├── FabricCanvas.jsx       # Low-level Fabric canvas wrapper
-│   │   ├── LivePlayer.jsx         # HLS.js video player for stream previews
+│   │   ├── LivePlayer.jsx         # hls.js video player for stream previews
 │   │   ├── LiveStreamForm.jsx     # Create/edit stream form
 │   │   ├── LiveStreamPicker.jsx   # Stream selection dropdown
 │   │   ├── MarkdownCanvas.jsx     # Markdown preview renderer
-│   │   ├── MediaUploadField.jsx   # Image/video upload with crop/trim UI
+│   │   ├── MediaUploadField.jsx   # Upload with crop (images) and trim (videos)
 │   │   ├── MultiSelect.jsx        # Group/device multi-selection control
 │   │   ├── PostAIChat.jsx         # AI Q&A chat interface for posts
-│   │   ├── PostForm.jsx           # Post creation/editing form
+│   │   ├── PostForm.jsx           # Post metadata form
 │   │   ├── PostList.jsx           # Post grid/table with filters
-│   │   ├── PostMedia.jsx          # Media display (image/video carousel)
+│   │   ├── PostMedia.jsx          # Image/video carousel display
 │   │   ├── SignageAssetList.jsx   # Device asset management table
 │   │   ├── SignagePanel.jsx       # Side panel for signage actions
 │   │   ├── SignagePublishForm.jsx # Publish post to devices form
@@ -201,520 +363,100 @@ frontend/
 │   │   └── VideoTrimSlider.jsx    # Video duration trim UI
 │   │
 │   ├── config/
-│   │   └── apiBase.js             # Dynamic API base URL + asset origin resolver
+│   │   └── apiBase.js             # Dynamic API base URL + asset origin
 │   ├── constants/
 │   │   └── (shared constants)
 │   ├── context/
-│   │   └── AuthContext.jsx        # React context provider: login/logout, profile refresh
+│   │   └── AuthContext.jsx        # React context: login/logout, profile refresh
 │   ├── hooks/
 │   │   └── (custom React hooks)
 │   ├── pages/                     # Route-level page components
 │   │   ├── Login.jsx              # Authentication page
-│   │   ├── admin/
+│   │   ├── admin/                 # Admin dashboard pages
 │   │   │   ├── AdminDashboard.jsx
-│   │   │   ├── AdminDevices.jsx   # Full device management (approve, groups, emergency asset)
-│   │   │   ├── AdminGroups.jsx    # Group CRUD + signage state control
-│   │   │   ├── AdminLogs.jsx      # Error + sensor log viewer
-│   │   │   ├── AdminPlaylists.jsx # Playlist builder
-│   │   │   ├── AdminPosts.jsx     # All posts moderation view
-│   │   │   └── AdminUsers.jsx     # User CRUD with role/group assignment
-│   │   ├── creator/
+│   │   │   ├── AdminDevices.jsx
+│   │   │   ├── AdminGroups.jsx
+│   │   │   ├── AdminLogs.jsx
+│   │   │   ├── AdminPlaylists.jsx
+│   │   │   ├── AdminPosts.jsx
+│   │   │   └── AdminUsers.jsx
+│   │   ├── creator/               # Creator dashboard pages
 │   │   │   ├── CreatorDashboard.jsx
-│   │   │   ├── CreatorEditor.jsx  # Post creation: designer + markdown + media
-│   │   │   ├── CreatorLiveStreams.jsx # Stream list + relay control
-│   │   │   ├── CreatorPosts.jsx   # Personal post management + publish
-│   │   │   └── CreatorSignage.jsx # Device status + playback controls
-│   │   └── public/
-│   │       ├── Feed.jsx           # Public post feed
-│   │       └── PostDetail.jsx     # Individual post view with AI chat
+│   │   │   ├── CreatorEditor.jsx
+│   │   │   ├── CreatorLiveStreams.jsx
+│   │   │   ├── CreatorPosts.jsx
+│   │   │   └── CreatorSignage.jsx
+│   │   └── public/                # Public-facing pages
+│   │       ├── Feed.jsx
+│   │       └── PostDetail.jsx
 │   │
 │   ├── socket/
 │   │   └── socket.js              # Socket.IO client singleton (autoConnect: false)
 │   ├── store/
-│   │   └── useAuthStore.js        # Zustand auth state (token, role, profile, managed groups)
+│   │   └── useAuthStore.js        # Zustand auth state + localStorage sync
 │   ├── styles/
 │   │   └── (CSS/style utilities)
-│   ├── styles.js                  # Design tokens: colors, spacing, typography
-│   ├── tokens.js                  # Additional style token definitions
+│   ├── styles.js                  # Composed design tokens for components
+│   ├── tokens.js                  # Raw design tokens (colors, spacing, radii, fonts)
 │   ├── App.css                    # Global app styles
 │   ├── index.css                  # Base CSS resets + utilities
-│   ├── App.jsx                    # Root component: Router + AuthProvider + Routes
+│   ├── App.jsx                    # Root: Router + AuthProvider + Routes
 │   └── main.jsx                   # Entry point: ReactDOM render
 │
-├── tests/                         # Playwright end-to-end tests
+├── tests/                         # Playwright E2E tests
 │   ├── admin/                     # Admin dashboard tests
 │   ├── auth.spec.js               # Login flow tests
 │   ├── creator/                   # Creator workflow tests
 │   ├── smoke/
-│   │   └── pi-live-stream.spec.js # Pi/Anthias live stream smoke test
+│   │   └── pi-live-stream.spec.js # Pi/Anthias smoke tests
 │   ├── globalSetup.cjs            # Test bootstrap: seed DB, start servers
 │   └── helpers/
 │       └── test-helpers.js        # Login, reset, seed utilities
 │
-├── .env                           # VITE_API_URL
-├── .gitignore
-├── eslint.config.js
+├── .env                           # VITE_API_URL, VITE_PROXY_TARGET
+├── vite.config.js                 # Dev proxy to backend, HMR
 ├── playwright.config.js           # E2E test configuration
+├── eslint.config.js
 ├── prettier.config.js
-├── vite.config.js                 # Dev proxy to backend, HMR config
 ├── index.html
 └── package.json
 ```
 
 ---
 
-## Routing & Access Control
-
-### Route Map
-
-| Path | Component | Auth Required | Role Guard |
-|------|-------------|---------------|------------|
-| `/login` | `Login.jsx` | No | — |
-| `/feed` | `Feed.jsx` | No | — |
-| `/post/:id` | `PostDetail.jsx` | No | — |
-| `/admin` | `AdminDashboard.jsx` | Yes | `admin` |
-| `/admin/devices` | `AdminDevices.jsx` | Yes | `admin` |
-| `/admin/users` | `AdminUsers.jsx` | Yes | `admin` |
-| `/admin/groups` | `AdminGroups.jsx` | Yes | `admin` |
-| `/admin/posts` | `AdminPosts.jsx` | Yes | `admin` |
-| `/admin/playlists` | `AdminPlaylists.jsx` | Yes | `admin` |
-| `/admin/logs` | `AdminLogs.jsx` | Yes | `admin` |
-| `/creator` | `CreatorDashboard.jsx` | Yes | `creator` |
-| `/creator/posts` | `CreatorPosts.jsx` | Yes | `creator` |
-| `/creator/editor` | `CreatorEditor.jsx` | Yes | `creator` |
-| `/creator/signage` | `CreatorSignage.jsx` | Yes | `creator` |
-| `/creator/live-streams` | `CreatorLiveStreams.jsx` | Yes | `creator` |
-| `/` | — | No | Redirects to `/feed` |
-| `*` | — | No | Redirects to `/feed` |
-
-### Role Guard Logic (`RequireRole`)
-
-```jsx
-function RequireRole({ role, children }) {
-  const { token, role: userRole } = useAuthStore();
-  if (!token) return <Navigate to="/login" replace />;
-  if (role && userRole !== role) return <Navigate to="/feed" replace />;
-  return children;
-}
-```
-
-- Unauthenticated users are redirected to `/login`
-- Authenticated users with wrong role are redirected to `/feed`
-- Logged-in users visiting `/login` are redirected to their role-appropriate dashboard
-
----
-
-## State Management
-
-### Zustand Auth Store (`useAuthStore.js`)
-
-The auth store is the single source of truth for user identity. It:
-
-- Decodes JWT payload without external libraries (base64url + UTF-8)
-- Persists to `localStorage` for session survival across reloads
-- Auto-purges expired tokens on application boot
-- Stores rich profile fields: `role`, `group_id`, `managed_group_ids`, `max_signage_state`, `creator_priority`, `control_lock_minutes`, `auto_approve`, `can_manage_other_posts`
-
-```js
-// Key store fields
-{
-  token,              // JWT string
-  id,                 // User ID
-  role,               // "admin" | "creator"
-  group_id,           // Primary group
-  managed_group_ids,  // Array of group IDs this user manages
-  max_signage_state,  // Highest signage state this user can set
-  creator_priority,   // Priority level for control locks
-  control_lock_minutes, // Lock duration for device control
-  auto_approve,       // Whether this creator's posts auto-approve
-  can_manage_other_posts, // Cross-group post management permission
-}
-```
-
-### Auth Context (`AuthContext.jsx`)
-
-Wraps the Zustand store with React Context to provide:
-
-- **`login(username, password)`** — Calls API, stores token, fetches full profile
-- **`logout()`** — Clears all auth state and localStorage
-- **Profile hydration** — On mount, fetches `/auth/me` to refresh profile fields that may have changed since JWT issuance
-
----
-
-## API Layer
-
-### Axios Instance (`api/axios.js`)
-
-```js
-const api = axios.create({ timeout: 15000 });
-
-// Request interceptor: attach JWT + baseURL
-api.interceptors.request.use((config) => {
-  config.baseURL = apiBaseUrl();  // /api in dev, full URL in prod
-  const token = localStorage.getItem("token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
-
-// Response interceptor: 401 → clear auth + redirect to login
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      useAuthStore.getState().clearAuth();
-      window.location.href = "/login";
-    }
-    return Promise.reject(error);
-  }
-);
-```
-
-### Dynamic Base URL (`config/apiBase.js`)
-
-| Environment | `apiBaseUrl()` | `assetOrigin()` |
-|-------------|----------------|-----------------|
-| Development | `/api` (Vite proxy) | `""` (same origin) |
-| Production | `VITE_API_URL` | `VITE_API_URL` without `/api` suffix |
-
-### API Module Pattern
-
-Each domain has a dedicated module in `src/api/*.js`:
-
-```js
-// Example: src/api/devices.js
-import api from "./axios";
-
-export const getDevices = () => api.get("/devices");
-export const getDevice = (id) => api.get(`/devices/${id}`);
-export const registerDevice = (data) => api.post("/devices/register", data);
-export const approveDevice = (id, data) => api.post(`/devices/${id}/approve`, data);
-export const updateDevice = (id, data) => api.put(`/devices/${id}`, data);
-export const deleteDevice = (id) => api.delete(`/devices/${id}`);
-export const uploadEmergencyAsset = (id, formData) =>
-  api.post(`/devices/${id}/emergency-asset`, formData, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
-```
-
----
-
-## Component Inventory
-
-### Layout & Navigation
-
-| Component | Purpose |
-|-----------|---------|
-| `AdminSidebar.jsx` | Admin dashboard navigation with role-aware links |
-| `CreatorSidebar.jsx` | Creator dashboard navigation |
-
-### Content Creation
-
-| Component | Purpose |
-|-----------|---------|
-| `Designer.jsx` | Full visual post editor (Fabric.js canvas + toolbar + templates) |
-| `DesignerCanvas.jsx` | Fabric.js canvas instance manager |
-| `DesignerToolbar.jsx` | Text, shape, image tools for the canvas |
-| `SafeZoneOverlay.jsx` | Guides for safe display zones on canvas |
-| `MarkdownCanvas.jsx` | Markdown WYSIWYG preview with KaTeX math support |
-| `MediaUploadField.jsx` | Drag-and-drop upload with crop (images) and trim (videos) |
-| `VideoTrimSlider.jsx` | Range slider for video start/end trimming |
-| `PostForm.jsx` | Post metadata form (title, description, group, scheduling) |
-
-### Device & Signage
-
-| Component | Purpose |
-|-----------|---------|
-| `DeviceList.jsx` | Table of devices with online/offline status |
-| `DeviceRegisterForm.jsx` | Pre-register a new Pi device |
-| `SignageAssetList.jsx` | Manage assets deployed to a specific device |
-| `SignagePanel.jsx` | Side panel for device control actions |
-| `SignagePublishForm.jsx` | Publish a post to one or more devices |
-| `SignageStateSelect.jsx` | Dropdown for `NORMAL` / `EMERGENCY` / etc. |
-
-### Live Streaming
-
-| Component | Purpose |
-|-----------|---------|
-| `LivePlayer.jsx` | hls.js-based video player for stream previews |
-| `LiveStreamForm.jsx` | Create/edit stream (HLS/RTSP/YouTube/RTMP) |
-| `LiveStreamPicker.jsx` | Select an existing stream to attach to a post |
-
-### Posts & Feed
-
-| Component | Purpose |
-|-----------|---------|
-| `PostList.jsx` | Filterable grid/table of posts |
-| `PostMedia.jsx` | Carousel/display for post images and videos |
-| `PostAIChat.jsx` | Chat interface for AI Q&A on a post |
-| `MultiSelect.jsx` | Generic multi-select for groups/devices/users |
-
-### UI Primitives (`components/ui/`)
-
-| Component | Purpose |
-|-----------|---------|
-| `Button.jsx` | Styled action button |
-| `Card.jsx` | Content container with shadow |
-| `Badge.jsx` | Status indicator (online, offline, pending) |
-| `Message.jsx` | Alert/toast message display |
-
----
-
-## Authentication Flow
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant Login as Login.jsx
-    participant AuthCtx as AuthContext
-    participant Store as useAuthStore
-    participant API as api/auth.js
-    participant Backend
-
-    User->>Login: enters credentials
-    Login->>AuthCtx: login(username, password)
-    AuthCtx->>API: POST /api/auth/login
-    API->>Backend: credentials
-    Backend-->>API: { token, role, group_id, ... }
-    API-->>AuthCtx: response
-    AuthCtx->>Store: setAuth(token, role, group_id, profile)
-    Store->>Store: decode JWT, persist to localStorage
-    AuthCtx->>API: GET /api/auth/me (profile hydration)
-    API-->>AuthCtx: full profile
-    AuthCtx->>Store: update with fresh profile fields
-    AuthCtx-->>Login: success
-    Login->>User: redirect to /admin or /creator
-```
-
----
-
-## Real-Time Communication
-
-### Socket.IO Client (`socket/socket.js`)
-
-```js
-import { io } from "socket.io-client";
-const socket = io(origin, { autoConnect: false });
-export default socket;
-```
-
-The client is created lazily (`autoConnect: false`) and connected on-demand by pages that need real-time updates (e.g., device status, live stream health). This avoids unnecessary connections on public pages like `/feed`.
-
-### Typical Usage
-
-```js
-import socket from "../socket/socket";
-
-useEffect(() => {
-  socket.connect();
-  socket.on("connect", () => console.log("Socket connected"));
-  socket.on("device_status_change", (data) => {
-    // Refresh device list
-  });
-  return () => {
-    socket.off("device_status_change");
-    socket.disconnect();
-  };
-}, []);
-```
-
----
-
-## Visual Post Designer
-
-The `Designer.jsx` component is a full-featured canvas editor for creating visually rich signage posts.
-
-### Capabilities
-
-| Feature | Implementation |
-|---------|---------------|
-| **Canvas** | Fabric.js 5.3.0 (`StaticCanvas`) |
-| **Elements** | Text boxes, rectangles, circles, images, uploaded media |
-| **Templates** | Pre-built layouts via `applyTemplate.js` |
-| **Safe zones** | Overlay guides for text-safe and action-safe areas |
-| **Export** | `html-to-image` for PNG export from canvas |
-| **Switching** | Toggle between visual designer and markdown mode |
-
-### Designer Sub-System
-
-```
-Designer.jsx (orchestrator)
-├── DesignerCanvas.jsx (Fabric canvas)
-├── DesignerToolbar.jsx (tools)
-├── SafeZoneOverlay.jsx (guides)
-├── applyTemplate.js (layout presets)
-└── designerConstants.js (sizes, colors)
-```
-
----
-
-## Environment Variables
-
-Create a `.env` file in the `frontend/` directory:
-
-```env
-VITE_API_URL=http://localhost:5000/api
-```
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `VITE_API_URL` | Yes | Backend API URL. In dev, Vite proxies `/api` to this origin. |
-| `VITE_PROXY_TARGET` | No | Override proxy target in `vite.config.js` (defaults to `http://127.0.0.1:5000`) |
-| `VITE_API_PORT` | No | Backend port fallback (defaults to `5000`) |
-
-> **Vite rule:** Only variables prefixed with `VITE_` are exposed to the client.
-
----
-
-## Setup & Development
-
-### Prerequisites
-
-- Node.js 18+
-- Backend running on port 5000 (or configured `VITE_API_URL`)
-
-### Install Dependencies
+## Quick Start
 
 ```bash
 cd frontend
 npm install
+
+# Create .env
+cat > .env <<EOF
+VITE_API_URL=http://localhost:5000/api
+EOF
+
+# Run dev server
+npm run dev   # http://localhost:5173
 ```
-
-> **Fabric.js pin:** The project requires `fabric@5.3.0` exactly. It is already in `package.json`, but if you encounter issues:
-> ```bash
-> npm install fabric@5.3.0 --save-exact
-> ```
-
-### Start Development Server
-
-```bash
-npm run dev
-```
-
-- Vite dev server starts on `http://localhost:5173`
-- API calls to `/api`, `/uploads`, `/streams`, and `/socket.io` are proxied to the backend
-- Hot Module Replacement (HMR) is active for instant UI updates
-
-### Available Scripts
-
-| Script | Command | Description |
-|--------|---------|-------------|
-| Dev | `npm run dev` | Start Vite dev server with HMR |
-| Build | `npm run build` | Production build to `dist/` |
-| Preview | `npm run preview` | Preview production build locally |
-| Lint | `npm run lint` | Run ESLint |
-| Format | `npm run format` | Run Prettier on all files |
-| Test | `npm run test:e2e` | Run Playwright E2E tests |
 
 ---
 
-## Testing
+## Component Documentation
 
-### Playwright E2E Tests
+For deep-dive documentation on each subsystem, see the component guides in `docs/frontend/`:
 
-The project uses Playwright for end-to-end testing. Tests run against a real browser (Chromium) and automatically start both the backend and frontend dev server.
-
-### Install Browsers (one-time)
-
-```bash
-npx playwright install
-```
-
-### Run Tests
-
-```bash
-# All tests
-npm run test:e2e
-
-# Specific suites
-npx playwright test tests/admin/        # Admin dashboard tests
-npx playwright test tests/creator/       # Creator workflow tests
-npx playwright test tests/auth.spec.js   # Login/logout tests
-npx playwright test tests/smoke/         # Pi/Anthias smoke tests
-```
-
-### Test Infrastructure (`playwright.config.js`)
-
-```js
-webServer: [
-  {
-    command: "node ../backend/start-test-server.js",
-    url: "http://localhost:5001/api/health",
-    // Test backend on port 5001
-  },
-  {
-    command: "npm run dev",
-    url: "http://localhost:5173",
-    env: { VITE_PROXY_TARGET: "http://127.0.0.1:5001" },
-  },
-];
-```
-
-> **Important:** Do not run your production backend on port 5001 when executing tests.
-
-### Test Helpers (`tests/helpers/`)
-
-- **`login(page, username, password)`** — Authenticate and store session
-- **`resetDatabase()`** — Clean test data between runs
-- **`seedTestData()`** — Create predictable fixtures
+| Guide | Covers |
+|-------|--------|
+| `docs/frontend/architecture.md` | Layered architecture, data flow, design decisions |
+| `docs/frontend/routing.md` | Route map, role guards, navigation structure |
+| `docs/frontend/state-management.md` | Zustand auth store, localStorage sync, profile hydration |
+| `docs/frontend/api-layer.md` | Axios instance, interceptors, per-domain API modules |
+| `docs/frontend/components.md` | Component inventory, designer subsystem, UI primitives |
+| `docs/frontend/authentication.md` | Login flow, JWT handling, 401 redirects, logout |
+| `docs/frontend/real-time.md` | Socket.IO client, lazy connections, event handling |
+| `docs/frontend/designer.md` | Fabric.js canvas, templates, safe zones, export |
+| `docs/frontend/setup.md` | Installation, environment variables, build, production deploy |
 
 ---
 
-## Build & Production
-
-### Production Build
-
-```bash
-npm run build
-```
-
-Outputs to `frontend/dist/`:
-- Optimized JS bundles with tree shaking
-- CSS extracted and minified
-- Asset hashes for cache busting
-
-### Production Deployment
-
-Serve the `dist/` folder with any static file server:
-
-```bash
-# Using Vite preview (testing only)
-npm run preview
-
-# Using Nginx (recommended)
-server {
-    listen 80;
-    root /var/www/signage-frontend/dist;
-    index index.html;
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-}
-```
-
-### Important Notes
-
-- The app uses **client-side routing** (React Router). The server must serve `index.html` for all non-file routes.
-- API calls go to the absolute `VITE_API_URL` in production (no proxy).
-- Uploads and streams are served directly by the backend, not the frontend.
-
----
-
-## Troubleshooting
-
-| Problem | Cause | Solution |
-|---------|-------|----------|
-| `Fabric is not defined` | Wrong Fabric.js version or build issue | Ensure `fabric@5.3.0` is installed exactly: `npm install fabric@5.3.0 --save-exact` |
-| Canvas not rendering | Fabric.js canvas initialization race | Check that canvas element is mounted before Fabric initializes |
-| Vite HMR not working | Cache or plugin issue | `npm run dev -- --force` |
-| API 404 / CORS errors | Backend not running or wrong URL | Verify backend is running; check `VITE_API_URL` in `.env` |
-| 401 Unauthorized loops | Expired token not cleared | Check localStorage `token`; manually clear and re-login |
-| `role is undefined` | Profile not hydrated | Refresh page to trigger `/auth/me` call in `AuthContext` |
-| Playwright tests fail | Port 5001 occupied | Kill any process on port 5001 before running tests |
-| Test backend timeout | Slow machine or DB connection | Increase `timeout` in `playwright.config.js` |
-| Live stream preview black | hls.js not loading | Check browser console for HLS manifest fetch errors |
-| Video trim not working | FFmpeg metadata unavailable | Ensure uploaded video has valid duration metadata |
-| Markdown math not rendering | KaTeX CSS not loaded | Check that `rehype-katex` styles are imported |
-
----
-
-_See the root `README.md` and `backend/README.md` for full system and API documentation._
+_See `backend/README.md` for the backend overview._
