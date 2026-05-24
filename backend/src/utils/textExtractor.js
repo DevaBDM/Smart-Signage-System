@@ -13,7 +13,7 @@ async function extractText(filePath, mimeType) {
 
     // PDF
     if (ext === ".pdf" || type.includes("pdf")) {
-      const pdfParse = require("pdf-parse");
+      const pdfParse = require("pdf-parse-fork");
       const buffer = fs.readFileSync(filePath);
       const data = await pdfParse(buffer);
       return data.text || "";
