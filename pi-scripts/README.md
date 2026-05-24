@@ -152,6 +152,15 @@ Both scripts handle: system update, dependency installation, Anthias/MPV install
 
 See `setup-anthias.sh -h` or `setup-mvp.sh -h` for all options.
 
+To later remove a device and its service, use the corresponding clear script:
+
+```bash
+./clear-mvp.sh -f Device3
+./clear-anthias.sh -f Device1
+```
+
+Both accept `--remove-packages` to also uninstall the apt packages installed during setup.
+
 ### Manual Setup
 
 For detailed manual step-by-step guides, see the `setup.md` files in each template folder:

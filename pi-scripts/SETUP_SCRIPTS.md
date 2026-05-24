@@ -6,14 +6,16 @@ This document describes the automated bash setup scripts for configuring Raspber
 
 ## Overview
 
-Two bash scripts automate the entire Pi setup process:
+Four bash scripts handle the Pi lifecycle:
 
-| Script | Device Type | Steps |
-|--------|-------------|-------|
-| `setup-anthias.sh` | Anthias-based player | System update, Anthias install, Python deps, serial permissions, deploy code, systemd service, optional brightness control |
-| `setup-mvp.sh` | MPV-based standalone player | System update, MPV + Python deps, serial permissions, optional brightnessctl, deploy code, systemd service |
+| Script | Purpose | What It Does |
+|--------|---------|-------------|
+| `setup-anthias.sh` | Install Anthias-based player | System update, Anthias install, Python deps, serial permissions, deploy code, systemd service, optional brightness control |
+| `setup-mvp.sh` | Install MPV-based player | System update, MPV + Python deps, serial permissions, optional brightnessctl, deploy code, systemd service |
+| `clear-anthias.sh` | Uninstall Anthias device | Stop service, remove service file, delete device folder, optionally remove packages |
+| `clear-mvp.sh` | Uninstall MVP device | Stop service, remove service file, delete device folder, optionally remove packages |
 
-Both scripts are idempotent and can be run on a fresh Raspberry Pi OS installation.
+Setup scripts are idempotent and can be run on a fresh Raspberry Pi OS installation.
 
 ---
 
@@ -173,6 +175,50 @@ After running either script:
 4. **Approve in web UI** — Open the admin dashboard, find the pending device, note the assigned `DEVICE_ID`.
 5. **Update `config.py`** if the assigned `DEVICE_ID` differs from what you passed to the script.
 6. **View logs**: `sudo journalctl -u <service-name> -f`
+
+---
+
+## Clear / Uninstall Scripts
+
+To completely remove a deployed device and its service:
+
+### `clear-mvp.sh`
+
+```bash
+./clear-mvp.sh -f Device3
+```
+
+| Flag | Description |
+|------|-------------|
+| `-f, --folder NAME` | Target the device folder to remove (default: `Device3`) |
+| `-y, --yes` | Skip confirmation prompts (useful in automation) |
+| `--remove-packages` | Also run `apt remove` on packages installed by `setup-mvp.sh` |
+
+**What it does:**
+1. Stops and disables the `mvp-player-{folder}.service`
+2. Deletes the systemd service file
+3. Removes the `~/signage/{folder}/` directory (including cached content and config)
+4. Optionally removes packages (`mpv`, `python3-requests`, `python3-socketio`, `python3-serial`, `python3-setuptools`, `brightnessctl`)
+
+### `clear-anthias.sh`
+
+```bash
+./clear-anthias.sh -f Device1
+```
+
+| Flag | Description |
+|------|-------------|
+| `-f, --folder NAME` | Target the device folder to remove (default: `Device1`) |
+| `-y, --yes` | Skip confirmation prompts |
+| `--remove-packages` | Also run `apt remove` on packages installed by `setup-anthias.sh` |
+
+**What it does:**
+1. Stops and disables `socket-signage-{folder}.service` and `brightness-control-{folder}.service`
+2. Deletes both systemd service files
+3. Removes the `~/signage/{folder}/` directory
+4. Optionally removes packages (`python3-requests`, `python3-socketio`, `python3-serial`, `python3-websocket`, `brightnessctl`)
+
+> **Note:** Neither script removes Anthias itself (Docker containers / images). To fully uninstall Anthias, run its own uninstaller inside `~/screenly/`.
 
 ---
 
