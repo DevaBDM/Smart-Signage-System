@@ -11,7 +11,7 @@ Two bash scripts automate the entire Pi setup process:
 | Script | Device Type | Steps |
 |--------|-------------|-------|
 | `setup-anthias.sh` | Anthias-based player | System update, Anthias install, Python deps, serial permissions, deploy code, systemd service, optional brightness control |
-| `setup-mvp.sh` | MPV-based standalone player | System update, MPV + Python deps, serial permissions, deploy code, systemd service, optional brightness control |
+| `setup-mvp.sh` | MPV-based standalone player | System update, MPV + Python deps, serial permissions, optional brightnessctl, deploy code, systemd service |
 
 Both scripts are idempotent and can be run on a fresh Raspberry Pi OS installation.
 
@@ -94,7 +94,7 @@ flowchart TD
 | 7 | systemd service | Creates `socket-signage-{folder}.service`, enables auto-start |
 | 8 | Optional brightness service | Creates `brightness-control-{folder}.service` if brightnessctl was installed |
 
-### `setup-mvp.sh` (7 Steps)
+### `setup-mvp.sh` (6 Steps)
 
 ```mermaid
 flowchart TD
@@ -103,7 +103,6 @@ flowchart TD
     C --> D[4. Optional: brightnessctl]
     D --> E[5. Deploy Agent Code]
     E --> F[6. Create systemd Service]
-    F --> G[7. Optional: Brightness Service]
 ```
 
 | Step | Action | Details |
@@ -111,10 +110,9 @@ flowchart TD
 | 1 | System update | `apt update && apt full-upgrade`, install git/curl/wget/vim |
 | 2 | Install MPV + Python deps | Installs `mpv`, `python3-requests`, `python3-socketio`, `python3-serial`, `python3-setuptools` |
 | 3 | Serial permissions | Adds `$USER` to `dialout` group |
-| 4 | Optional brightnessctl | Prompts to install `brightnessctl` |
+| 4 | Optional brightnessctl | Prompts to install `brightnessctl`. MVP handles brightness **internally** via a daemon thread — no separate service needed. |
 | 5 | Deploy code | Copies `mvpDevice/` template to `~/signage/{folder}/`, creates `config.py` with all settings |
 | 6 | systemd service | Creates `mvp-player-{folder}.service`, enables auto-start |
-| 7 | Optional brightness service | Creates `brightness-control-{folder}.service` if requested |
 
 ---
 
@@ -213,6 +211,9 @@ The service name is derived from the `--folder` argument (lowercased). For examp
 | Device shows "offline" in dashboard | Agent not running or wrong `DEVICE_ID` | Check service status and verify `DEVICE_ID` matches admin registration |
 | No sensor data | Wrong `SERIAL_PORT` in `config.py` | Run `ls /dev/tty*` to find the correct Arduino port |
 | Brightness control not working | `brightnessctl` not installed or no backlight device | Check `brightnessctl` is installed; not all displays support DDC/CI |
+| MVP: screen never turns off | Motion sensor always reporting `1` | Check ultrasonic sensors are not blocked; verify wiring |
+| MVP: screen stays black | `brightnessctl` not installed | `sudo apt install brightnessctl`; MVP handles brightness internally |
+| Anthias: brightness not adjusting | Separate `brightness-control` service not running | `sudo systemctl status brightness-control-<folder>.service` |
 
 ---
 
@@ -224,7 +225,7 @@ The service name is derived from the `--folder` argument (lowercased). For examp
 | Steps | Follow setup.md guides step by step | Single command, all steps automatic |
 | systemd services | Create manually by copying .tpl files | Generated automatically with correct paths |
 | config.py | Copy and edit template manually | Generated with CLI-provided values |
-| Brightness control | Install and configure manually | Optional interactive prompt |
+| Brightness control | Install and configure manually | Anthias: optional systemd service; MVP: **built-in** via `mvp-player.py` daemon thread (motion-aware, turns screen off when idle) |
 | Best for | Learning how each piece works | Rapid deployment of multiple devices |
 
 ---

@@ -203,42 +203,21 @@ sudo journalctl -u mvp-player.service -f
 
 ---
 
-## 8. Optional: Brightness Control Service
+## 8. Brightness Control (Built-In)
 
-If you want brightness control as a separate process:
-
-```bash
-sudo nano /etc/systemd/system/brightness-control.service
-```
-
-```ini
-[Unit]
-Description=Signage Brightness Control
-After=network.target
-
-[Service]
-Type=simple
-User=pi
-WorkingDirectory=/home/pi/signage/Device3
-ExecStart=/usr/bin/python3 /home/pi/signage/Device3/brightness_control.py
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable brightness-control.service
-sudo systemctl start brightness-control.service
-```
+**MVP handles brightness control internally.** `mvp-player.py` spawns a `BrightnessLoop` daemon thread that reads the Arduino LDR sensor and adjusts display brightness automatically. **Do not create a separate `brightness-control` systemd service** — that would create a conflicting second brightness loop.
 
 Requires `brightnessctl`:
 
 ```bash
 sudo apt install -y brightnessctl
 ```
+
+The brightness thread:
+- Reads `/tmp/signage_sensors` every 5 seconds
+- **Turns the screen OFF (0% brightness) when no motion is detected**
+- **Restores brightness based on ambient light when motion is detected**
+- Uses a 20-point hysteresis to avoid flickering
 
 ---
 

@@ -72,13 +72,13 @@ fi
 
 # ── 1. System Update ──
 echo ""
-echo "[1/7] Updating system..."
+echo "[1/6] Updating system..."
 sudo apt update && sudo apt full-upgrade -y
 sudo apt install -y git curl wget vim
 
 # ── 2. Install MPV and Python Dependencies ──
 echo ""
-echo "[2/7] Installing MPV and Python dependencies..."
+echo "[2/6] Installing MPV and Python dependencies..."
 sudo apt install -y \
     mpv \
     python3-requests \
@@ -95,13 +95,15 @@ echo "MPV version: $(mpv --version | head -1)"
 
 # ── 3. Arduino Serial Permissions ──
 echo ""
-echo "[3/7] Setting up Arduino serial permissions..."
+echo "[3/6] Setting up Arduino serial permissions..."
 sudo usermod -aG dialout "$USER"
 echo "Added '$USER' to 'dialout' group."
 
 # ── 4. Optional: Brightness Control ──
+# NOTE: MVP handles brightness internally via a daemon thread.
+# We only install brightnessctl here; no separate service is needed.
 echo ""
-read -p "[4/7] Install brightnessctl for auto-brightness? [y/N]: " brightness_answer
+read -p "[4/6] Install brightnessctl for auto-brightness? [y/N]: " brightness_answer
 if [[ "$brightness_answer" =~ ^[Yy]$ ]]; then
     sudo apt install -y brightnessctl
     echo "brightnessctl installed."
@@ -111,7 +113,7 @@ fi
 
 # ── 5. Deploy Agent Code ──
 echo ""
-echo "[5/7] Deploying agent code..."
+echo "[5/6] Deploying agent code..."
 
 mkdir -p "$HOME/signage"
 
@@ -181,7 +183,7 @@ echo "Agent deployed to: $DEVICE_DIR"
 
 # ── 6. Create systemd Service ──
 echo ""
-echo "[6/7] Creating systemd service..."
+echo "[6/6] Creating systemd service..."
 
 SERVICE_NAME="mvp-player-${FOLDER_NAME,,}.service"
 SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME"
@@ -211,35 +213,10 @@ sudo systemctl enable "$SERVICE_NAME"
 echo "Created $SERVICE_FILE"
 echo "Service name: $SERVICE_NAME"
 
-# ── 7. Optional: Brightness Control Service ──
-echo ""
-if [[ "$brightness_answer" =~ ^[Yy]$ ]]; then
-    read -p "[7/7] Create brightness-control systemd service? [y/N]: " bc_service
-    if [[ "$bc_service" =~ ^[Yy]$ ]]; then
-        BC_SERVICE="/etc/systemd/system/brightness-control-${FOLDER_NAME,,}.service"
-        sudo tee "$BC_SERVICE" > /dev/null <<EOF
-[Unit]
-Description=Signage Brightness Control ($DEVICE_NAME)
-After=network.target
-
-[Service]
-Type=simple
-User=$USER
-WorkingDirectory=$DEVICE_DIR
-ExecStart=/usr/bin/python3 $DEVICE_DIR/brightness_control.py
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
-        sudo systemctl daemon-reload
-        sudo systemctl enable "$(basename "$BC_SERVICE")"
-        echo "Created $BC_SERVICE"
-    fi
-else
-    echo "[7/7] Skipped brightness control service."
-fi
+# NOTE: MVP does NOT need a separate brightness-control service.
+# mvp-player.py already runs brightness_control.run() as an internal
+# daemon thread. A separate systemd service would create a conflicting
+# second brightness loop.
 
 # ── Summary ──
 echo ""

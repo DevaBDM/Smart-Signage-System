@@ -21,14 +21,23 @@ def set_brightness(level):
     """Map Arduino LDR value (0-1023) to a brightnessctl percentage."""
     pct = MIN_PCT + int((level / 1023.0) * (MAX_PCT - MIN_PCT))
     pct = max(MIN_PCT, min(MAX_PCT, pct))
+    _apply_brightness(pct, f"sensor: {level}")
 
+
+def set_brightness_raw(pct):
+    """Set brightness to a specific percentage (0-100)."""
+    pct = max(0, min(100, pct))
+    _apply_brightness(pct, "manual override")
+
+
+def _apply_brightness(pct, reason):
     try:
         subprocess.run(
             ["brightnessctl", "set", f"{pct}%"],
             check=True,
             capture_output=True,
         )
-        print(f"[brightness] Set to {pct}% (sensor: {level})")
+        print(f"[brightness] Set to {pct}% ({reason})")
     except subprocess.CalledProcessError as e:
         err = e.stderr.decode().strip() if e.stderr else str(e)
         print(f"[brightness] brightnessctl failed: {err}")
@@ -45,7 +54,9 @@ def run():
         return
 
     print("[brightness] Starting auto-brightness control (using brightnessctl)...")
-    last_val = -1
+    print("[brightness] Screen turns OFF when no motion, ON when motion detected.")
+    last_brightness = -1
+    last_motion = None  # Track motion state to avoid redundant calls
 
     while True:
         try:
@@ -55,12 +66,21 @@ def run():
                     if content:
                         # Format: motion:X,brightness:Y,rain:Z
                         parts = dict(p.split(":") for p in content.split(","))
+                        motion = parts.get("motion", "0") == "1"
                         brightness_val = int(parts.get("brightness", 500))
 
-                        # Only update if changed significantly to avoid flickering
-                        if abs(brightness_val - last_val) > 20:
-                            set_brightness(brightness_val)
-                            last_val = brightness_val
+                        if not motion:
+                            # No motion — turn screen completely off
+                            if last_motion is not False:
+                                set_brightness_raw(0)
+                                last_motion = False
+                                last_brightness = -1  # Reset so it re-adjusts on wake
+                        else:
+                            # Motion detected — adjust based on ambient light
+                            if last_motion is not True or abs(brightness_val - last_brightness) > 20:
+                                set_brightness(brightness_val)
+                                last_motion = True
+                                last_brightness = brightness_val
 
         except Exception as e:
             print(f"[brightness] Loop error: {e}")
