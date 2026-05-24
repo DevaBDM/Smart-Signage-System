@@ -97,7 +97,8 @@ def sync_loop():
         socket_client.sync_event.wait(timeout=wait_time)
         socket_client.sync_event.clear()
 
-if __name__ == "__main__":
+def main():
+    """Entry point for the MVP signage player."""
     print("[mvp] Starting MVP Signage Player...")
     
     # 1. Initialize State
@@ -133,3 +134,6 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("[mvp] Shutting down...")
         player.stop_mpv()
+
+if __name__ == "__main__":
+    main()

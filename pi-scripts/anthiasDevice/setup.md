@@ -134,11 +134,11 @@ python3 brightness_control.py
 
 ## 7. Deploy the Agent Code
 
-Transfer the `pi-scripts/Device/` folder to the Pi:
+Transfer the `pi-scripts/anthiasDevice/` folder to the Pi:
 
 ```bash
 # From your development machine
-scp -r pi-scripts/Device/ pi@<PI_IP>:~/signage/
+scp -r pi-scripts/anthiasDevice/ pi@<PI_IP>:~/signage/
 ```
 
 On the Pi, create your per-device folder and config:
@@ -166,7 +166,7 @@ Create `run.py`:
 ```python
 import sys, os
 _device_dir = os.path.dirname(__file__)
-_shared_dir = os.path.join(_device_dir, "..", "Device")
+_shared_dir = os.path.join(_device_dir, "..", "anthiasDevice")
 sys.path.insert(0, os.path.abspath(_shared_dir))
 
 from socket_client import main
@@ -255,8 +255,8 @@ After=network.target
 [Service]
 Type=simple
 User=pi
-WorkingDirectory=/home/pi/signage/Device
-ExecStart=/usr/bin/python3 /home/pi/signage/Device/brightness_control.py
+WorkingDirectory=/home/pi/signage/anthiasDevice
+ExecStart=/usr/bin/python3 /home/pi/signage/anthiasDevice/brightness_control.py
 Restart=always
 RestartSec=5
 
@@ -274,7 +274,7 @@ sudo systemctl start brightness-control.service
 
 ## 10. Fallback Assets
 
-Make sure these files exist in your per-device folder (or in `Device/`):
+Make sure these files exist in your per-device folder (or in `anthiasDevice/`):
 
 | File | Purpose |
 |------|---------|

@@ -36,7 +36,7 @@ At a high level, the agent performs four continuous jobs:
 | `Arduino_connection.py` | Standalone serial test / debug utility. Prints Arduino lines to stdout and ACKs back. |
 | `config_defaults.py` | Default constants: server URL, Anthias URL, serial port, baud rate, asset paths, token path, and disconnection timeout (default 72 h). |
 | `config.py` | **Per-device override template.** Imports defaults and overrides `DEVICE_ID`, `DEVICE_NAME`, `LOCATION`, `SERIAL_PORT`, and `SERVER_URL`. |
-| `run.py` | Launch shim. Adds `../Device` to `sys.path`, then starts `socket_client.main()`. Copied into each per-device folder. |
+| `run.py` | Launch shim. Adds `../anthiasDevice` to `sys.path`, then starts `socket_client.main()`. Copied into each per-device folder. |
 | `socket-signage.service.tpl` | systemd unit template for auto-starting the main agent. |
 
 ---
@@ -56,7 +56,7 @@ The agent uses a two-tier config:
    SERVER_URL = "http://192.168.56.1:5000/api"
    ```
 
-When `run.py` executes, `sys.path` points to the shared `Device/` package, but the working directory is the per-device folder, so `from config import ...` resolves to the local override first.
+When `run.py` executes, `sys.path` points to the shared `anthiasDevice/` package, but the working directory is the per-device folder, so `from config import ...` resolves to the local override first.
 
 ---
 
@@ -253,7 +253,7 @@ python3 run.py
 
 ## Local Assets
 
-Three fallback files are expected alongside the config or in the shared `Device/` folder:
+Three fallback files are expected alongside the config or in the shared `anthiasDevice/` folder:
 
 | File | Purpose |
 |------|---------|

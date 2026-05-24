@@ -1,5 +1,7 @@
 # MPV-Based Standalone Signage Player
 
+> **Template:** Copy this entire `mvpDevice/` folder to create a new MPV-based device (e.g. `Device3/`). Edit `config.py` with your device-specific values, then run `python3 mvp-player.py`.
+
 This agent runs on a Raspberry Pi connected to an Arduino sensor board. It uses **MPV** as the native media player, handles its own scheduling and playlist rotation, and communicates with a remote server over Socket.IO and REST.
 
 ---
@@ -41,8 +43,9 @@ At a high level, the agent performs six continuous jobs:
 | `api.py` | REST API wrapper. Fetches deployments, downloads media, syncs the emergency asset (ETag-cached), and manages the device token sidecar file. |
 | `sensors.py` | Arduino serial reader. Parses `SENSOR:` packets, detects emergency button presses, forwards sensor data, and triggers local emergency playback immediately. |
 | `brightness_control.py` | Optional standalone script. Reads `/tmp/signage_sensors` and adjusts display brightness with `brightnessctl`. |
-| `config.py` | Device configuration. Server URL, device identity, serial port, sync interval, asset paths, and timeouts. |
-| `mvp-player.service` | systemd unit template for auto-starting the agent on boot. |
+| `config.py` | **Template.** Device configuration. Server URL, device identity, serial port, sync interval, asset paths, and timeouts. Edit this after copying the folder. |
+| `mvp-player.service.tpl` | systemd unit template for auto-starting the agent on boot. Copy and edit paths after renaming the folder. |
+| `run.py` | Optional launch shim. Use this if you prefer a shared-package model where `mvpDevice/` stays in one place and per-device folders only hold `config.py`. |
 
 ---
 
@@ -172,6 +175,8 @@ If `no_content.jpg` is missing, `player.py` generates a black placeholder image 
 ## Setup
 
 See `setup.md` in this folder for a full real-world Raspberry Pi installation guide.
+
+---
 
 ## Troubleshooting
 

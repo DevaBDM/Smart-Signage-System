@@ -1,6 +1,6 @@
 # MPV-Based Raspberry Pi Device Setup
 
-This guide covers setting up a **headless Raspberry Pi** to run the standalone MPV-based signage player (Device3). Unlike the Anthias-based agent, this device uses **MPV** as the native media player and handles its own scheduling, caching, and playlist rotation.
+> **Template:** This guide covers setting up a headless Raspberry Pi to run the standalone MPV-based signage player. Copy the `mvpDevice/` folder, rename it (e.g. to `Device3/`), edit `config.py`, then follow these steps.
 
 ---
 
@@ -96,19 +96,21 @@ Log out and back in (or reboot) for the group change to take effect.
 
 ## 5. Deploy the Agent Code
 
-Transfer the `Device3/` folder to the Pi:
+Transfer the copied device folder to the Pi:
 
 ```bash
 # From your development machine
-scp -r pi-scripts/Device3/ pi@<PI_IP>:~/signage/
+scp -r pi-scripts/mvpDevice/ pi@<PI_IP>:~/signage/
 ```
 
-On the Pi, create the required directories:
+On the Pi, rename the folder and create required directories:
 
 ```bash
-mkdir -p ~/signage/Device3/downloads
-mkdir -p ~/signage/Device3/data
-cd ~/signage/Device3
+cd ~/signage
+mv mvpDevice Device3   # or whatever name you prefer
+mkdir -p Device3/downloads
+mkdir -p Device3/data
+cd Device3
 ```
 
 Edit `config.py`:
@@ -156,13 +158,14 @@ Stop with `Ctrl+C`.
 
 ## 7. Auto-Start on Boot (systemd)
 
-Create the service file:
+Copy and edit the service template:
 
 ```bash
+sudo cp mvp-player.service.tpl /etc/systemd/system/mvp-player.service
 sudo nano /etc/systemd/system/mvp-player.service
 ```
 
-Paste:
+Update the paths to match your actual folder name:
 
 ```ini
 [Unit]
@@ -241,7 +244,7 @@ sudo apt install -y brightnessctl
 
 ## 9. Local Assets
 
-Three fallback files are expected in the `Device3/` folder:
+Three fallback files are expected in the device folder:
 
 | File | Purpose |
 |------|---------|

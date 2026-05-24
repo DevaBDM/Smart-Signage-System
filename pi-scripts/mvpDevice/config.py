@@ -1,12 +1,12 @@
 import os
 
-# ~/signage-player/config.py
-# Device3 — Standalone MVP Player (no Anthias)
+# Device config — edit these for your specific device
+# Copy this entire mvpDevice/ folder, rename it, then fill in the values below.
 
-SERVER_URL = "http://192.168.56.1:5000/api"
-DEVICE_NAME = "MVP-Player-3"
-LOCATION = "Main Hall"
-DEVICE_ID = 3
+SERVER_URL = "http://YOUR_SERVER_IP:5000/api"
+DEVICE_NAME = "MVP-Player"
+LOCATION = "Unknown"
+DEVICE_ID = 0
 
 # Server-assigned token (populated automatically after first Socket.IO heartbeat).
 # Keep this secret — do not commit production values.
@@ -20,7 +20,7 @@ PLAYER_PORT = 8080
 CACHE_DIR = "downloads"
 
 # Arduino Serial Configuration
-SERIAL_PORT = "/dev/ttyS0"
+SERIAL_PORT = "/dev/ttyUSB0"
 BAUD_RATE = 9600
 RAIN_THRESHOLD = 500
 
@@ -35,7 +35,7 @@ EMERGENCY_FALLBACK = os.path.join(os.path.dirname(__file__), "emergency_fallback
 
 # Disconnection timeout: if no server contact for this many hours, purge content
 # and display the disconnection image
-DISCONNECTION_TIMEOUT_HOURS = 72  # 3 days
+DISCONNECTION_TIMEOUT_HOURS = 72
 DISCONNECTION_IMAGE = os.path.join(os.path.dirname(__file__), "disconnection.png")
 
 # Default image shown when the device has no scheduled content
