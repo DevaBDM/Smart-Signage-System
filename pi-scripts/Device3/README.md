@@ -1,220 +1,201 @@
-# MVP Player — Standalone Signage Player
+# MPV-Based Standalone Signage Player
 
-This is a **self-contained signage player** that runs directly on a Raspberry Pi without Anthias.
-It receives posts from the server, schedules them, and displays them via **MPV** (a command-line media player).
+This agent runs on a Raspberry Pi connected to an Arduino sensor board. It uses **MPV** as the native media player, handles its own scheduling and playlist rotation, and communicates with a remote server over Socket.IO and REST.
 
-## What it does
+---
 
-- **Scheduling**: Automatically cycles through published posts based on `start_date`, `end_date`, and `duration_seconds`.
-- **Media types**: Images, videos, and live streams (HLS/YouTube via server proxy).
-- **Time management**: Only shows posts that are currently within their valid time window.
-- **Emergency mode**: Hardware button or admin-triggered emergency overrides all content with an emergency video.
-- **Disconnection timeout**: After 72 hours of no server contact, purges all content and displays a disconnection image.
-- **Auto-start**: Runs as a systemd service that starts on boot.
-- **Server sync**: Talks to the server via the same Socket.IO + REST API as Device1/Device2.
+## What This Agent Does
 
-## Architecture
+At a high level, the agent performs six continuous jobs:
 
-```
-┌─────────────┐     Socket.IO     ┌─────────────────┐
-│   Server    │◄─────────────────►│   Device3 (Pi)  │
-│  (port 5000)│    REST API       │                 │
-└─────────────┘                   │  ┌─────────────────┐  │
-                                  │  │  mvp-player.py  │  │
-                                  │  │  (Python        │  │
-                                  │  │   scheduler +   │  │
-                                  │  │   server sync)  │  │
-                                  │  └────────┬────────┘  │
-                                  │           │ IPC       │
-                                  │  ┌────────▼────────┐  │
-                                  │  │      MPV        │  │
-                                  │  │  (fullscreen    │  │
-                                  │  │   display)      │  │
-                                  │  └─────────────────┘  │
-                                  └───────────────────────┘
-```
+1. **Keep the device identifiable and online** — sends a periodic heartbeat with device name, location, and IP.
+2. **Read sensors** — listens to the Arduino over USB serial for motion, brightness, rain, and emergency-button events.
+3. **Synchronize content** — pulls the current content list from the server, downloads media to a local cache, and updates the playlist.
+4. **Schedule and rotate posts** — runs a scheduler loop that decides what MPV should display based on post timing, duration, and validity windows.
+5. **Control MPV** — starts MPV in fullscreen idle mode and commands it via a Unix socket (`/tmp/mpv-socket`) to load images, videos, and live streams.
+6. **Handle special states** — enters emergency mode when triggered (local button or remote command), and falls back to a disconnection image if the server has been unreachable for too long.
+
+---
+
+## Hardware Prerequisites
+
+- Raspberry Pi (3B+, 4, or 5 recommended)
+- Arduino Mega 2560 (or compatible) connected via USB
+- HDMI display
+- The Arduino is expected to emit packets like:
+  ```
+  SENSOR:motion:1,brightness:742,rain:0,emergency:0
+  ```
+
+---
+
+## File Structure
+
+| File | Role |
+|------|------|
+| `mvp-player.py` | Main orchestrator. Initializes state, starts MPV, spawns all worker threads, and monitors MPV health. |
+| `media.py` | Playlist state management. Caches downloads, persists playlist to disk, tracks emergency/disconnection flags, and filters posts by active time windows. |
+| `player.py` | MPV process control. Starts MPV in fullscreen idle mode with an IPC socket, sends `loadfile` and property commands, and handles emergency/disconnection/no-content playback. |
+| `scheduler.py` | Post rotation loop. Decides what to play next based on elapsed duration, handles jump requests, skips failed posts temporarily, and respects emergency/disconnection states. |
+| `socket_client.py` | Socket.IO client. Manages connection, handles server-originated commands (publish, clear, delete, hide/show, next/previous/start), emits heartbeats, and triggers sync on token receipt. |
+| `api.py` | REST API wrapper. Fetches deployments, downloads media, syncs the emergency asset (ETag-cached), and manages the device token sidecar file. |
+| `sensors.py` | Arduino serial reader. Parses `SENSOR:` packets, detects emergency button presses, forwards sensor data, and triggers local emergency playback immediately. |
+| `brightness_control.py` | Optional standalone script. Reads `/tmp/signage_sensors` and adjusts display brightness with `brightnessctl`. |
+| `config.py` | Device configuration. Server URL, device identity, serial port, sync interval, asset paths, and timeouts. |
+| `mvp-player.service` | systemd unit template for auto-starting the agent on boot. |
+
+---
+
+## How It Works
+
+### Main Thread: `mvp-player.py`
+
+On startup:
+1. Restores the playlist from `data/playlist.json`.
+2. Loads the device token from `.device_token`.
+3. Starts MPV in fullscreen idle mode with `--input-ipc-server=/tmp/mpv-socket`.
+4. Spawns six daemon threads:
+   - **Socket loop** — maintains the Socket.IO connection.
+   - **Heartbeat loop** — emits `heartbeat` every 10 seconds.
+   - **Sync loop** — polls the server for deployments every 60 seconds.
+   - **Scheduler loop** — rotates posts and tells MPV what to play.
+   - **Sensor loop** — reads Arduino serial.
+   - **Brightness loop** — adjusts screen brightness (optional).
+5. Monitors MPV health every 10 seconds and restarts it if the process or IPC socket dies.
+
+### MPV Lifecycle (`player.py`)
+
+MPV is started once and kept running:
+- Launched with `--idle`, `--fullscreen`, `--no-osc`, `--no-osd-bar`, and `--image-display-duration=inf`.
+- The `MpvController` class sends JSON commands over the Unix socket at `/tmp/mpv-socket`.
+- Commands include `loadfile`, `set_property` (for `loop-file`), `stop`, and `show-text`.
+- If the socket becomes unresponsive, MPV is restarted automatically.
+
+### Scheduling (`scheduler.py`)
+
+The scheduler runs every second:
+1. Skips rotation if emergency or disconnection mode is active.
+2. Queries `media.get_active_posts()` for posts whose `start_date`/`end_date` window includes the current time.
+3. Checks if the current post's duration has expired, or if MPV went idle (video finished).
+4. Picks the next post in round-robin order, skipping any that failed to load recently.
+5. Calls `player.mpv.loadfile(path)` and records the current post and timestamp.
+6. Handles socket-driven jump requests (next, previous, or start a specific post).
+
+### Content Sync (`api.py` + `mvp-player.py` sync loop)
+
+Every 60 seconds:
+1. Fetches the deployment list from `/api/signage/device/:id/deployments`.
+2. For each post, downloads the media to `downloads/` (skipped for live streams).
+3. Updates the local playlist via `media.update_posts()`.
+4. Also syncs the emergency asset from the server using ETag to avoid redundant downloads.
+5. Checks device group states — enters emergency if any group is emergency, clears if all are normal.
+
+### Socket.IO Commands (Server → Pi)
+
+The agent listens for server events:
+- **`signage_command`** — handles actions: list, publish_asset, clear_all, delete_asset, hide_asset, show_asset, next, previous, start.
+- **`playlist_update`** — same as `publish_asset`.
+- **`refresh_display`** — forces MPV to reload the current media.
+- **`restart_display`** — stops and restarts the MPV process.
+- **`emergency_mode_start`** — sets emergency flag and plays the local emergency file.
+- **`emergency_mode_end`** — checks all groups before clearing emergency, then resumes normal scheduling.
+
+### Sensor Loop (`sensors.py`)
+
+Opens the serial port and reads `SENSOR:` lines:
+- Writes the payload to `/tmp/signage_sensors` for `brightness_control.py`.
+- Detects `emergency:1` and triggers local emergency playback immediately.
+- Emits `sensor_update` to the server with motion, brightness, and rain flags.
+- Debounces the button so one press triggers once.
+
+---
+
+## Emergency & Disconnection States
+
+Priority order:
+
+1. **Emergency** (highest)
+2. **Disconnection**
+3. **Normal**
+
+### Emergency Mode
+
+Triggered by:
+- Local Arduino button (`emergency:1` in serial packet)
+- Remote `emergency_mode_start` event
+- Server group state change detected during sync
+
+While active:
+- The scheduler stops rotating posts.
+- MPV is forced to play `emergency_fallback.mp4` with `loop-file=inf`.
+- Refresh and restart commands are blocked.
+- The agent stays in emergency until **all** of its groups are cleared.
+
+### Disconnection Mode
+
+Triggered when the server has not been contacted successfully for longer than `DISCONNECTION_TIMEOUT_HOURS` (default 72 h).
+
+While active:
+- `media.purge_all()` clears the playlist and deletes all cached files in `downloads/`.
+- MPV displays `disconnection.png` with `loop-file=inf`.
+- The scheduler stops rotating posts.
+- Any successful server contact resets the timer and exits this mode automatically.
+
+---
+
+## Brightness Control (`brightness_control.py`)
+
+Optional standalone script that can run independently:
+- Reads `/tmp/signage_sensors` (written by `sensors.py`).
+- Extracts the `brightness` value (0–1023).
+- Maps it to a screen brightness percentage between **5% and 100%**.
+- Only applies a change if the raw value differs by more than **20** from the last applied value.
+- Calls `brightnessctl set {pct}%`.
+- Checks every **5 seconds**.
+
+Requires `brightnessctl` (`sudo apt install brightnessctl`).
+
+---
+
+## Local Assets
+
+| File | Purpose |
+|------|---------|
+| `emergency_fallback.mp4` | Plays during emergency mode. |
+| `disconnection.png` | Shows when the server is unreachable for the timeout period. |
+| `no_content.jpg` | Placeholder when no content is assigned. |
+
+If `no_content.jpg` is missing, `player.py` generates a black placeholder image automatically (using PIL if available, otherwise a raw BMP).
+
+---
 
 ## Setup
 
-### 1. Copy files to the Pi
-
-```bash
-# On the Pi
-mkdir -p /media/signageScript
-cd /media/signageScript
-
-# Copy these files from the repo:
-#   config.py
-#   mvp-player.py
-#   requirements.txt
-```
-
-### 2. Edit config.py
-
-```python
-SERVER_URL = "http://<YOUR_SERVER_IP>:5000/api"   # e.g., http://192.168.1.100:5000/api
-DEVICE_NAME = "MVP-Player-3"
-LOCATION = "Main Hall"
-DEVICE_ID = 3
-```
-
-> **Device ID**: You must first create this device in the admin dashboard (or use an existing device ID).
-
-### 3. Install dependencies via APT (Debian 12/13)
-
-For a dedicated signage device, install dependencies globally via `apt` instead of `pip`:
-
-```bash
-sudo apt update
-sudo apt install -y \
-    mpv \
-    python3-requests \
-    python3-python-socketio \
-    python3-serial \
-    python3-setuptools
-```
-
-> **Why apt instead of pip?** Debian 12/13 blocks pip in externally managed environments. Using apt gives you pre-compiled binaries, automatic security updates, and lower storage usage (no duplicate venv libraries).
-
-### 4. Test the player
-
-```bash
-python3 mvp-player.py
-```
-
-You should see:
-```
-[mvp] Restored X posts from disk
-[mpv] Starting MPV...
-[mpv] IPC socket ready at /tmp/mpv-socket
-[socket] Connected to server
-```
-
-MPV should open in fullscreen on the Pi's display (black screen = idle).
-
-### 5. Install the systemd service (auto-start on boot)
-
-```bash
-sudo cp mvp-player.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable mvp-player.service
-sudo systemctl start mvp-player.service
-```
-
-Check status:
-```bash
-sudo systemctl status mvp-player.service
-```
-
-### 6. MPV is installed via apt
-
-MPV was already installed in step 3. It stays open in fullscreen idle mode and `mvp-player.py` tells it what to play via a Unix socket at `/tmp/mpv-socket`.
-
-## How it works with the server
-
-1. **Admin publishes a post** to Device3 via the dashboard.
-2. The server sends a `signage_command` with `action: "publish_asset"` to Device3 via Socket.IO.
-3. Device3 receives the post, **downloads the media** to `downloads/`, and adds it to its local playlist.
-4. The **scheduler** checks every second what should be on screen based on time and duration.
-5. **MPV** plays the media fullscreen. Images stay on screen for `duration_seconds`, videos play to end (or duration), live streams play continuously.
-6. If Device3 was offline, it **polls the server every 60 seconds** to sync the full deployment list.
-
-## File structure
-
-```
-/media/signageScript/
-├── mvp-player.py              # Main orchestrator (scheduler + sync + MPV IPC)
-├── media.py                   # Playlist state, caching, emergency/disconnection tracking
-├── player.py                  # MPV process control via Unix socket
-├── socket_client.py           # Socket.IO client (commands, events)
-├── scheduler.py               # Post rotation loop
-├── api.py                     # REST API wrapper for deployments
-├── sensors.py                 # Arduino serial reader
-├── config.py                  # Device config
-├── requirements.txt           # Python deps
-├── mvp-player.service         # systemd unit
-├── emergency_fallback.mp4     # Emergency video (auto-downloaded or manual)
-├── disconnection.png          # Disconnection timeout image
-├── data/
-│   └── playlist.json          # Persisted playlist state
-├── downloads/                 # Cached media files
-│   ├── post_24.webp
-│   └── post_25.mp4
-└── .device_token              # Server auth token (auto-generated)
-```
-
-## Emergency Mode
-
-Emergency mode overrides all normal content and plays the `emergency_fallback.mp4` asset.
-
-**Triggers:**
-- Hardware emergency button (Arduino Pin 2) detected by `sensors.py`
-- Admin sets any of the device's groups to `EMERGENCY` state
-- `emergency_mode_start` Socket.IO event from server
-
-**Behavior:**
-- `media.set_emergency(True)` is called
-- `player.play_emergency()` forces MPV to play the emergency file with `loop-file=inf`
-- Scheduler skips all post rotation while emergency is active
-- Refresh/restart commands are blocked during emergency
-- Device checks **all its groups** before exiting emergency
-
-## Disconnection Timeout
-
-If the server is unreachable for more than `DISCONNECTION_TIMEOUT_HOURS` (default: 72 hours):
-
-1. `media.check_disconnection_timeout()` returns `True`
-2. `media.purge_all()` clears the playlist and `downloads/` cache
-3. `media.set_disconnected(True)` activates disconnection mode
-4. `player.play_disconnection()` displays `disconnection.png` via MPV
-5. Scheduler stops rotating posts
-
-**Recovery:** Any successful server sync or Socket.IO heartbeat calls `media.mark_server_contact()`, which resets the timer and exits disconnection mode.
-
-## Differences from Device1/Device2
-
-| Feature | Device1/2 (Anthias) | Device3 (MVP Player) |
-|---------|--------------------|----------------------|
-| Display engine | Anthias (web viewer) | MPV (native media player) |
-| Scheduling | Anthias handles it | Python scheduler |
-| Media caching | Anthias downloads | Python downloads to `downloads/` |
-| Time management | Anthias | Built-in scheduler |
-| Live streams | Via Anthias | Direct HLS playback in MPV |
-| Content sync | `content_sync.py` | Built into `mvp-player.py` via `api.py` |
-| Emergency playback | Push to Anthias asset list | Direct MPV `loadfile` + `loop-file=inf` |
-| Disconnection purge | `clear_all_assets()` in Anthias | `media.purge_all()` deletes cache + playlist |
+See `setup.md` in this folder for a full real-world Raspberry Pi installation guide.
 
 ## Troubleshooting
 
 **MPV shows black screen / no content**
-- Check that posts are published to this device in the admin dashboard.
 - Check `mvp-player.py` logs: `journalctl -u mvp-player.service -f`
 - Check if MPV is running: `pgrep -a mpv`
 - Check the IPC socket exists: `ls -la /tmp/mpv-socket`
 - Try starting MPV manually: `mpv --idle --fullscreen --input-ipc-server=/tmp/mpv-socket`
 - Check the server connection: the service should print `[socket] Connected to server`.
+- Verify posts are published to this device and `downloads/` contains cached files.
 
 **Live stream not playing**
-- Verify the stream's `relay_url` is reachable from the Pi.
+- Verify the stream URL is reachable from the Pi.
 - Check MPV output manually: `mpv "http://<server>/streams/X/index.m3u8"` to test the stream.
-- Ensure the server is proxying the stream (the URL should be `http://<server>/streams/X/index.m3u8`).
 
 **Socket.IO not connecting**
 - Check `config.py` has the correct `SERVER_URL`.
-- Ensure the device is approved in the admin dashboard.
-- Check that the `.device_token` file was created after the first successful heartbeat.
+- Ensure the device token file `.device_token` exists after the first successful heartbeat.
 
 **Emergency mode not clearing**
-- Admin must clear **all** groups the device belongs to. Device3 checks every group via `/devices/me` before exiting emergency.
+- The agent checks **all** of its groups via `/devices/me` before exiting emergency.
 - Check logs: `journalctl -u mvp-player.service -f | grep emergency`
 
 **Device stuck on disconnection image**
 - Verify the server is reachable from the Pi: `curl -I http://<server>:5000/api`
 - Any successful sync resets the 72-hour timer. Check network connectivity.
 - To test without waiting 72h, temporarily set `DISCONNECTION_TIMEOUT_HOURS = 0.001` in `config.py`.
-
-## Reboot command
-
-```bash
-sudo systemctl restart mvp-player.service
-```
