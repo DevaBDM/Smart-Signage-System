@@ -71,7 +71,7 @@ Install the Python libraries the agent needs using the system package manager:
 
 ```bash
 sudo apt update
-sudo apt install -y python3-requests python3-serial python3-python-socketio python3-websocket
+sudo apt install -y python3-requests python3-serial python3-socketio python3-websocket
 ```
 
 These are the Debian/Ubuntu package equivalents of the Python modules used by the agent. They install into the global system Python so no virtual environment or `pip` is required.

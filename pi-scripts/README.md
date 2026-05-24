@@ -163,12 +163,12 @@ For detailed manual step-by-step guides, see the `setup.md` files in each templa
 
 **Anthias devices:**
 ```bash
-sudo apt install -y python3-requests python3-serial python3-python-socketio python3-websocket
+sudo apt install -y python3-requests python3-serial python3-socketio python3-websocket
 ```
 
 **MPV devices:**
 ```bash
-sudo apt install -y mpv python3-requests python3-python-socketio python3-serial python3-setuptools
+sudo apt install -y mpv python3-requests python3-socketio python3-serial python3-setuptools
 ```
 
 **Both:**

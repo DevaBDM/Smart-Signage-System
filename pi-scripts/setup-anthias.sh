@@ -100,7 +100,7 @@ echo "[3/8] Installing Python dependencies..."
 sudo apt install -y \
     python3-requests \
     python3-serial \
-    python3-python-socketio \
+    python3-socketio \
     python3-websocket
 
 # ── 4. Arduino Serial Permissions ──

@@ -51,7 +51,7 @@ sudo apt update
 sudo apt install -y \
     mpv \
     python3-requests \
-    python3-python-socketio \
+    python3-socketio \
     python3-serial \
     python3-setuptools
 ```
