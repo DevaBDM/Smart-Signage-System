@@ -7,6 +7,7 @@ will pick up your per-device configuration automatically.
 """
 import sys
 import os
+import importlib.util
 
 # Add the shared mvpDevice package to the path.
 # Adjust the relative path if your device folder is nested differently.
@@ -14,7 +15,14 @@ _device_dir = os.path.dirname(__file__)
 _shared_dir = os.path.join(_device_dir, "..", "mvpDevice")
 sys.path.insert(0, os.path.abspath(_shared_dir))
 
-from mvp_player import main
+# mvp-player.py has a hyphen so it can't be imported normally;
+# load it dynamically with importlib.
+_mvp_path = os.path.join(_shared_dir, "mvp-player.py")
+_spec = importlib.util.spec_from_file_location("mvp_player", _mvp_path)
+_mvp_mod = importlib.util.module_from_spec(_spec)
+sys.modules["mvp_player"] = _mvp_mod
+_spec.loader.exec_module(_mvp_mod)
+main = _mvp_mod.main
 
 if __name__ == "__main__":
     main()
