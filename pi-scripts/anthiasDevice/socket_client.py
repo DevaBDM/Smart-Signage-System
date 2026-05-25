@@ -573,6 +573,15 @@ def content_sync_loop():
 # ── Main ──────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    # Clean up stale emergency flag from previous run (if any)
+    _stale_flag = "/tmp/signage_emergency_active"
+    if os.path.exists(_stale_flag):
+        try:
+            os.remove(_stale_flag)
+            print(f"[startup] Removed stale emergency flag: {_stale_flag}")
+        except Exception as e:
+            print(f"[startup] Failed to remove stale emergency flag: {e}")
+
     threading.Thread(target=heartbeat_loop, daemon=True).start()
     threading.Thread(target=sensor_loop, daemon=True).start()
     threading.Thread(target=content_sync_loop, daemon=True).start()

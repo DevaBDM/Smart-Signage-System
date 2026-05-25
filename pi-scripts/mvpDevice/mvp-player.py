@@ -100,7 +100,16 @@ def sync_loop():
 def main():
     """Entry point for the MVP signage player."""
     print("[mvp] Starting MVP Signage Player...")
-    
+
+    # Clean up stale emergency flag from previous run (if any)
+    _emergency_flag = "/tmp/signage_emergency_active"
+    if os.path.exists(_emergency_flag):
+        try:
+            os.remove(_emergency_flag)
+            print(f"[mvp] Removed stale emergency flag: {_emergency_flag}")
+        except Exception as e:
+            print(f"[mvp] Failed to remove stale emergency flag: {e}")
+
     # 1. Initialize State
     media.load_playlist()
     api.load_token()

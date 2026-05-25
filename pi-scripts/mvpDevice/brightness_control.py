@@ -56,6 +56,7 @@ def run():
     print("[brightness] Starting auto-brightness control (using brightnessctl)...")
     print("[brightness] Screen turns OFF when no motion, ON when motion detected.")
     print("[brightness] Emergency mode keeps display at 100% regardless of motion.")
+    print(f"[brightness] Startup check: emergency flag exists = {os.path.exists('/tmp/signage_emergency_active')}")
     last_brightness = -1
     last_motion = None  # Track motion state to avoid redundant calls
 
@@ -66,6 +67,7 @@ def run():
             if emergency_active:
                 # Emergency mode — keep screen at full brightness always
                 if last_motion is not True or last_brightness != 100:
+                    print("[brightness] Emergency active — forcing 100% brightness")
                     set_brightness_raw(100)
                     last_motion = True
                     last_brightness = 100
@@ -84,12 +86,14 @@ def run():
                         if not motion:
                             # No motion — turn screen completely off
                             if last_motion is not False:
+                                print("[brightness] No motion detected — turning screen OFF")
                                 set_brightness_raw(0)
                                 last_motion = False
                                 last_brightness = -1  # Reset so it re-adjusts on wake
                         else:
                             # Motion detected — adjust based on ambient light
                             if last_motion is not True or abs(brightness_val - last_brightness) > 20:
+                                print(f"[brightness] Motion detected — adjusting brightness to sensor={brightness_val}")
                                 set_brightness(brightness_val)
                                 last_motion = True
                                 last_brightness = brightness_val
