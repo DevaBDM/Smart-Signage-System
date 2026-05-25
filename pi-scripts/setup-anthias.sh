@@ -11,6 +11,8 @@
 #   -l, --location LOC       Device location (default: Floor 1)
 #   -s, --server URL         Server URL (default: http://192.168.1.100:5000/api)
 #   -p, --serial-port PORT   Arduino serial port (default: /dev/ttyUSB0)
+#   -b, --brightness-ctrl    Brightness controller: brightnessctl|ddcurtl|noop (default: brightnessctl)
+#   -o, --onoff-ctrl         Screen on/off controller: brightnessctl|ddcurtl|noop (default: same as --brightness-ctrl)
 #   -f, --folder NAME        Per-device folder name (default: Device1)
 #   -h, --help               Show this help message
 #
@@ -26,8 +28,9 @@ DEVICE_NAME="Pi-Display-1"
 LOCATION="Floor 1"
 SERVER_URL="http://192.168.1.100:5000/api"
 SERIAL_PORT="/dev/ttyUSB0"
+BRIGHTNESS_CTRL="brightnessctl"
+ONOFF_CTRL=""
 FOLDER_NAME="Device1"
-INSTALL_BRIGHTNESSCTL="n"
 INSTALL_ANTHIAS="y"
 
 # ── Parse arguments ──
@@ -38,13 +41,26 @@ while [[ $# -gt 0 ]]; do
         -l|--location) LOCATION="$2"; shift 2 ;;
         -s|--server) SERVER_URL="$2"; shift 2 ;;
         -p|--serial-port) SERIAL_PORT="$2"; shift 2 ;;
+        -b|--brightness-ctrl) BRIGHTNESS_CTRL="$2"; shift 2 ;;
+        -o|--onoff-ctrl) ONOFF_CTRL="$2"; shift 2 ;;
         -f|--folder) FOLDER_NAME="$2"; shift 2 ;;
         -h|--help)
-            sed -n '2,18p' "$0"
+            sed -n '2,20p' "$0"
             exit 0
             ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
+done
+
+# Default on/off controller to brightness controller if not specified
+[[ -z "$ONOFF_CTRL" ]] && ONOFF_CTRL="$BRIGHTNESS_CTRL"
+
+# Validate controller choices
+for ctrl in "$BRIGHTNESS_CTRL" "$ONOFF_CTRL"; do
+    if [[ "$ctrl" != "brightnessctl" && "$ctrl" != "ddcurtl" && "$ctrl" != "noop" ]]; then
+        echo "ERROR: Invalid controller '$ctrl'. Must be one of: brightnessctl, ddcurtl, noop"
+        exit 1
+    fi
 done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -61,6 +77,8 @@ echo "Device Name:    $DEVICE_NAME"
 echo "Location:       $LOCATION"
 echo "Server URL:     $SERVER_URL"
 echo "Serial Port:    $SERIAL_PORT"
+echo "Brightness:     $BRIGHTNESS_CTRL"
+echo "On/Off:         $ONOFF_CTRL"
 echo "Folder:         $FOLDER_NAME"
 echo ""
 
@@ -111,13 +129,36 @@ echo "Added '$USER' to 'dialout' group."
 
 # ── 5. Optional: Brightness Control ──
 echo ""
-read -p "[5/8] Install brightnessctl for auto-brightness? [y/N]: " brightness_answer
-if [[ "$brightness_answer" =~ ^[Yy]$ ]]; then
-    sudo apt install -y brightnessctl
-    echo "brightnessctl installed."
-else
-    echo "Skipped brightnessctl."
-fi
+for ctrl in "$BRIGHTNESS_CTRL" "$ONOFF_CTRL"; do
+    case "$ctrl" in
+        brightnessctl)
+            if ! command -v brightnessctl &> /dev/null; then
+                read -p "[5/8] Install brightnessctl for auto-brightness? [y/N]: " bc_ans
+                if [[ "$bc_ans" =~ ^[Yy]$ ]]; then
+                    sudo apt install -y brightnessctl
+                    echo "brightnessctl installed."
+                else
+                    echo "WARNING: brightnessctl not installed but selected as controller."
+                fi
+            else
+                echo "[5/8] brightnessctl already installed."
+            fi
+            ;;
+        ddcurtl)
+            if ! command -v ddcurtl &> /dev/null; then
+                read -p "[5/8] ddcurtl not found in PATH. Install now or continue? [y/N]: " dd_ans
+                if [[ "$dd_ans" =~ ^[Yy]$ ]]; then
+                    echo "Please install ddcurtl manually and re-run setup."
+                fi
+            else
+                echo "[5/8] ddcurtl found."
+            fi
+            ;;
+        noop)
+            echo "[5/8] noop controller selected — no package installation needed."
+            ;;
+    esac
+done
 
 # ── 6. Deploy Agent Code ──
 echo ""
@@ -159,6 +200,11 @@ EMERGENCY_FALLBACK = os.path.join(_dir, "emergency_fallback.mp4")
 DISCONNECTION_IMAGE = os.path.join(_dir, "disconnection.png")
 NO_CONTENT_IMAGE = os.path.join(_dir, "no_content.png")
 TOKEN_FILE = os.path.join(_dir, ".device_token")
+
+# Display controller backends (change per hardware)
+# Available: "brightnessctl", "ddcurtl", "noop"
+BRIGHTNESS_CONTROLLER = "$BRIGHTNESS_CTRL"
+ONOFF_CONTROLLER = "$ONOFF_CTRL"
 EOF
 
 echo "Created $DEVICE_DIR/config.py"
@@ -227,7 +273,7 @@ echo "Service name: $SERVICE_NAME"
 
 # ── 8. Optional: Brightness Control Service ──
 echo ""
-if [[ "$brightness_answer" =~ ^[Yy]$ ]]; then
+if [[ "$BRIGHTNESS_CTRL" != "noop" || "$ONOFF_CTRL" != "noop" ]]; then
     read -p "[8/8] Create brightness-control systemd service? [y/N]: " bc_service
     if [[ "$bc_service" =~ ^[Yy]$ ]]; then
         BC_SERVICE="/etc/systemd/system/brightness-control-${FOLDER_NAME,,}.service"
@@ -252,7 +298,7 @@ EOF
         echo "Created $BC_SERVICE"
     fi
 else
-    echo "[8/8] Skipped brightness control service."
+    echo "[8/8] Skipped brightness control service (noop controller)."
 fi
 
 # ── Summary ──
