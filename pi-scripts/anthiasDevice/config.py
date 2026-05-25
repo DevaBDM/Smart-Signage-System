@@ -21,5 +21,5 @@ SERVER_URL = "http://192.168.56.1:5000/api"
 # _dir = os.path.dirname(__file__)
 # EMERGENCY_FALLBACK = os.path.join(_dir, "emergency_fallback.mp4")
 # DISCONNECTION_IMAGE = os.path.join(_dir, "disconnection.png")
-# NO_CONTENT_IMAGE = os.path.join(_dir, "no_content.jpg")
+# NO_CONTENT_IMAGE = os.path.join(_dir, "no_content.png")
 # TOKEN_FILE = os.path.join(_dir, ".device_token")

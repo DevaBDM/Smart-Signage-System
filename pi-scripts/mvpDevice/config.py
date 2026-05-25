@@ -39,4 +39,4 @@ DISCONNECTION_TIMEOUT_HOURS = 72
 DISCONNECTION_IMAGE = os.path.join(os.path.dirname(__file__), "disconnection.png")
 
 # Default image shown when the device has no scheduled content
-NO_CONTENT_IMAGE = os.path.join(os.path.dirname(__file__), "no_content.jpg")
+NO_CONTENT_IMAGE = os.path.join(os.path.dirname(__file__), "no_content.png")
