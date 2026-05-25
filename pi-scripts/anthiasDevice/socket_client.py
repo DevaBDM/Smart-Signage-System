@@ -34,6 +34,15 @@ def _is_emergency():
 def _set_emergency(active):
     global _emergency_active
     _emergency_active = active
+    _emergency_flag = "/tmp/signage_emergency_active"
+    try:
+        if active:
+            with open(_emergency_flag, "w") as f:
+                f.write("1")
+        elif os.path.exists(_emergency_flag):
+            os.remove(_emergency_flag)
+    except Exception as e:
+        print(f"[emergency] Failed to update emergency flag file: {e}")
 
 
 def _mark_server_contact():

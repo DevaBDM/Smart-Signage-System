@@ -12,6 +12,19 @@ from config import SERVER_URL, DEVICE_ID, DEVICE_NAME, LOCATION, EMERGENCY_FALLB
 sync_event = threading.Event()
 
 
+def _write_emergency_flag(active):
+    """Write shared flag file so brightness_control knows emergency state."""
+    flag = "/tmp/signage_emergency_active"
+    try:
+        if active:
+            with open(flag, "w") as f:
+                f.write("1")
+        elif os.path.exists(flag):
+            os.remove(flag)
+    except Exception as e:
+        print(f"[emergency] Failed to update emergency flag file: {e}")
+
+
 def _asset_id_for_post(post_id):
     """Deterministic asset_id the backend can track."""
     return f"mvp-{post_id}"
@@ -218,6 +231,7 @@ def on_emergency_mode_start(data):
         return
     print(f"[socket] Emergency mode started by device {data.get('triggered_by')} for groups {data.get('groups')}")
     media.set_emergency(True)
+    _write_emergency_flag(True)
     player.play_emergency(EMERGENCY_FALLBACK)
 
 
@@ -245,6 +259,7 @@ def on_emergency_mode_end(data):
         return
 
     media.set_emergency(False)
+    _write_emergency_flag(False)
     # Force scheduler to resume normal content immediately
     scheduler.request_jump(direction="next")
 

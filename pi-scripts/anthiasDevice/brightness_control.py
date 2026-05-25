@@ -55,11 +55,23 @@ def run():
 
     print("[brightness] Starting auto-brightness control (using brightnessctl)...")
     print("[brightness] Screen turns OFF when no motion, ON when motion detected.")
+    print("[brightness] Emergency mode keeps display at 100% regardless of motion.")
     last_brightness = -1
     last_motion = None  # Track motion state to avoid redundant calls
 
     while True:
         try:
+            emergency_active = os.path.exists("/tmp/signage_emergency_active")
+
+            if emergency_active:
+                # Emergency mode — keep screen at full brightness always
+                if last_motion is not True or last_brightness != 100:
+                    set_brightness_raw(100)
+                    last_motion = True
+                    last_brightness = 100
+                time.sleep(5)
+                continue
+
             if os.path.exists(SENSOR_FILE):
                 with open(SENSOR_FILE, "r") as f:
                     content = f.read().strip()

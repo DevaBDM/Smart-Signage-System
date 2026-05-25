@@ -18,6 +18,11 @@ def _trigger_emergency(sio):
 
     # Set emergency flag FIRST so scheduler stops before we start playback
     media.set_emergency(True)
+    try:
+        with open("/tmp/signage_emergency_active", "w") as f:
+            f.write("1")
+    except Exception as e:
+        print(f"[sensors] Failed to write emergency flag: {e}")
 
     # Force local playback immediately (fail-safe)
     mpv_ok = player.ensure_mpv_running()
