@@ -7,6 +7,7 @@ Add a new backend by defining a class with three methods:
 
 Then register it in _BACKENDS.
 """
+import os
 import shutil
 import subprocess
 import sys
@@ -44,11 +45,11 @@ class BrightnessctlBackend:
         self.set_brightness_pct(0)
 
 
-class DdcurtlBackend:
-    """ddcurtl — DDC/CI display control (example: ddcurtl set d4 <pct>)."""
+class DdcutilBackend:
+    """ddcutil — DDC/CI hardware display control (requires i2c-dev, user in i2c group)."""
 
     def __init__(self):
-        self.cmd = shutil.which("ddcurtl")
+        self.cmd = shutil.which("ddcutil")
 
     def available(self):
         return self.cmd is not None
@@ -56,20 +57,51 @@ class DdcurtlBackend:
     def set_brightness_pct(self, pct):
         pct = max(0, min(100, int(pct)))
         subprocess.run(
-            [self.cmd, "set", "d4", str(pct)],
+            [self.cmd, "setvcp", "10", str(pct)],
             check=True, capture_output=True,
         )
 
     def screen_on(self):
         subprocess.run(
-            [self.cmd, "power", "on"],
+            [self.cmd, "setvcp", "d6", "01"],
             check=True, capture_output=True,
         )
 
     def screen_off(self):
         subprocess.run(
-            [self.cmd, "power", "off"],
+            [self.cmd, "setvcp", "d6", "04"],
             check=True, capture_output=True,
+        )
+
+
+class XsetBackend:
+    """xset — DPMS power management (requires X11 / DISPLAY)."""
+
+    def __init__(self):
+        self.cmd = shutil.which("xset")
+
+    def available(self):
+        return self.cmd is not None
+
+    def set_brightness_pct(self, pct):
+        print(f"[xset] set_brightness_pct({pct}) — xset does not support brightness, ignoring")
+
+    def screen_on(self):
+        env = os.environ.copy()
+        if "DISPLAY" not in env:
+            env["DISPLAY"] = ":0"
+        subprocess.run(
+            [self.cmd, "dpms", "force", "on"],
+            check=True, capture_output=True, env=env,
+        )
+
+    def screen_off(self):
+        env = os.environ.copy()
+        if "DISPLAY" not in env:
+            env["DISPLAY"] = ":0"
+        subprocess.run(
+            [self.cmd, "dpms", "force", "off"],
+            check=True, capture_output=True, env=env,
         )
 
 
@@ -91,7 +123,8 @@ class NoopBackend:
 
 _BACKENDS = {
     "brightnessctl": BrightnessctlBackend,
-    "ddcurtl": DdcurtlBackend,
+    "ddcutil": DdcutilBackend,
+    "xset": XsetBackend,
     "noop": NoopBackend,
 }
 

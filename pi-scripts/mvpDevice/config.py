@@ -42,6 +42,6 @@ DISCONNECTION_IMAGE = os.path.join(os.path.dirname(__file__), "disconnection.png
 NO_CONTENT_IMAGE = os.path.join(os.path.dirname(__file__), "no_content.png")
 
 # Display controller backends (change per hardware)
-# Available: "brightnessctl", "ddcurtl", "noop"
+# Available: "brightnessctl", "ddcutil", "xset", "noop"
 BRIGHTNESS_CONTROLLER = "brightnessctl"
 ONOFF_CONTROLLER = "brightnessctl"

@@ -11,8 +11,8 @@
 #   -l, --location LOC       Device location (default: Main Hall)
 #   -s, --server URL         Server URL (default: http://192.168.1.100:5000/api)
 #   -p, --serial-port PORT   Arduino serial port (default: /dev/ttyUSB0)
-#   -b, --brightness-ctrl    Brightness controller: brightnessctl|ddcurtl|noop (default: brightnessctl)
-#   -o, --onoff-ctrl         Screen on/off controller: brightnessctl|ddcurtl|noop (default: same as --brightness-ctrl)
+#   -b, --brightness-ctrl    Brightness controller: brightnessctl|ddcutil|xset|noop (default: brightnessctl)
+#   -o, --onoff-ctrl         Screen on/off controller: brightnessctl|ddcutil|xset|noop (default: same as --brightness-ctrl)
 #   -f, --folder NAME        Per-device folder name (default: Device3)
 #   -h, --help               Show this help message
 #
@@ -56,8 +56,8 @@ done
 
 # Validate controller choices
 for ctrl in "$BRIGHTNESS_CTRL" "$ONOFF_CTRL"; do
-    if [[ "$ctrl" != "brightnessctl" && "$ctrl" != "ddcurtl" && "$ctrl" != "noop" ]]; then
-        echo "ERROR: Invalid controller '$ctrl'. Must be one of: brightnessctl, ddcurtl, noop"
+    if [[ "$ctrl" != "brightnessctl" && "$ctrl" != "ddcutil" && "$ctrl" != "xset" && "$ctrl" != "noop" ]]; then
+        echo "ERROR: Invalid controller '$ctrl'. Must be one of: brightnessctl, ddcutil, xset, noop"
         exit 1
     fi
 done
@@ -137,14 +137,32 @@ for ctrl in "$BRIGHTNESS_CTRL" "$ONOFF_CTRL"; do
                 echo "[4/6] brightnessctl already installed."
             fi
             ;;
-        ddcurtl)
-            if ! command -v ddcurtl &> /dev/null; then
-                read -p "[4/6] ddcurtl not found in PATH. Install now or continue? [y/N]: " dd_ans
+        ddcutil)
+            if ! command -v ddcutil &> /dev/null; then
+                read -p "[4/6] Install ddcutil + i2c-tools for DDC/CI control? [y/N]: " dd_ans
                 if [[ "$dd_ans" =~ ^[Yy]$ ]]; then
-                    echo "Please install ddcurtl manually and re-run setup."
+                    sudo apt install -y ddcutil i2c-tools
+                    sudo modprobe i2c-dev
+                    sudo usermod -aG i2c "$USER"
+                    echo "ddcutil installed. Reboot or log out for i2c group to take effect."
+                else
+                    echo "WARNING: ddcutil not installed but selected as controller."
                 fi
             else
-                echo "[4/6] ddcurtl found."
+                echo "[4/6] ddcutil already installed."
+            fi
+            ;;
+        xset)
+            if ! command -v xset &> /dev/null; then
+                read -p "[4/6] Install x11-xserver-utils (provides xset)? [y/N]: " xs_ans
+                if [[ "$xs_ans" =~ ^[Yy]$ ]]; then
+                    sudo apt install -y x11-xserver-utils
+                    echo "xset installed."
+                else
+                    echo "WARNING: xset not installed but selected as controller."
+                fi
+            else
+                echo "[4/6] xset already installed."
             fi
             ;;
         noop)
@@ -194,7 +212,7 @@ BAUD_RATE = 9600
 RAIN_THRESHOLD = 500
 
 # Display controller backends (change per hardware)
-# Available: "brightnessctl", "ddcurtl", "noop"
+# Available: "brightnessctl", "ddcutil", "xset", "noop"
 BRIGHTNESS_CONTROLLER = "$BRIGHTNESS_CTRL"
 ONOFF_CONTROLLER = "$ONOFF_CTRL"
 

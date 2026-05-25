@@ -25,6 +25,6 @@ SERVER_URL = "http://192.168.56.1:5000/api"
 # TOKEN_FILE = os.path.join(_dir, ".device_token")
 
 # Display controller backends (change per hardware)
-# Available: "brightnessctl", "ddcurtl", "noop"
+# Available: "brightnessctl", "ddcutil", "xset", "noop"
 BRIGHTNESS_CONTROLLER = "brightnessctl"
 ONOFF_CONTROLLER = "brightnessctl"
