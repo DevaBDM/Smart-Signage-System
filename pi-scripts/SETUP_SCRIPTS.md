@@ -135,7 +135,7 @@ flowchart TD
     ├── run.py                     # Launch shim (adds anthiasDevice to sys.path)
     ├── emergency_fallback.mp4
     ├── disconnection.png
-    └── no_content.jpg
+    └── no_content.png
 ```
 
 ### MPV (after setup)
@@ -156,7 +156,7 @@ flowchart TD
     ├── data/                      # Playlist persistence
     ├── emergency_fallback.mp4
     ├── disconnection.png
-    └── no_content.jpg
+    └── no_content.png
 ```
 
 ---

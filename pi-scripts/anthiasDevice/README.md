@@ -259,7 +259,7 @@ Three fallback files are expected alongside the config or in the shared `anthias
 |------|---------|
 | `emergency_fallback.mp4` | Plays during emergency mode. Can be an image or video (up to ~200 MB). |
 | `disconnection.png` | Static image shown when the server has been unreachable for the timeout period. |
-| `no_content.jpg` | Optional placeholder when no content is assigned. |
+| `no_content.png` | Optional placeholder when no content is assigned. |
 
 The emergency asset is also periodically updated from the server (ETag-cached) so the local file stays current.
 

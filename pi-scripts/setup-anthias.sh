@@ -157,7 +157,7 @@ SERVER_URL = "$SERVER_URL"
 _dir = os.path.dirname(__file__)
 EMERGENCY_FALLBACK = os.path.join(_dir, "emergency_fallback.mp4")
 DISCONNECTION_IMAGE = os.path.join(_dir, "disconnection.png")
-NO_CONTENT_IMAGE = os.path.join(_dir, "no_content.jpg")
+NO_CONTENT_IMAGE = os.path.join(_dir, "no_content.png")
 TOKEN_FILE = os.path.join(_dir, ".device_token")
 EOF
 
@@ -183,7 +183,7 @@ chmod +x "$DEVICE_DIR/run.py"
 echo "Created $DEVICE_DIR/run.py"
 
 # Copy fallback assets from template if not already present
-for asset in emergency_fallback.mp4 disconnection.png no_content.jpg; do
+for asset in emergency_fallback.mp4 disconnection.png no_content.png; do
     if [[ ! -f "$DEVICE_DIR/$asset" && -f "$SHARED_DIR/$asset" ]]; then
         cp "$SHARED_DIR/$asset" "$DEVICE_DIR/$asset"
         echo "Copied $asset"

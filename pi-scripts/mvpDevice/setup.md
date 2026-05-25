@@ -126,7 +126,7 @@ SERIAL_PORT = "/dev/ttyUSB0"   # or /dev/ttyACM0
 Ensure fallback assets are present:
 
 ```bash
-ls -la emergency_fallback.mp4 disconnection.png no_content.jpg
+ls -la emergency_fallback.mp4 disconnection.png no_content.png
 ```
 
 ---
@@ -229,7 +229,7 @@ Three fallback files are expected in the device folder:
 |------|---------|
 | `emergency_fallback.mp4` | Plays when emergency mode is triggered. |
 | `disconnection.png` | Shows when the server is unreachable for >72 hours. |
-| `no_content.jpg` | Placeholder when no content is assigned. |
+| `no_content.png` | Placeholder when no content is assigned. |
 
 The emergency asset is periodically synced from the server (ETag-cached). A local copy ensures offline resilience.
 

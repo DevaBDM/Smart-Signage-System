@@ -29,4 +29,4 @@ _asset_dir = os.path.dirname(__file__)
 EMERGENCY_FALLBACK = os.path.join(_asset_dir, "emergency_fallback.mp4")
 DISCONNECTION_TIMEOUT_HOURS = 72
 DISCONNECTION_IMAGE = os.path.join(_asset_dir, "disconnection.png")
-NO_CONTENT_IMAGE = os.path.join(_asset_dir, "no_content.jpg")
+NO_CONTENT_IMAGE = os.path.join(_asset_dir, "no_content.png")

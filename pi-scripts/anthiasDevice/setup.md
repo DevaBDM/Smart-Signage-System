@@ -280,7 +280,7 @@ Make sure these files exist in your per-device folder (or in `anthiasDevice/`):
 |------|---------|
 | `emergency_fallback.mp4` | Plays when emergency mode is triggered. |
 | `disconnection.png` | Shows when the server is unreachable for >72 hours. |
-| `no_content.jpg` | Optional placeholder when no content is deployed. |
+| `no_content.png` | Optional placeholder when no content is deployed. |
 
 The agent syncs the emergency asset from the server periodically, but a local copy ensures it works even offline.
 

@@ -166,13 +166,13 @@ DISCONNECTION_TIMEOUT_HOURS = 72
 DISCONNECTION_IMAGE = os.path.join(os.path.dirname(__file__), "disconnection.png")
 
 # Default image shown when the device has no scheduled content
-NO_CONTENT_IMAGE = os.path.join(os.path.dirname(__file__), "no_content.jpg")
+NO_CONTENT_IMAGE = os.path.join(os.path.dirname(__file__), "no_content.png")
 EOF
 
 echo "Created $DEVICE_DIR/config.py"
 
 # Ensure fallback assets exist
-for asset in emergency_fallback.mp4 disconnection.png no_content.jpg; do
+for asset in emergency_fallback.mp4 disconnection.png no_content.png; do
     if [[ ! -f "$DEVICE_DIR/$asset" ]]; then
         echo "WARNING: $asset not found in template."
     fi

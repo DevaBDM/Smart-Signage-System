@@ -166,9 +166,9 @@ Requires `brightnessctl` (`sudo apt install brightnessctl`).
 |------|---------|
 | `emergency_fallback.mp4` | Plays during emergency mode. |
 | `disconnection.png` | Shows when the server is unreachable for the timeout period. |
-| `no_content.jpg` | Placeholder when no content is assigned. |
+| `no_content.png` | Placeholder when no content is assigned. |
 
-If `no_content.jpg` is missing, `player.py` generates a black placeholder image automatically (using PIL if available, otherwise a raw BMP).
+If `no_content.png` is missing, `player.py` generates a black placeholder image automatically (using PIL if available, otherwise a raw BMP).
 
 ---
 
