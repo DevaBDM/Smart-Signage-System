@@ -66,9 +66,9 @@ def sync_loop():
                 wait_time = 10
 
             # Also sync the emergency asset from server
-            api.sync_emergency_asset()
-            # Mark contact if emergency sync succeeded (even if deployments failed)
-            media.mark_server_contact()
+            emergency_sync_ok = api.sync_emergency_asset()
+            if emergency_sync_ok:
+                media.mark_server_contact()
 
             # Check group states to auto-clear or auto-enter emergency
             device = api.fetch_device_settings()
@@ -85,10 +85,12 @@ def sync_loop():
                 if any_emergency and not media.is_emergency():
                     print("[sync] Server group in EMERGENCY — entering emergency mode")
                     media.set_emergency(True)
+                    socket_client._write_emergency_flag(True)
                     player.play_emergency(EMERGENCY_FALLBACK)
                 elif not any_emergency and media.is_emergency():
                     print("[sync] Server groups all NORMAL — clearing emergency mode")
                     media.set_emergency(False)
+                    socket_client._write_emergency_flag(False)
                     scheduler.request_jump(direction="next")
         except Exception as e:
             print(f"[sync] Loop error: {e}")

@@ -132,9 +132,10 @@ def scheduler_loop():
 
             # If only one post and already playing it (not a jump), don't reload — just reset timer.
             # Videos that go idle are allowed to loop; images just stay on screen.
+            # Bypass this if the post has expired (e.g., after refresh_display resets last_change).
             if not jumped and len(active) == 1 and current:
                 only_post = active[0]
-                if current.get("post_id") == only_post.get("post_id") and not is_idle:
+                if current.get("post_id") == only_post.get("post_id") and not is_idle and not expired:
                     with _lock:
                         _state["last_change"] = time.time()
                     time.sleep(1)

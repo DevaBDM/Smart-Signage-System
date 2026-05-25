@@ -60,13 +60,15 @@ def _download(url, dest):
     if not url or not url.startswith("http"):
         return True
     dest = Path(dest)
-    if dest.exists():
+    if dest.exists() and dest.stat().st_size > 0:
         return True
     try:
         print(f"[media] Downloading {url[:80]}...")
         r = requests.get(url, timeout=120, stream=True)
         r.raise_for_status()
-        dest.write_bytes(r.content)
+        part = dest.with_suffix(dest.suffix + ".part")
+        part.write_bytes(r.content)
+        part.rename(dest)
         print(f"[media] Cached to {dest.name}")
         return True
     except Exception as e:
@@ -103,6 +105,11 @@ def ensure_cached(post):
 def update_posts(new_posts):
     with _state_lock:
         old_posts = {p.get("post_id"): p for p in _state["posts"]}
+        # Remember what post was playing before sync
+        current_pid = None
+        if _state["posts"] and 0 <= _state["current_idx"] < len(_state["posts"]):
+            current_pid = _state["posts"][_state["current_idx"]].get("post_id")
+
         merged = []
         for post in new_posts:
             pid = post.get("post_id")
@@ -118,7 +125,17 @@ def update_posts(new_posts):
                 post["is_enabled"] = True
             merged.append(post)
         _state["posts"] = merged
-        _state["current_idx"] = 0
+
+        # Try to stay on the same post if it still exists; otherwise reset to 0
+        if current_pid is not None:
+            for i, p in enumerate(merged):
+                if p.get("post_id") == current_pid:
+                    _state["current_idx"] = i
+                    break
+            else:
+                _state["current_idx"] = 0
+        else:
+            _state["current_idx"] = 0
     save_playlist()
 
 def add_or_update_post(post):

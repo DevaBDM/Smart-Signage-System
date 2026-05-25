@@ -63,6 +63,9 @@ def on_device_token(data):
 @sio.on("signage_command")
 def on_signage_command(data):
     print(f"[socket] Signage command: {data}")
+    if media.is_emergency():
+        print("[socket] Command rejected: emergency mode active")
+        return {"ok": False, "error": "Emergency mode active"}
     try:
         action = data.get("action")
 
@@ -189,6 +192,11 @@ def on_signage_command(data):
 
 @sio.on("playlist_update")
 def on_playlist_update(data):
+    if media.is_emergency():
+        print("[socket] playlist_update rejected: emergency mode active")
+        if sio.connected:
+            sio.emit("playlist_ack", {"device_id": DEVICE_ID})
+        return {"ok": False, "error": "Emergency mode active"}
     result = on_signage_command({"action": "publish_asset", **data})
     if sio.connected:
         sio.emit("playlist_ack", {"device_id": DEVICE_ID})
@@ -294,6 +302,7 @@ def heartbeat_loop():
         time.sleep(10)
 
 def socket_loop():
+    retry_delay = 5
     while True:
         try:
             base_url = SERVER_URL.split("/api")[0]
@@ -303,9 +312,11 @@ def socket_loop():
                 connect_kwargs["auth"] = {"token": token}
             sio.connect(base_url, **connect_kwargs)
             sio.wait()
+            retry_delay = 5  # Reset on clean disconnect / successful session end
         except Exception as e:
-            print(f"[socket] Reconnecting in 5s... ({e})")
-            time.sleep(5)
+            print(f"[socket] Reconnecting in {retry_delay}s... ({e})")
+            time.sleep(retry_delay)
+            retry_delay = min(retry_delay * 2, 30)  # Capped exponential backoff
 
 def _get_local_ip():
     try:

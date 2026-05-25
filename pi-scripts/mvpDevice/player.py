@@ -143,8 +143,8 @@ def start_mpv():
     print(f"[player] Starting MPV...")
     _mpv_process = subprocess.Popen(
         args,
-        stdout=None,
-        stderr=None,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     for _ in range(30):
         if os.path.exists(MPV_SOCKET):
