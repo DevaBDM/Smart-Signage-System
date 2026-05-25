@@ -467,14 +467,24 @@ def _sync_emergency_asset():
         if os.path.exists(etag_file):
             with open(etag_file, "r") as f:
                 local_etag = f.read().strip()
-        if remote_etag and remote_etag == local_etag and os.path.exists(fallback):
-            return
+        if remote_etag and remote_etag == local_etag and os.path.exists(fallback) and os.path.getsize(fallback) > 0:
+            return device
         print(f"[emergency_sync] Downloading asset: {asset_url}")
         dr = requests.get(asset_url, timeout=120, stream=True)
         dr.raise_for_status()
-        with open(fallback, "wb") as f:
+        part = fallback + ".part"
+        size = 0
+        with open(part, "wb") as f:
             for chunk in dr.iter_content(chunk_size=8192):
-                f.write(chunk)
+                if chunk:
+                    f.write(chunk)
+                    size += len(chunk)
+        if size < 1:
+            if os.path.exists(part):
+                os.remove(part)
+            print(f"[emergency_sync] Download empty body from {asset_url}")
+            return device
+        os.rename(part, fallback)
         if remote_etag:
             with open(etag_file, "w") as f:
                 f.write(remote_etag)
@@ -586,6 +596,7 @@ if __name__ == "__main__":
     threading.Thread(target=sensor_loop, daemon=True).start()
     threading.Thread(target=content_sync_loop, daemon=True).start()
 
+    retry_delay = 5
     while True:
         try:
             # SERVER_URL is usually like http://localhost:5000/api
@@ -596,6 +607,8 @@ if __name__ == "__main__":
                 connect_kwargs["auth"] = {"token": _current_token}
             sio.connect(base_url, **connect_kwargs)
             sio.wait()
+            retry_delay = 5  # Reset on clean disconnect
         except Exception as e:
-            print(f"[socket] Reconnecting in 5s... ({e})")
-            time.sleep(5)
+            print(f"[socket] Reconnecting in {retry_delay}s... ({e})")
+            time.sleep(retry_delay)
+            retry_delay = min(retry_delay * 2, 30)  # Capped exponential backoff
