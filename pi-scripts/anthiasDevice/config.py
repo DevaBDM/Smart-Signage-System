@@ -23,3 +23,8 @@ SERVER_URL = "http://192.168.56.1:5000/api"
 # DISCONNECTION_IMAGE = os.path.join(_dir, "disconnection.png")
 # NO_CONTENT_IMAGE = os.path.join(_dir, "no_content.png")
 # TOKEN_FILE = os.path.join(_dir, ".device_token")
+
+# Display controller backends (change per hardware)
+# Available: "brightnessctl", "ddcurtl", "noop"
+BRIGHTNESS_CONTROLLER = "brightnessctl"
+ONOFF_CONTROLLER = "brightnessctl"

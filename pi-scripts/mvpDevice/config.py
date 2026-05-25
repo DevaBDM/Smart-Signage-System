@@ -40,3 +40,8 @@ DISCONNECTION_IMAGE = os.path.join(os.path.dirname(__file__), "disconnection.png
 
 # Default image shown when the device has no scheduled content
 NO_CONTENT_IMAGE = os.path.join(os.path.dirname(__file__), "no_content.png")
+
+# Display controller backends (change per hardware)
+# Available: "brightnessctl", "ddcurtl", "noop"
+BRIGHTNESS_CONTROLLER = "brightnessctl"
+ONOFF_CONTROLLER = "brightnessctl"

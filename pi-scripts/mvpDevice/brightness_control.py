@@ -1,59 +1,42 @@
 # pi-scripts/brightness_control.py
 import os
-import shutil
-import subprocess
 import time
+
+import display_backends
 
 # This script reads the light sensor value from a shared file
 # (written by sensors.py) and adjusts the display brightness
-# using brightnessctl (Debian 13 compatible, no X11 required).
+# using the configured display backend.
 
 SENSOR_FILE = "/tmp/signage_sensors"
 MIN_PCT = 5   # never go completely black
 MAX_PCT = 100
 
 
-def _has_brightnessctl():
-    return shutil.which("brightnessctl") is not None
-
-
 def set_brightness(level):
-    """Map Arduino LDR value (0-1023) to a brightnessctl percentage."""
+    """Map Arduino LDR value (0-1023) to a display brightness percentage."""
     pct = MIN_PCT + int((level / 1023.0) * (MAX_PCT - MIN_PCT))
     pct = max(MIN_PCT, min(MAX_PCT, pct))
-    _apply_brightness(pct, f"sensor: {level}")
+    display_backends.set_brightness_pct(pct)
+    print(f"[brightness] Set to {pct}% (sensor: {level})")
 
 
 def set_brightness_raw(pct):
     """Set brightness to a specific percentage (0-100)."""
     pct = max(0, min(100, pct))
-    _apply_brightness(pct, "manual override")
-
-
-def _apply_brightness(pct, reason):
-    try:
-        subprocess.run(
-            ["brightnessctl", "set", f"{pct}%"],
-            check=True,
-            capture_output=True,
-        )
-        print(f"[brightness] Set to {pct}% ({reason})")
-    except subprocess.CalledProcessError as e:
-        err = e.stderr.decode().strip() if e.stderr else str(e)
-        print(f"[brightness] brightnessctl failed: {err}")
-    except Exception as e:
-        print(f"[brightness] Error: {e}")
+    display_backends.set_brightness_pct(pct)
+    print(f"[brightness] Set to {pct}% (manual override)")
 
 
 def run():
-    if not _has_brightnessctl():
+    if not display_backends.has_backend():
         print(
-            "[brightness] WARNING: brightnessctl not found. "
-            "Install with: sudo apt install brightnessctl"
+            f"[brightness] WARNING: configured display controller not available. "
+            f"({display_backends.info()})"
         )
         return
 
-    print("[brightness] Starting auto-brightness control (using brightnessctl)...")
+    print(f"[brightness] Starting auto-brightness control ({display_backends.info()})")
     print("[brightness] Screen turns OFF when no motion, ON when motion detected.")
     print("[brightness] Emergency mode keeps display at 100% regardless of motion.")
     print(f"[brightness] Startup check: emergency flag exists = {os.path.exists('/tmp/signage_emergency_active')}")
@@ -68,7 +51,7 @@ def run():
                 # Emergency mode — keep screen at full brightness always
                 if last_motion is not True or last_brightness != 100:
                     print("[brightness] Emergency active — forcing 100% brightness")
-                    set_brightness_raw(100)
+                    display_backends.set_brightness_pct(100)
                     last_motion = True
                     last_brightness = 100
                 time.sleep(5)
@@ -87,15 +70,17 @@ def run():
                             # No motion — turn screen completely off
                             if last_motion is not False:
                                 print("[brightness] No motion detected — turning screen OFF")
-                                set_brightness_raw(0)
+                                display_backends.screen_off()
                                 last_motion = False
                                 last_brightness = -1  # Reset so it re-adjusts on wake
                         else:
-                            # Motion detected — adjust based on ambient light
-                            if last_motion is not True or abs(brightness_val - last_brightness) > 20:
-                                print(f"[brightness] Motion detected — adjusting brightness to sensor={brightness_val}")
-                                set_brightness(brightness_val)
+                            # Motion detected — turn on if needed, then adjust brightness
+                            if last_motion is not True:
+                                print("[brightness] Motion detected — turning screen ON")
+                                display_backends.screen_on()
                                 last_motion = True
+                            if abs(brightness_val - last_brightness) > 20:
+                                set_brightness(brightness_val)
                                 last_brightness = brightness_val
 
         except Exception as e:
