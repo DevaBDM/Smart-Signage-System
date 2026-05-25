@@ -114,19 +114,65 @@ SERIAL_PORT = "/dev/ttyUSB0"   # or /dev/ttyACM0
 
 ---
 
-## 6. Brightness Control (Optional)
+## 6. Brightness & Screen Power Control (Optional)
 
-If your display supports DDC/CI or the Pi has a backlight interface, install `brightnessctl`:
+The `brightness_control.py` script reads the LDR value from `/tmp/signage_sensors` and adjusts screen brightness and power automatically. It uses a pluggable backend system (`display_backends.py`) so you can choose the right controller for your hardware.
 
+### Choose Your Controller
+
+Edit your per-device `config.py`:
+
+```python
+# Display controller backends (change per hardware)
+# Available: "brightnessctl", "ddcutil", "xset", "noop"
+BRIGHTNESS_CONTROLLER = "brightnessctl"   # controls brightness level
+ONOFF_CONTROLLER = "brightnessctl"        # controls screen power on/off
+```
+
+You can mix controllers — for example `ddcutil` for brightness and `xset` for power management:
+
+```python
+BRIGHTNESS_CONTROLLER = "ddcutil"
+ONOFF_CONTROLLER = "xset"
+```
+
+### Backend Options
+
+| Backend | Brightness | Power On/Off | Hardware Requirements |
+|---------|------------|--------------|----------------------|
+| `brightnessctl` | `brightnessctl set {pct}%` | Sets 100% / 0% | Linux backlight device (most HDMI displays on Pi) |
+| `ddcutil` | `ddcutil setvcp 10 {pct}` | `setvcp d6 01` / `d6 04` | Monitor with DDC/CI over HDMI/DP; `i2c-dev` loaded; user in `i2c` group |
+| `xset` | Not supported (no-op) | `xset dpms force on/off` | X11 session running (`DISPLAY=:0`) |
+| `noop` | Prints only | Prints only | Nothing — for headless testing |
+
+### Installing Controllers
+
+**brightnessctl (default):**
 ```bash
 sudo apt install -y brightnessctl
 ```
 
-The `brightness_control.py` script reads the LDR value from `/tmp/signage_sensors` and adjusts screen brightness automatically.
+**ddcutil (DDC/CI hardware control):**
+```bash
+sudo apt install -y ddcutil i2c-tools
+sudo modprobe i2c-dev
+sudo usermod -aG i2c $USER
+# Reboot or log out for i2c group to take effect
+```
+Verify your monitor supports DDC/CI:
+```bash
+sudo ddcutil detect
+```
 
-Test it manually:
+**xset (DPMS power management):**
+```bash
+sudo apt install -y x11-xserver-utils
+```
+
+### Test Manually
 
 ```bash
+cd ~/signage/anthiasDevice
 python3 brightness_control.py
 ```
 
@@ -241,7 +287,7 @@ sudo journalctl -u socket-signage.service -f
 
 ## 9. Optional: Auto-Start Brightness Control
 
-If you want brightness control as a separate service:
+If you want brightness control as a separate service (skipped automatically if `noop` is selected):
 
 ```bash
 sudo nano /etc/systemd/system/brightness-control.service
@@ -296,7 +342,7 @@ After setup, verify:
 - [ ] Heartbeat logs appear every 10s
 - [ ] Arduino button press triggers emergency mode locally
 - [ ] Content appears on the display after publishing from the server
-- [ ] `brightnessctl` works if brightness control is enabled
+- [ ] Brightness controller is installed and available in PATH (`brightnessctl`, `ddcutil`, or `xset`)
 
 ---
 
@@ -310,6 +356,12 @@ After setup, verify:
 | `401 Unauthorized` in logs | Token invalid. Stop agent, delete `.device_token`, restart. |
 | Anthias not showing content | Verify Anthias is running (`docker ps`); check `ANTHIAS_URL` in config. |
 | Display stays black | Check HDMI cable; verify Pi GPU memory split (`raspi-config` → Advanced → Memory Split, set at least 128 MB). |
+| `brightnessctl` not found | Install: `sudo apt install brightnessctl`. If using a different controller, update `BRIGHTNESS_CONTROLLER` in `config.py`. |
+| `ddcutil` not found or fails | Install `ddcutil i2c-tools`; run `sudo modprobe i2c-dev`; add user to `i2c` group; verify with `sudo ddcutil detect`. |
+| `ddcutil` permission denied | User must be in `i2c` group. Run `sudo usermod -aG i2c $USER` then reboot. |
+| `xset` fails with "unable to open display" | X11 not running or `DISPLAY` not set. Ensure a GUI session is active, or use `brightnessctl` / `ddcutil` instead. |
+| Screen never turns off on no motion | Check `ONOFF_CONTROLLER` in `config.py`; verify the controller command works manually. |
+| Backend error on startup | Check `config.py` values for `BRIGHTNESS_CONTROLLER` and `ONOFF_CONTROLLER` match one of: `brightnessctl`, `ddcutil`, `xset`, `noop`. |
 
 ---
 

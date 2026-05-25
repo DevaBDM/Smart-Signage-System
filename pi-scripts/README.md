@@ -118,7 +118,7 @@ The Pi parses this, writes the values to `/tmp/signage_sensors`, and:
 
 - **Forwards to server** — emits `sensor_update` event via Socket.IO
 - **Triggers emergency** — if `emergency:1`, immediately plays the local emergency asset
-- **Adjusts brightness** — `brightness_control.py` reads `/tmp/signage_sensors` and calls `brightnessctl set {pct}%`
+- **Adjusts brightness** — `brightness_control.py` reads `/tmp/signage_sensors` and calls the configured display backend (`display_backends.py`) to set brightness and screen power
 
 ### Emergency & Disconnection States
 
@@ -139,16 +139,20 @@ Both states use local fallback assets so the device remains functional without a
 Run these scripts directly on the Pi after flashing Raspberry Pi OS Lite:
 
 ```bash
-# Anthias device
+# Anthias device (default brightnessctl)
 ./setup-anthias.sh -d 1 -n "Lobby-Screen" -l "Main Lobby" \
   -s "http://192.168.1.100:5000/api" -p "/dev/ttyUSB0"
 
-# MPV device
+# MPV device with ddcutil for brightness and xset for power
 ./setup-mvp.sh -d 3 -n "Hall-Screen" -l "Conference Hall" \
-  -s "http://192.168.1.100:5000/api" -p "/dev/ttyUSB0"
+  -s "http://192.168.1.100:5000/api" -p "/dev/ttyUSB0" \
+  -b ddcutil -o xset
+
+# Headless test (noop — no display hardware needed)
+./setup-mvp.sh -d 4 -n "Test-Device" -b noop
 ```
 
-Both scripts handle: system update, dependency installation, Anthias/MPV install, Arduino serial permissions, config generation, systemd service creation, and optional brightness control.
+Both scripts handle: system update, dependency installation, Anthias/MPV install, Arduino serial permissions, config generation, systemd service creation, and optional brightness / screen-power control. Use `-b` to choose the brightness backend (`brightnessctl`, `ddcutil`, `xset`, `noop`) and `-o` to choose the screen on/off backend.
 
 See `setup-anthias.sh -h` or `setup-mvp.sh -h` for all options.
 
@@ -216,7 +220,8 @@ sudo usermod -aG dialout $USER   # Arduino serial access
 | `config_defaults.py` | Shared default constants: server URL, Anthias URL, asset paths, timeouts |
 | `config.py` | **Template** — per-device overrides (DEVICE_ID, NAME, LOCATION, SERIAL_PORT, SERVER_URL) |
 | `run.py` | Launch shim: adds `anthiasDevice/` to `sys.path`, then starts `socket_client.main()` |
-| `brightness_control.py` | Optional: reads sensor brightness value, calls `brightnessctl` to adjust display |
+| `brightness_control.py` | Optional: reads sensor brightness value, calls `display_backends` to adjust display brightness and power |
+| `display_backends.py` | Pluggable backends: `brightnessctl`, `ddcutil`, `xset`, `noop` |
 | `Arduino_connection.py` | Standalone serial debug utility |
 
 ### MPV Template (`mvpDevice/`)
@@ -230,6 +235,8 @@ sudo usermod -aG dialout $USER   # Arduino serial access
 | `player.py` | MPV process control: starts MPV with IPC socket, sends `loadfile`, handles special states |
 | `media.py` | Playlist state: caches downloads, persists to disk, tracks emergency/disconnection flags |
 | `sensors.py` | Arduino serial reader: parses `SENSOR:` packets, detects emergency, forwards data |
+| `brightness_control.py` | Reads sensor brightness value, calls `display_backends` to adjust display brightness and power |
+| `display_backends.py` | Pluggable backends: `brightnessctl`, `ddcutil`, `xset`, `noop` |
 | `config.py` | **Template** — all device settings in one file (no shared defaults needed) |
 
 ---
@@ -252,7 +259,9 @@ When a post with `media_type == "LIVE_STREAM"` is published:
 | Agent keeps reconnecting | Server may be down, or token is invalid. Stop agent, delete `.device_token`, restart |
 | Anthias assets not syncing | Check Anthias is running: `docker ps`; verify `ANTHIAS_URL` in config |
 | MPV black screen / no content | Check `journalctl -u mvp-player -f`; verify `downloads/` has cached files; test MPV manually: `mpv --idle --fullscreen` |
-| Brightness control not working | Install `brightnessctl` (`sudo apt install brightnessctl`); verify `/tmp/signage_sensors` exists |
+| Brightness control not working | Check `BRIGHTNESS_CONTROLLER` and `ONOFF_CONTROLLER` in `config.py`; install the chosen controller (`brightnessctl`, `ddcutil`, or `xset`); verify `/tmp/signage_sensors` exists |
+| `ddcutil` not found or fails | Install `ddcutil i2c-tools`; run `sudo modprobe i2c-dev`; add user to `i2c` group; verify with `sudo ddcutil detect` |
+| `xset` fails with "unable to open display" | X11 not running or `DISPLAY` not set. Use `brightnessctl` or `ddcutil` instead, or ensure a GUI session is active |
 | Content sync shows "Server down" | Backend is unreachable. Check network and `SERVER_URL` |
 | Emergency mode not clearing | The agent checks **all** assigned groups before clearing. Check logs: `journalctl -u <service> -f \| grep emergency` |
 

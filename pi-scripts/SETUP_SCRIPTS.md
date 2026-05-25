@@ -57,6 +57,8 @@ Both scripts accept the same options:
 | `-l` | `--location` | `Floor 1` / `Main Hall` | Physical location |
 | `-s` | `--server` | `http://192.168.1.100:5000/api` | Backend API URL |
 | `-p` | `--serial-port` | `/dev/ttyUSB0` | Arduino USB serial port |
+| `-b` | `--brightness-ctrl` | `brightnessctl` | Brightness backend: `brightnessctl`, `ddcutil`, `xset`, `noop` |
+| `-o` | `--onoff-ctrl` | same as `-b` | Screen on/off backend: `brightnessctl`, `ddcutil`, `xset`, `noop` |
 | `-f` | `--folder` | `Device1` / `Device3` | Per-device folder name under `~/signage/` |
 | `-h` | `--help` | — | Show usage help |
 
@@ -79,7 +81,7 @@ flowchart TD
     A[1. System Update] --> B[2. Install Anthias]
     B --> C[3. Python Dependencies]
     C --> D[4. Serial Permissions]
-    D --> E[5. Optional: brightnessctl]
+    D --> E[5. Install Display Controller]
     E --> F[6. Deploy Agent Code]
     F --> G[7. Create systemd Service]
     G --> H[8. Optional: Brightness Service]
@@ -91,10 +93,10 @@ flowchart TD
 | 2 | Install Anthias | Runs Anthias installer if Docker not present; skips if already installed |
 | 3 | Python deps | Installs `python3-requests`, `python3-serial`, `python3-socketio`, `python3-websocket` |
 | 4 | Serial permissions | Adds `$USER` to `dialout` group for Arduino USB access |
-| 5 | Optional brightnessctl | Prompts to install `brightnessctl` for auto-brightness |
+| 5 | Install display controller | Installs the chosen backend: `brightnessctl` (apt), `ddcutil` (apt + i2c-dev + i2c group), `xset` (x11-xserver-utils), or skips for `noop` |
 | 6 | Deploy code | Copies `anthiasDevice/` template to `~/signage/anthiasDevice`, creates per-device folder with `config.py` and `run.py` |
 | 7 | systemd service | Creates `socket-signage-{folder}.service`, enables auto-start |
-| 8 | Optional brightness service | Creates `brightness-control-{folder}.service` if brightnessctl was installed |
+| 8 | Optional brightness service | Creates `brightness-control-{folder}.service` if a real controller was selected (skipped for `noop`) |
 
 ### `setup-mvp.sh` (6 Steps)
 
@@ -102,7 +104,7 @@ flowchart TD
 flowchart TD
     A[1. System Update] --> B[2. Install MPV + Python Deps]
     B --> C[3. Serial Permissions]
-    C --> D[4. Optional: brightnessctl]
+    C --> D[4. Install Display Controller]
     D --> E[5. Deploy Agent Code]
     E --> F[6. Create systemd Service]
 ```
@@ -112,7 +114,7 @@ flowchart TD
 | 1 | System update | `apt update && apt full-upgrade`, install git/curl/wget/vim |
 | 2 | Install MPV + Python deps | Installs `mpv`, `python3-requests`, `python3-socketio`, `python3-serial`, `python3-setuptools` |
 | 3 | Serial permissions | Adds `$USER` to `dialout` group |
-| 4 | Optional brightnessctl | Prompts to install `brightnessctl`. MVP handles brightness **internally** via a daemon thread — no separate service needed. |
+| 4 | Install display controller | Installs the chosen backend: `brightnessctl` (apt), `ddcutil` (apt + i2c-dev + i2c group), `xset` (x11-xserver-utils), or skips for `noop`. MVP handles brightness **internally** via a daemon thread — no separate service needed. |
 | 5 | Deploy code | Copies `mvpDevice/` template to `~/signage/{folder}/`, creates `config.py` with all settings |
 | 6 | systemd service | Creates `mvp-player-{folder}.service`, enables auto-start |
 
@@ -256,10 +258,12 @@ The service name is derived from the `--folder` argument (lowercased). For examp
 | Service fails to start | Wrong path in config or missing `config.py` | Check `config.py` exists and `SERVER_URL` is reachable |
 | Device shows "offline" in dashboard | Agent not running or wrong `DEVICE_ID` | Check service status and verify `DEVICE_ID` matches admin registration |
 | No sensor data | Wrong `SERIAL_PORT` in `config.py` | Run `ls /dev/tty*` to find the correct Arduino port |
-| Brightness control not working | `brightnessctl` not installed or no backlight device | Check `brightnessctl` is installed; not all displays support DDC/CI |
-| MVP: screen never turns off | Motion sensor always reporting `1` | Check ultrasonic sensors are not blocked; verify wiring |
-| MVP: screen stays black | `brightnessctl` not installed | `sudo apt install brightnessctl`; MVP handles brightness internally |
-| Anthias: brightness not adjusting | Separate `brightness-control` service not running | `sudo systemctl status brightness-control-<folder>.service` |
+| Brightness control not working | Controller not installed or display not supported | Check the chosen controller is installed (`brightnessctl`, `ddcutil`, or `xset`); verify display compatibility |
+| MVP: screen never turns off | Motion sensor always reporting `1` or wrong `ONOFF_CONTROLLER` | Check ultrasonic sensors are not blocked; verify wiring; check `ONOFF_CONTROLLER` in `config.py` |
+| MVP: screen stays black | Controller not installed or wrong backend selected | Install the chosen controller or switch to `noop` for testing; MVP handles brightness internally |
+| Anthias: brightness not adjusting | Separate `brightness-control` service not running or wrong backend | `sudo systemctl status brightness-control-<folder>.service`; check `BRIGHTNESS_CONTROLLER` in `config.py` |
+| `ddcutil` permission denied | User not in `i2c` group | Run `sudo usermod -aG i2c $USER` then reboot |
+| `xset` fails with "unable to open display" | X11 not running or `DISPLAY` not set | Use `brightnessctl` or `ddcutil` instead, or ensure a GUI session is active |
 
 ---
 
@@ -271,6 +275,7 @@ The service name is derived from the `--folder` argument (lowercased). For examp
 | Steps | Follow setup.md guides step by step | Single command, all steps automatic |
 | systemd services | Create manually by copying .tpl files | Generated automatically with correct paths |
 | config.py | Copy and edit template manually | Generated with CLI-provided values |
+| Display controller | Install and configure one controller manually | Choose via `-b` / `-o` flags: `brightnessctl`, `ddcutil`, `xset`, or `noop`; installs the right packages automatically |
 | Brightness control | Install and configure manually | Anthias: optional systemd service; MVP: **built-in** via `mvp-player.py` daemon thread (motion-aware, turns screen off when idle) |
 | Best for | Learning how each piece works | Rapid deployment of multiple devices |
 
