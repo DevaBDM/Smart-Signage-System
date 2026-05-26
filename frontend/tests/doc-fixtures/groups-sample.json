@@ -1,0 +1,44 @@
+[
+  {
+    "id": 1,
+    "name": "ECE Department",
+    "description": "Electrical & Computer Engineering - academic news, lab schedules, and faculty notices.",
+    "signage_state": "NORMAL"
+  },
+  {
+    "id": 2,
+    "name": "Main Library",
+    "description": "Public signage for the main campus library, study room availability, and event alerts.",
+    "signage_state": "NORMAL"
+  },
+  {
+    "id": 3,
+    "name": "Student Union",
+    "description": "Student activity center, club announcements, and general campus life updates.",
+    "signage_state": "NORMAL"
+  },
+  {
+    "id": 4,
+    "name": "Campus Security",
+    "description": "Security alerts, lost & found, and emergency protocol communications.",
+    "signage_state": "EMERGENCY"
+  },
+  {
+    "id": 5,
+    "name": "IT Services",
+    "description": "System status updates, help desk hours, and technology workshops.",
+    "signage_state": "NORMAL"
+  },
+  {
+    "id": 6,
+    "name": "Dining Services",
+    "description": "Menu boards for campus cafeterias, nutrition info, and dining hours.",
+    "signage_state": "NORMAL"
+  },
+  {
+    "id": 7,
+    "name": "Emergency Broadcast",
+    "description": "Highest priority group for campus-wide emergency alerts and critical safety info.",
+    "signage_state": "EMERGENCY"
+  }
+]

@@ -1,0 +1,62 @@
+{
+  "version": "5.3.0",
+  "objects": [
+    {
+      "type": "rect",
+      "version": "5.3.0",
+      "originX": "left",
+      "originY": "top",
+      "left": 0,
+      "top": 0,
+      "width": 1920,
+      "height": 1080,
+      "fill": "#0f172a",
+      "stroke": null,
+      "strokeWidth": 1,
+      "selectable": false,
+      "evented": false
+    },
+    {
+      "type": "textbox",
+      "version": "5.3.0",
+      "originX": "center",
+      "originY": "center",
+      "left": 960,
+      "top": 300,
+      "width": 1200,
+      "height": 120,
+      "fill": "#ffffff",
+      "text": "BIG ANNOUNCEMENT",
+      "fontSize": 120,
+      "fontWeight": "bold",
+      "fontFamily": "Impact",
+      "textAlign": "center"
+    },
+    {
+      "type": "rect",
+      "version": "5.3.0",
+      "originX": "center",
+      "originY": "center",
+      "left": 960,
+      "top": 450,
+      "width": 800,
+      "height": 10,
+      "fill": "#dc2626"
+    },
+    {
+      "type": "textbox",
+      "version": "5.3.0",
+      "originX": "center",
+      "originY": "top",
+      "left": 960,
+      "top": 550,
+      "width": 1400,
+      "height": 80,
+      "fill": "#e2e8f0",
+      "text": "Sub-header text goes here to provide more details about the event or notice.",
+      "fontSize": 48,
+      "fontFamily": "Segoe UI",
+      "textAlign": "center"
+    }
+  ]
+}

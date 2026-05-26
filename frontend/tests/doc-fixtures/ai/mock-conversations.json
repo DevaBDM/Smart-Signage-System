@@ -1,0 +1,78 @@
+[
+  {
+    "scenario_id": "doc-sample-1",
+    "topic": "ECE Research Symposium",
+    "conversations": [
+      {
+        "question": "What is the main topic of this post?",
+        "answer": "This post announces the **Annual ECE Research Symposium 2026**, taking place March 15 in the Main Hall. The agenda covers six research tracks ranging from embedded AI to power electronics, with two keynote speakers."
+      },
+      {
+        "question": "Who can attend the symposium?",
+        "answer": "It is open to faculty, graduate students, and invited industry partners. Undergraduates are welcome at the afternoon poster session in the atrium."
+      },
+      {
+        "question": "Is there a registration fee?",
+        "answer": "No. The symposium is free for all university members, but registration is required by Friday so catering numbers can be confirmed."
+      },
+      {
+        "question": "Where can I park if I am visiting from outside campus?",
+        "answer": "Visitor parking is available in **Lot D**, directly across from the Main Hall entrance. The QR code on the signage opens a printable visitor pass."
+      }
+    ]
+  },
+  {
+    "scenario_id": "doc-sample-2",
+    "topic": "Lab Safety & Calibration Guide",
+    "conversations": [
+      {
+        "question": "How do I report a maintenance issue?",
+        "answer": "Scan the QR code on the side of any signage display. It opens the IT Services maintenance portal with the device ID pre-filled."
+      },
+      {
+        "question": "What PPE is required to enter Lab 302?",
+        "answer": "A lab coat, safety goggles, and closed-toe shoes are mandatory at all times. Nitrile gloves are required for any chemical handling, and heat-resistant gloves are required when operating the furnace."
+      },
+      {
+        "question": "What are the lab hours on weekends?",
+        "answer": "The lab is closed on Sundays. Saturday hours are 10:00 to 16:00, and only authorised personnel may use the lab outside those windows."
+      },
+      {
+        "question": "Where is the calibration log stored?",
+        "answer": "Calibration logs are stored on the lab share at `\\\\labshare\\ECE302\\calibration\\<YYYY-MM>\\`. Each device has a sub-folder named after its asset tag."
+      }
+    ]
+  },
+  {
+    "scenario_id": "doc-sample-3",
+    "topic": "Dining Hall Spring Menu",
+    "conversations": [
+      {
+        "question": "Are there vegan options on Tuesday?",
+        "answer": "Yes. Tuesday's dinner — **Lentil Shepherd's Pie** — is fully vegan. Vegan substitutions are also available at the build-your-own bowl station every weekday."
+      },
+      {
+        "question": "What time does dinner end on weekends?",
+        "answer": "Weekend dinner service ends at **20:00**. Weekday dinner runs until 21:00."
+      },
+      {
+        "question": "Does the Tech Tower Burger contain dairy?",
+        "answer": "Yes — the Tech Tower Burger includes a brioche bun (dairy + gluten) and aged cheddar (dairy). A dairy-free version with a sourdough bun and vegan cheese can be ordered at the grill station."
+      }
+    ]
+  },
+  {
+    "scenario_id": "doc-sample-4",
+    "topic": "Emergency Severe Weather Alert",
+    "conversations": [
+      {
+        "question": "What should I do if I am off-campus when this alert is issued?",
+        "answer": "Do not travel to campus. Wait for an `emergency_mode_end` notification (push or SMS) before resuming your normal schedule. Faculty: contact your department chair if you are mid-class."
+      },
+      {
+        "question": "How long does emergency mode typically last?",
+        "answer": "Emergency mode persists until an admin manually clears it via **Admin → Groups**. Hardware-triggered emergencies (button press on a Pi) follow the same rule — they only clear when an admin sets the group's signage state back to NORMAL."
+      }
+    ]
+  }
+]

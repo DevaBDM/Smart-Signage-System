@@ -1,0 +1,112 @@
+[
+  {
+    "id": 1,
+    "device_name": "ECE-Lobby-Signage",
+    "location": "Building 5, Main Entrance",
+    "ip_address": "10.42.5.101",
+    "group_id": 1,
+    "group_ids": [1, 7],
+    "all_groups": false,
+    "status": "online",
+    "is_approved": true
+  },
+  {
+    "id": 2,
+    "device_name": "Library-Entry-F1",
+    "location": "Central Library South Lobby",
+    "ip_address": "10.42.12.50",
+    "group_id": 2,
+    "group_ids": [2, 7],
+    "all_groups": false,
+    "status": "online",
+    "is_approved": true
+  },
+  {
+    "id": 3,
+    "device_name": "Union-Cafe-Menu",
+    "location": "Student Union, Ground Floor",
+    "ip_address": "10.42.8.20",
+    "group_id": 3,
+    "group_ids": [3, 6],
+    "all_groups": false,
+    "status": "online",
+    "is_approved": true
+  },
+  {
+    "id": 4,
+    "device_name": "Security-Monitor-01",
+    "location": "Admin Block B, Room 102",
+    "ip_address": "10.42.1.15",
+    "group_id": 4,
+    "group_ids": [4, 7],
+    "all_groups": false,
+    "status": "online",
+    "is_approved": true
+  },
+  {
+    "id": 5,
+    "device_name": "IT-Service-Display",
+    "location": "Tech Tower, Room 204",
+    "ip_address": "10.42.15.110",
+    "group_id": 5,
+    "group_ids": [5, 1],
+    "all_groups": false,
+    "status": "online",
+    "is_approved": true
+  },
+  {
+    "id": 6,
+    "device_name": "ECE-Lab-302-Status",
+    "location": "Building 5, Lab 302",
+    "ip_address": "10.42.5.202",
+    "group_id": 1,
+    "group_ids": [1],
+    "all_groups": false,
+    "status": "online",
+    "is_approved": true
+  },
+  {
+    "id": 7,
+    "device_name": "Library-Quiet-Zone",
+    "location": "Library 3rd Floor Wing",
+    "ip_address": "10.42.12.88",
+    "group_id": 2,
+    "group_ids": [2],
+    "all_groups": false,
+    "status": "offline",
+    "is_approved": true
+  },
+  {
+    "id": 8,
+    "device_name": "North-Gate-Totem",
+    "location": "Campus North Entrance",
+    "ip_address": "10.42.0.5",
+    "group_id": 7,
+    "group_ids": [7, 3],
+    "all_groups": false,
+    "status": "online",
+    "is_approved": true
+  },
+  {
+    "id": 9,
+    "device_name": "Dining-Hall-A-Promo",
+    "location": "Central Dining Hall",
+    "ip_address": "10.42.10.12",
+    "group_id": 6,
+    "group_ids": [6, 7],
+    "all_groups": false,
+    "status": "online",
+    "is_approved": true
+  },
+  {
+    "id": 10,
+    "device_name": "Faculty-Lounge-TV",
+    "location": "Building 5, Room 501",
+    "ip_address": "10.42.5.50",
+    "group_id": 1,
+    "group_ids": [1, 7],
+    "all_groups": false,
+    "status": "offline",
+    "is_approved": true
+  }
+]
