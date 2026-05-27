@@ -101,6 +101,16 @@ router.get("/meta/group-creators", auth(["admin", "creator"]), async (req, res) 
 
 // GET single post — public for published feed posts; auth required otherwise
 router.get("/:id", async (req, res, next) => {
+  // Best-effort auth: populate req.user if a valid Bearer token is sent,
+  // but allow anonymous fallthrough for public-feed posts below.
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(" ")[1];
+  if (token) {
+    try {
+      req.user = require("jsonwebtoken").verify(token, process.env.JWT_SECRET);
+    } catch { /* ignore — treat as anonymous */ }
+  }
+
   const post = await prisma.post.findUnique({
     where: { id: Number(req.params.id) },
     include: { author: true, images: true, signage_metadata: true, signage_deployments: true, live_stream: true, attachments: true },

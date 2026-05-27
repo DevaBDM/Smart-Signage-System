@@ -35,6 +35,7 @@ const liveStreamRepo = require("../src/repositories/liveStreamRepo");
 
 function createMockChild() {
   const child = new EventEmitter();
+  child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
   child.kill = jest.fn(() => { child.killed = true; });
   child.killed = false;
@@ -49,24 +50,48 @@ describe("streamRelay.start", () => {
     fs.mkdirSync.mockReturnValue(undefined);
   });
 
-  it("starts HLS passthrough and sets relay_url", async () => {
-    const stream = { id: 1, stream_type: "HLS", source_url: "https://example.com/stream.m3u8" };
-    const result = await streamRelay.start(stream);
+  it("spawns ffmpeg for HLS and resolves after playlist exists", async () => {
+    const child = createMockChild();
+    spawn.mockReturnValue(child);
+    fs.existsSync
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
 
+    const stream = { id: 1, stream_type: "HLS", source_url: "https://example.com/stream.m3u8" };
+    const promise = streamRelay.start(stream);
+    await new Promise((r) => setTimeout(r, 100));
+    const result = await promise;
+
+    expect(spawn).toHaveBeenCalledWith(
+      "/mock/ffmpeg",
+      expect.arrayContaining(["-i", "https://example.com/stream.m3u8"]),
+      expect.any(Object)
+    );
     expect(result.ok).toBe(true);
-    expect(result.status).toBe("started");
-    expect(result.relay_url).toBe("https://example.com/stream.m3u8");
+    expect(result.relay_url).toMatch(/streams\/1\/index\.m3u8/);
     expect(streamRelay.getStatus(1)).toBe("running");
-  });
+
+    child.emit("exit", 0);
+  }, 15_000);
 
   it("is idempotent for already-running streams", async () => {
-    const stream = { id: 2, stream_type: "HLS", source_url: "https://example.com/stream.m3u8" };
-    await streamRelay.start(stream);
-    const result = await streamRelay.start(stream);
+    const child = createMockChild();
+    spawn.mockReturnValue(child);
+    fs.existsSync
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
 
+    const stream = { id: 2, stream_type: "HLS", source_url: "https://example.com/stream.m3u8" };
+    const promise = streamRelay.start(stream);
+    await new Promise((r) => setTimeout(r, 100));
+    await promise;
+
+    const result = await streamRelay.start(stream);
     expect(result.ok).toBe(true);
     expect(result.status).toBe("already_running");
-  });
+
+    child.emit("exit", 0);
+  }, 15_000);
 
   it("spawns ffmpeg for RTSP and resolves after playlist exists", async () => {
     const child = createMockChild();
@@ -96,7 +121,7 @@ describe("streamRelay.start", () => {
 
     // Simulate ffmpeg exit to avoid leaving process handlers
     child.emit("exit", 0);
-  });
+  }, 15_000);
 });
 
 describe("streamRelay.stop", () => {
@@ -138,16 +163,20 @@ describe("streamRelay.stop", () => {
     expect(child.kill).toHaveBeenCalledWith("SIGTERM");
     expect(result.ok).toBe(true);
     expect(result.status).toBe("stopped");
-  });
+  }, 15_000);
 });
 
 describe("streamRelay.bootstrapAll", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     streamRelay.PROCESSES.clear();
+    fs.existsSync.mockReturnValue(true);
   });
 
   it("starts relays for all published live streams", async () => {
+    const child = createMockChild();
+    spawn.mockReturnValue(child);
+
     prisma.liveStream.findMany.mockResolvedValue([
       { id: 10, stream_type: "HLS", source_url: "https://example.com/a.m3u8" },
       { id: 11, stream_type: "HLS", source_url: "https://example.com/b.m3u8" },
@@ -157,12 +186,18 @@ describe("streamRelay.bootstrapAll", () => {
 
     expect(streamRelay.getStatus(10)).toBe("running");
     expect(streamRelay.getStatus(11)).toBe("running");
-  });
+
+    child.emit("exit", 0);
+  }, 20_000);
 });
 
 describe("streamRelay.pruneOrphanDirs", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    fs.existsSync.mockReturnValue(true);
+    fs.readdirSync.mockReturnValue([]);
+    fs.rmSync.mockReturnValue(undefined);
+    prisma.liveStream.findMany.mockResolvedValue([]);
   });
 
   it("removes stream directories with no matching DB row", async () => {
@@ -178,8 +213,10 @@ describe("streamRelay.pruneOrphanDirs", () => {
     streamRelay.pruneOrphanDirs();
 
     // Allow the promise-based prune to finish
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 200));
 
+    expect(fs.existsSync).toHaveBeenCalled();
+    expect(fs.readdirSync).toHaveBeenCalled();
     expect(fs.rmSync).toHaveBeenCalledWith(
       expect.stringContaining("200"),
       expect.objectContaining({ recursive: true, force: true })

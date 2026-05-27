@@ -33,16 +33,16 @@ test.describe("Step-by-step manual screenshot generation", () => {
      ═══════════════════════════════════════════════════════════════ */
   test("1. Login flow — empty form → filled → admin dashboard", async ({ page }) => {
     await page.goto("/login");
-    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(300);
     await page.screenshot({ path: shot("01a-login-empty.png") });
 
-    await page.fill('input[name="username"]', "admin.root");
-    await page.fill('input[name="password"]', "AdminPass123!");
+    await page.fill('input[name="username"]', "test-admin");
+    await page.fill('input[name="password"]', "TestPass123!");
     await page.screenshot({ path: shot("01b-login-filled.png") });
 
     await page.click('button[type="submit"]');
     await page.waitForURL("**/admin", { timeout: 5000 });
-    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(300);
     await page.screenshot({ path: shot("01c-admin-dashboard.png") });
   });
 
@@ -50,9 +50,9 @@ test.describe("Step-by-step manual screenshot generation", () => {
      2. ADMIN — GROUPS (list → create form → created)
      ═══════════════════════════════════════════════════════════════ */
   test("2. Admin groups — step-by-step creation", async ({ page }) => {
-    await loginAs(page, "admin.root", "AdminPass123!", "**/admin");
+    await loginAs(page, "test-admin", "TestPass123!", "**/admin");
     await page.goto("/admin/groups");
-    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(300);
     await page.screenshot({ path: shot("02a-groups-list.png") });
 
     // Fill the Add Group form
@@ -62,7 +62,7 @@ test.describe("Step-by-step manual screenshot generation", () => {
 
     await page.locator('div:has(> h2:has-text("Add Group")) button[type="submit"]').click();
     await page.waitForTimeout(600);
-    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(300);
     await page.screenshot({ path: shot("02c-groups-created.png") });
   });
 
@@ -70,9 +70,9 @@ test.describe("Step-by-step manual screenshot generation", () => {
      3. ADMIN — USERS (list → create form → created)
      ═══════════════════════════════════════════════════════════════ */
   test("3. Admin users — step-by-step registration", async ({ page }) => {
-    await loginAs(page, "admin.root", "AdminPass123!", "**/admin");
+    await loginAs(page, "test-admin", "TestPass123!", "**/admin");
     await page.goto("/admin/users");
-    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(300);
     await page.screenshot({ path: shot("03a-users-list.png") });
 
     // Fill the Add User form (left card)
@@ -80,13 +80,15 @@ test.describe("Step-by-step manual screenshot generation", () => {
     await card.locator('input').nth(0).fill("research.director");
     await card.locator('input[type="password"]').fill("CreatorPass123!");
     await card.locator('select').nth(0).selectOption("creator");
-    // Primary group — pick ECE Department (id=1 from fixtures)
-    await card.locator('select').nth(1).selectOption("1");
+    // Primary group — pick first available group
+    const groupSelect = card.locator('select').nth(1);
+    const groupOptions = await groupSelect.locator('option').allTextContents();
+    if (groupOptions.length > 1) await groupSelect.selectOption({ index: 1 });
     await page.screenshot({ path: shot("03b-users-form-filled.png") });
 
     await card.locator('button[type="submit"]').click();
     await page.waitForTimeout(600);
-    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(300);
     await page.screenshot({ path: shot("03c-users-created.png") });
   });
 
@@ -94,9 +96,9 @@ test.describe("Step-by-step manual screenshot generation", () => {
      4. ADMIN — DEVICES (list → register → select → settings)
      ═══════════════════════════════════════════════════════════════ */
   test("4. Admin devices — registration & configuration", async ({ page }) => {
-    await loginAs(page, "admin.root", "AdminPass123!", "**/admin");
+    await loginAs(page, "test-admin", "TestPass123!", "**/admin");
     await page.goto("/admin/devices");
-    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(300);
     await page.screenshot({ path: shot("04a-devices-list.png") });
 
     // Fill Register Device form (left card)
@@ -104,12 +106,14 @@ test.describe("Step-by-step manual screenshot generation", () => {
     await regCard.locator('input').nth(1).fill("Research-Lab-Display");
     await regCard.locator('input').nth(2).fill("10.42.20.55");
     await regCard.locator('input').nth(3).fill("Research Tower, Room 101");
-    await regCard.locator('select').first().selectOption("1"); // ECE Department
+    const devGroupSelect = regCard.locator('select').first();
+    const devGroupOptions = await devGroupSelect.locator('option').allTextContents();
+    if (devGroupOptions.length > 1) await devGroupSelect.selectOption({ index: 1 });
     await page.screenshot({ path: shot("04b-devices-form-filled.png") });
 
     await regCard.locator('button[type="submit"]').click();
     await page.waitForTimeout(600);
-    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(300);
     await page.screenshot({ path: shot("04c-devices-created.png") });
 
     // Click the newly created device to open settings panel
@@ -125,13 +129,13 @@ test.describe("Step-by-step manual screenshot generation", () => {
      5. CREATOR — POSTS (dashboard → list → create → saved)
      ═══════════════════════════════════════════════════════════════ */
   test("5. Creator posts — creating a new post", async ({ page }) => {
-    await loginAs(page, "prof.thompson", "CreatorPass123!", "**/creator");
+    await loginAs(page, "test-creator", "TestPass123!", "**/creator");
     await page.goto("/creator");
-    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(300);
     await page.screenshot({ path: shot("05a-creator-dashboard.png") });
 
     await page.goto("/creator/posts");
-    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(300);
     await page.screenshot({ path: shot("05b-posts-list.png") });
 
     // Fill New Post form using top-level label selectors
@@ -167,7 +171,7 @@ test.describe("Step-by-step manual screenshot generation", () => {
     if (await saveBtn.isVisible().catch(() => false)) {
       await saveBtn.click();
       await page.waitForTimeout(1500);
-      await page.waitForLoadState("networkidle").catch(() => {});
+      await page.waitForTimeout(300);
     }
     await page.screenshot({ path: shot("05e-posts-saved.png"), fullPage: true });
   });
@@ -176,9 +180,9 @@ test.describe("Step-by-step manual screenshot generation", () => {
      6. CREATOR — DESIGNER (canvas → template → text)
      ═══════════════════════════════════════════════════════════════ */
   test("6. Creator designer — visual canvas workflow", async ({ page }) => {
-    await loginAs(page, "prof.thompson", "CreatorPass123!", "**/creator");
+    await loginAs(page, "test-creator", "TestPass123!", "**/creator");
     await page.goto("/creator/editor");
-    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(300);
     await page.screenshot({ path: shot("06a-designer-empty.png") });
 
     // Click a template if available
@@ -202,9 +206,9 @@ test.describe("Step-by-step manual screenshot generation", () => {
      7. CREATOR — SIGNAGE (select post → select devices → publish)
      ═══════════════════════════════════════════════════════════════ */
   test("7. Creator signage — publishing to devices", async ({ page }) => {
-    await loginAs(page, "prof.thompson", "CreatorPass123!", "**/creator");
+    await loginAs(page, "test-creator", "TestPass123!", "**/creator");
     await page.goto("/creator/signage");
-    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(300);
     await page.screenshot({ path: shot("07a-signage-list.png") });
 
     // Try to select the first post and first device
@@ -232,9 +236,9 @@ test.describe("Step-by-step manual screenshot generation", () => {
      8. CREATOR — LIVE STREAMS (list → create form)
      ═══════════════════════════════════════════════════════════════ */
   test("8. Creator live streams — creating a stream", async ({ page }) => {
-    await loginAs(page, "su.events", "CreatorPass123!", "**/creator");
+    await loginAs(page, "test-creator", "TestPass123!", "**/creator");
     await page.goto("/creator/live-streams");
-    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(300);
     await page.screenshot({ path: shot("08a-livestream-list.png") });
 
     // Fill new stream form if present
@@ -265,7 +269,7 @@ test.describe("Step-by-step manual screenshot generation", () => {
      ═══════════════════════════════════════════════════════════════ */
   test("9. Public feed — browsing posts", async ({ page }) => {
     await page.goto("/feed");
-    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(300);
     await page.screenshot({ path: shot("09a-feed.png") });
 
     // Click the first post card
@@ -273,7 +277,7 @@ test.describe("Step-by-step manual screenshot generation", () => {
     if (await card.isVisible().catch(() => false)) {
       await card.click();
       await page.waitForURL("**/post/**", { timeout: 5000 });
-      await page.waitForLoadState("networkidle");
+      await page.waitForTimeout(300);
       await page.screenshot({ path: shot("09b-post-detail.png") });
     }
   });
@@ -282,19 +286,19 @@ test.describe("Step-by-step manual screenshot generation", () => {
      10. EMERGENCY PROCEDURES (group emergency state → post detail)
      ═══════════════════════════════════════════════════════════════ */
   test("10. Emergency — group state and alert detail", async ({ page }) => {
-    await loginAs(page, "admin.root", "AdminPass123!", "**/admin");
+    await loginAs(page, "test-admin", "TestPass123!", "**/admin");
     await page.goto("/admin/groups");
-    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(300);
     // Show Emergency Broadcast group in EMERGENCY state
     await page.screenshot({ path: shot("10a-emergency-groups.png") });
 
     await page.goto("/feed");
-    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(300);
     const card = page.locator('text=EMERGENCY: SEVERE WEATHER ALERT').first();
     if (await card.isVisible().catch(() => false)) {
       await card.click();
       await page.waitForURL("**/post/**", { timeout: 5000 });
-      await page.waitForLoadState("networkidle");
+      await page.waitForTimeout(300);
       await page.screenshot({ path: shot("10b-emergency-post.png") });
     }
   });
@@ -303,9 +307,9 @@ test.describe("Step-by-step manual screenshot generation", () => {
      11. ADMIN — EDITING GROUPS (toggle emergency state)
      ═══════════════════════════════════════════════════════════════ */
   test("11. Admin groups — editing existing group state", async ({ page }) => {
-    await loginAs(page, "admin.root", "AdminPass123!", "**/admin");
+    await loginAs(page, "test-admin", "TestPass123!", "**/admin");
     await page.goto("/admin/groups");
-    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(300);
     await page.screenshot({ path: shot("11a-groups-table.png"), fullPage: true });
 
     // Open the inline state dropdown of the first group row (if rendered as a select)
@@ -329,9 +333,9 @@ test.describe("Step-by-step manual screenshot generation", () => {
      12. ADMIN — EDITING USERS (inline role / approval changes)
      ═══════════════════════════════════════════════════════════════ */
   test("12. Admin users — editing existing user", async ({ page }) => {
-    await loginAs(page, "admin.root", "AdminPass123!", "**/admin");
+    await loginAs(page, "test-admin", "TestPass123!", "**/admin");
     await page.goto("/admin/users");
-    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(300);
     await page.screenshot({ path: shot("12a-users-table.png"), fullPage: true });
 
     // Show the existing user table with inline editable fields
@@ -346,9 +350,9 @@ test.describe("Step-by-step manual screenshot generation", () => {
      13. ADMIN — EDITING DEVICE (select → settings → emergency asset)
      ═══════════════════════════════════════════════════════════════ */
   test("13. Admin devices — editing & emergency asset upload", async ({ page }) => {
-    await loginAs(page, "admin.root", "AdminPass123!", "**/admin");
+    await loginAs(page, "test-admin", "TestPass123!", "**/admin");
     await page.goto("/admin/devices");
-    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(300);
 
     // Click the first device row to load the Settings panel
     const row = page.locator('table tbody tr, [data-test="device-row"]').first();
@@ -377,9 +381,9 @@ test.describe("Step-by-step manual screenshot generation", () => {
      14. CREATOR — MARKDOWN DESIGNER MODE
      ═══════════════════════════════════════════════════════════════ */
   test("14. Creator designer — markdown slide mode", async ({ page }) => {
-    await loginAs(page, "prof.thompson", "CreatorPass123!", "**/creator");
+    await loginAs(page, "test-creator", "TestPass123!", "**/creator");
     await page.goto("/creator/editor");
-    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(300);
 
     // Click the Markdown mode toggle
     const mdToggle = page.locator('button:has-text("Markdown"), label:has-text("Markdown") input').first();
@@ -403,14 +407,14 @@ test.describe("Step-by-step manual screenshot generation", () => {
      ═══════════════════════════════════════════════════════════════ */
   test("15. Post detail — opening AI assistant chat", async ({ page }) => {
     await page.goto("/feed");
-    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(300);
 
     // Open the first post detail
     const card = page.locator('a[href^="/post/"]').first();
     if (await card.isVisible().catch(() => false)) {
       await card.click();
       await page.waitForURL("**/post/**", { timeout: 5000 });
-      await page.waitForLoadState("networkidle");
+      await page.waitForTimeout(300);
     }
     await page.screenshot({ path: shot("15a-post-detail-full.png"), fullPage: true });
 
@@ -438,9 +442,9 @@ test.describe("Step-by-step manual screenshot generation", () => {
      (attachments require an already-saved post)
      ═══════════════════════════════════════════════════════════════ */
   test("16. Creator posts — uploading attachment to existing post", async ({ page }) => {
-    await loginAs(page, "prof.thompson", "CreatorPass123!", "**/creator");
+    await loginAs(page, "test-creator", "TestPass123!", "**/creator");
     await page.goto("/creator/posts");
-    await page.waitForLoadState("networkidle");
+    await page.waitForSelector('h1:has-text("My Posts")', { timeout: 15000 }).catch(() => {});
 
     // Click the edit (pencil) button on the first post row
     const editBtn = page.locator('button[aria-label*="Edit"], button:has-text("Edit")').or(
@@ -477,9 +481,9 @@ test.describe("Step-by-step manual screenshot generation", () => {
      17. CREATOR — LIVE STREAM EDIT / START / STOP / DELETE
      ═══════════════════════════════════════════════════════════════ */
   test("17. Creator live streams — editing & lifecycle", async ({ page }) => {
-    await loginAs(page, "lib.director", "CreatorPass123!", "**/creator");
+    await loginAs(page, "test-creator", "TestPass123!", "**/creator");
     await page.goto("/creator/live-streams");
-    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(300);
     await page.screenshot({ path: shot("17a-livestreams-table.png"), fullPage: true });
 
     // Click an existing stream's Edit button

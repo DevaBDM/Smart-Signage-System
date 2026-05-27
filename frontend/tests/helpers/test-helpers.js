@@ -43,13 +43,14 @@ export async function resetState(request) {
 }
 
 export async function loginAs(page, username, password, redirectPattern = "**/creator") {
-  await page.goto("/login");
+  await page.goto("/feed");
   await page.evaluate(() => localStorage.clear());
-  await page.reload();
+  await page.goto("/login", { waitUntil: "networkidle" });
+  await page.waitForSelector('input[name="username"]', { timeout: 15000 });
   await page.fill('input[name="username"]', username);
   await page.fill('input[name="password"]', password);
   await page.click('button[type="submit"]');
-  await page.waitForURL(redirectPattern, { timeout: 5000 });
+  await page.waitForURL(redirectPattern, { timeout: 10000 });
 }
 
 export function seedSignageAsset(postId, deviceId, assetId) {

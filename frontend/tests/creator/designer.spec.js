@@ -6,8 +6,6 @@ test.describe.configure({ mode: "serial" });
 test.describe("Signage Designer UI tests", () => {
   test.beforeEach(async ({ page, request }) => {
     await resetState(request);
-    await page.goto("/login");
-    await page.evaluate(() => localStorage.clear());
     await loginAs(page, "test-creator", "TestPass123!");
   });
 

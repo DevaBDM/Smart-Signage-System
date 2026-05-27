@@ -71,6 +71,7 @@ async function createPost({
   allowed_on_feed = false,
   allowed_on_signage = false,
   signage_state = "NORMAL",
+  live_stream_id = null,
 } = {}) {
   return prisma.post.create({
     data: {
@@ -82,6 +83,7 @@ async function createPost({
       allowed_on_feed,
       allowed_on_signage,
       signage_state,
+      ...(live_stream_id != null && { live_stream_id }),
       signage_metadata: {
         create: {
           duration_seconds: 10,

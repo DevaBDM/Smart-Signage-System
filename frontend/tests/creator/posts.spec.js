@@ -451,13 +451,7 @@ test.describe("Admin Posts UI tests", () => {
 test.describe("Creator My Posts UI tests", () => {
   test.beforeEach(async ({ page, request }) => {
     await resetState(request);
-    await page.goto("/login");
-    await page.evaluate(() => localStorage.clear());
-    await page.reload();
-    await page.fill('input[name="username"]', "test-creator");
-    await page.fill('input[name="password"]', "TestPass123!");
-    await page.click('button[type="submit"]');
-    await page.waitForURL("**/creator", { timeout: 5000 });
+    await loginAs(page, "test-creator", "TestPass123!");
   });
 
   test("1. Page loads with My Posts heading and empty state", async ({ page }) => {
@@ -723,13 +717,7 @@ test.describe("Creator My Posts UI tests", () => {
     });
     expect(postRes.ok()).toBeTruthy();
 
-    await page.evaluate(() => localStorage.clear());
-    await page.goto("/login");
-    await page.waitForLoadState("networkidle");
-    await page.fill('input[name="username"]', `creator-b-${ts}`);
-    await page.fill('input[name="password"]', "TestPass123!");
-    await page.click('button[type="submit"]');
-    await page.waitForURL("**/creator", { timeout: 5000 });
+    await loginAs(page, `creator-b-${ts}`, "TestPass123!");
 
     await page.goto("/creator/posts");
     await page.waitForLoadState("networkidle");
@@ -856,14 +844,7 @@ test.describe("Creator My Posts UI tests", () => {
     });
     expect(postB.ok()).toBeTruthy();
 
-    await page.goto("/login");
-    await page.evaluate(() => localStorage.clear());
-    await page.reload();
-    await page.waitForLoadState("networkidle");
-    await page.fill('input[name="username"]', `cf-creator-a-${ts}`);
-    await page.fill('input[name="password"]', "TestPass123!");
-    await page.click('button[type="submit"]');
-    await page.waitForURL("**/creator", { timeout: 5000 });
+    await loginAs(page, `cf-creator-a-${ts}`, "TestPass123!");
 
     await page.goto("/creator/posts");
     await page.waitForLoadState("networkidle");

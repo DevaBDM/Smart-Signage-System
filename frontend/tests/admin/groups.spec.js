@@ -134,7 +134,7 @@ test.describe("Admin Group tests", () => {
 
     const updateRes = await request.put(`${API_URL}/groups/${grp.id}`, {
       headers: { Authorization: `Bearer ${adminToken}` },
-      data: { signage_state: "EMERGENCY" },
+      data: { signage_state: "BREAKING_NEWS" },
     });
     expect(updateRes.ok()).toBeTruthy();
 
