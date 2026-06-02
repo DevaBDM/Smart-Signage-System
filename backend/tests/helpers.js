@@ -1,4 +1,5 @@
 const fs = require("fs");
+const http = require("http");
 const path = require("path");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -165,6 +166,36 @@ async function createLiveStream({
   });
 }
 
+/**
+ * Create a real HTTP + Socket.IO server on a random port.
+ * Returns { server, port, socketCleanup, getPort, ready }.
+ */
+function createTestServer() {
+  const initSocket = require("../src/websocket/socket");
+  const app = require("../src/app");
+  const server = http.createServer(app);
+  const { emitToDeviceAck, cleanup } = initSocket(server);
+  const piBridge = require("../src/services/piBridge");
+  piBridge.setEmitter(emitToDeviceAck);
+  const ready = new Promise((resolve) => {
+    server.listen(0, "127.0.0.1", () => {
+      resolve(server.address().port);
+    });
+  });
+  return { server, cleanup, ready };
+}
+
+/** Wait for a socket event with a timeout. */
+function waitForEvent(socket, event, timeoutMs = 5000) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Timeout waiting for ${event}`)), timeoutMs);
+    socket.once(event, (data) => {
+      clearTimeout(timer);
+      resolve(data);
+    });
+  });
+}
+
 module.exports = {
   prisma,
   createGroup,
@@ -173,5 +204,7 @@ module.exports = {
   createPostImage,
   createDevice,
   createLiveStream,
+  createTestServer,
+  waitForEvent,
   JWT_SECRET,
 };

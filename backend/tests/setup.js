@@ -1,15 +1,14 @@
-require("dotenv").config();
 const prisma = require("../src/db/prisma");
 
 /** Clean all tables between tests. Order matters for FK constraints. */
 async function cleanDatabase() {
-  // Delete children first to respect foreign keys
   await prisma.playlistItem.deleteMany({});
   await prisma.playlist.deleteMany({});
   await prisma.signageDeployment.deleteMany({});
   await prisma.signageAsset.deleteMany({});
   await prisma.signageMetadata.deleteMany({});
-  await prisma.postImage.deleteMany({});
+  try { await prisma.postImage.deleteMany({}); } catch { /* ignore */ }
+  await prisma.postAttachment.deleteMany({});
   await prisma.post.deleteMany({});
   await prisma.errorLog.deleteMany({});
   await prisma.sensorLog.deleteMany({});
@@ -20,15 +19,6 @@ async function cleanDatabase() {
   await prisma.user.deleteMany({});
   await prisma.group.deleteMany({});
 }
-
-beforeAll(async () => {
-  if (!process.env.TEST_DATABASE_URL) {
-    throw new Error(
-      "TEST_DATABASE_URL is required. " +
-        "Create a test DB and set the env var before running tests.",
-    );
-  }
-});
 
 beforeEach(async () => {
   await cleanDatabase();

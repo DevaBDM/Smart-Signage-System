@@ -1,41 +1,8 @@
-const http = require("http");
 const request = require("supertest");
-const { io } = require("socket.io-client");
 const app = require("../src/app");
-const initSocket = require("../src/websocket/socket");
-const piBridge = require("../src/services/piBridge");
+const { io } = require("socket.io-client");
 const prisma = require("../src/db/prisma");
-const { createDevice, createGroup, createUser, createPost, createPostImage } = require("./helpers");
-
-/** Create a fresh HTTP + Socket.IO server for each test to avoid port conflicts. */
-function createTestServer() {
-  const server = http.createServer(app);
-  const { emitToDeviceAck, cleanup } = initSocket(server);
-  piBridge.setEmitter(emitToDeviceAck);
-  return { server, cleanup };
-}
-
-/** Wait for a socket event with a timeout. */
-function waitForEvent(socket, event, timeoutMs = 5000) {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`Timeout waiting for ${event}`)), timeoutMs);
-    socket.once(event, (data) => {
-      clearTimeout(timer);
-      resolve(data);
-    });
-  });
-}
-
-/** Wait for socket disconnect with a timeout. */
-function waitForDisconnect(socket, timeoutMs = 5000) {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("Timeout waiting for disconnect")), timeoutMs);
-    socket.once("disconnect", () => {
-      clearTimeout(timer);
-      resolve();
-    });
-  });
-}
+const { createDevice, createGroup, createUser, createPost, createPostImage, createTestServer, waitForEvent } = require("./helpers");
 
 describe("Device Authentication & Pi Script Alignment", () => {
   let server;
@@ -47,10 +14,7 @@ describe("Device Authentication & Pi Script Alignment", () => {
     const result = createTestServer();
     server = result.server;
     socketCleanup = result.cleanup;
-    await new Promise((resolve) => {
-      server.listen(0, "127.0.0.1", resolve);
-    });
-    serverPort = server.address().port;
+    serverPort = await result.ready;
   });
 
   afterAll(async () => {
@@ -60,19 +24,9 @@ describe("Device Authentication & Pi Script Alignment", () => {
     }
     if (socketCleanup) socketCleanup();
     await new Promise((resolve) => server.close(resolve));
-    piBridge.setEmitter(null);
   });
 
   beforeEach(async () => {
-    // Clean DB tables that matter for these tests
-    await prisma.signageDeployment.deleteMany({});
-    await prisma.signageAsset.deleteMany({});
-    await prisma.postImage.deleteMany({});
-    await prisma.post.deleteMany({});
-    await prisma.device.deleteMany({});
-    await prisma.user.deleteMany({});
-    await prisma.group.deleteMany({});
-
     if (clientSocket) {
       clientSocket.removeAllListeners();
       clientSocket.close();
