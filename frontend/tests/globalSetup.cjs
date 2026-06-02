@@ -1,24 +1,66 @@
-/** Playwright global setup — clean and seed the test database before e2e runs. */
+/** Playwright global setup — ensure test DB exists, push schema, clean and seed. */
 const path = require("path");
+const { execSync, exec } = require("child_process");
 const { createRequire } = require("module");
 
 const backendRoot = path.resolve(__dirname, "../../backend");
 const backendRequire = createRequire(path.join(backendRoot, "package.json"));
 
-const { PrismaClient } = backendRequire("@prisma/client");
-const bcrypt = backendRequire("bcryptjs");
 backendRequire("dotenv").config({ path: path.join(backendRoot, ".env") });
 
-const TEST_DB_URL = process.env.TEST_DATABASE_URL;
+const TEST_DB_URL = (process.env.TEST_DATABASE_URL || "").replace(/^"(.*)"$/, "$1");
 if (!TEST_DB_URL) {
   throw new Error("TEST_DATABASE_URL is not set. Check your backend/.env file.");
 }
+
+async function ensureDatabaseExists() {
+  const url = new URL(TEST_DB_URL);
+  const dbName = decodeURIComponent(url.pathname.slice(1));
+
+  try {
+    const { Client } = backendRequire("pg");
+    const adminUrl = `postgresql://postgres@${url.hostname}:${url.port}/postgres`;
+    const client = new Client({ connectionString: adminUrl });
+    await client.connect();
+    try {
+      await client.query(`CREATE DATABASE "${dbName}"`);
+      console.log(`[globalSetup] Created database: ${dbName}`);
+    } catch (e) {
+      if (e.code === "42P04") {
+        console.log(`[globalSetup] Database "${dbName}" already exists`);
+      } else {
+        console.error(`[globalSetup] DB error: ${e.message}`);
+      }
+    }
+    await client.end();
+  } catch (e) {
+    console.warn(`[globalSetup] Could not auto-create DB: ${e.message}`);
+  }
+}
+
+async function pushSchema() {
+  return new Promise((resolve, reject) => {
+    const child = exec(`npx prisma db push`, {
+      cwd: backendRoot,
+      env: { ...process.env, DATABASE_URL: TEST_DB_URL },
+      stdio: "pipe",
+    }, (err, stdout) => {
+      if (err) reject(err);
+      else resolve(stdout);
+    });
+    child.stdout.on("data", (d) => process.stdout.write(d));
+    child.stderr.on("data", (d) => process.stderr.write(d));
+  });
+}
+
+const { PrismaClient } = backendRequire("@prisma/client");
+const bcrypt = backendRequire("bcryptjs");
 
 async function safeDelete(prisma, model) {
   try {
     await prisma[model].deleteMany({});
   } catch (e) {
-    if (e.code !== "P2021") throw e; // ignore "table does not exist"
+    if (e.code !== "P2021") throw e;
   }
 }
 
@@ -29,6 +71,7 @@ async function cleanDatabase(prisma) {
   await safeDelete(prisma, "signageAsset");
   await safeDelete(prisma, "signageMetadata");
   await safeDelete(prisma, "postImage");
+  await safeDelete(prisma, "postAttachment");
   await safeDelete(prisma, "post");
   await safeDelete(prisma, "liveStream");
   await safeDelete(prisma, "errorLog");
@@ -68,6 +111,9 @@ async function seedUsers(prisma) {
 }
 
 module.exports = async function globalSetup() {
+  await ensureDatabaseExists();
+  await pushSchema();
+
   const prisma = new PrismaClient({
     datasources: { db: { url: TEST_DB_URL } },
   });

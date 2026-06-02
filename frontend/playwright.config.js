@@ -12,9 +12,11 @@ export default defineConfig({
   workers: 1,
   reporter: "list",
   timeout: 60_000,
+  outputDir: "./test-results",
   use: {
     baseURL: "http://localhost:5173",
     trace: "on-first-retry",
+    screenshot: "only-on-failure",
   },
   webServer: [
     {
@@ -22,6 +24,7 @@ export default defineConfig({
       url: "http://localhost:5001/api/health",
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
+      env: { NODE_ENV: "test" },
     },
     {
       command: "npm run dev",

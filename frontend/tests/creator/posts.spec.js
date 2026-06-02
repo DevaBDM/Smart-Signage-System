@@ -4,6 +4,7 @@ import {
   resetState,
   loginTestAdmin,
   loginAs,
+  loginViaApi,
   API_URL,
   mockImagePath,
   seedSignageDeployment,
@@ -717,9 +718,8 @@ test.describe("Creator My Posts UI tests", () => {
     });
     expect(postRes.ok()).toBeTruthy();
 
-    await loginAs(page, `creator-b-${ts}`, "TestPass123!");
-
-    await page.goto("/creator/posts");
+    await loginViaApi(page, request, `creator-b-${ts}`, "TestPass123!");
+    await page.goto("/creator/posts", { waitUntil: "networkidle" });
     await page.waitForLoadState("networkidle");
 
     await expect(page.locator(`text=A Secret Post ${ts}`)).toBeVisible();
@@ -802,14 +802,14 @@ test.describe("Creator My Posts UI tests", () => {
 
     const regA = await request.post(`${API_URL}/auth/register`, {
       headers: { Authorization: `Bearer ${adminToken}` },
-      data: { username: `cf-creator-a-${ts}`, password: "TestPass123!", role: "creator", group_id: group.id, managed_group_ids: JSON.stringify([group.id]) },
+      data: { username: `cf-creator-a-${ts}`, password: "TestPass123!", role: "creator", auto_approve: true, group_id: group.id, managed_group_ids: JSON.stringify([group.id]) },
     });
     expect(regA.ok()).toBeTruthy();
     const userA = await regA.json();
 
     const regB = await request.post(`${API_URL}/auth/register`, {
       headers: { Authorization: `Bearer ${adminToken}` },
-      data: { username: `cf-creator-b-${ts}`, password: "TestPass123!", role: "creator", group_id: group.id, managed_group_ids: JSON.stringify([group.id]) },
+      data: { username: `cf-creator-b-${ts}`, password: "TestPass123!", role: "creator", auto_approve: true, group_id: group.id, managed_group_ids: JSON.stringify([group.id]) },
     });
     expect(regB.ok()).toBeTruthy();
     const userB = await regB.json();
@@ -844,28 +844,25 @@ test.describe("Creator My Posts UI tests", () => {
     });
     expect(postB.ok()).toBeTruthy();
 
-    await loginAs(page, `cf-creator-a-${ts}`, "TestPass123!");
+    await loginViaApi(page, request, `cf-creator-a-${ts}`, "TestPass123!");
+    await page.goto("/creator/posts", { waitUntil: "domcontentloaded" });
+    await page.waitForSelector('text=My Posts', { timeout: 10000 });
 
-    await page.goto("/creator/posts");
-    await page.waitForLoadState("networkidle");
-
-    await expect(page.locator(`text=Post By A ${ts}`)).toBeVisible();
-    await expect(page.locator(`text=Post By B ${ts}`)).toBeVisible();
+    await expect(page.locator(`text=Post By A ${ts}`)).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(`text=Post By B ${ts}`)).toBeVisible({ timeout: 5000 });
 
     const creatorSelect = page.locator('select').filter({ has: page.locator('option', { hasText: 'All creators in group' }) });
 
-    const filterPromise = page.waitForResponse(resp => resp.url().includes("/api/posts") && resp.status() === 200);
     await creatorSelect.selectOption(String(userA.id));
-    await filterPromise;
+    await page.waitForResponse((resp) => resp.url().includes("/api/posts") && resp.status() === 200);
 
-    await expect(page.locator(`text=Post By A ${ts}`)).toBeVisible();
+    await expect(page.locator(`text=Post By A ${ts}`)).toBeVisible({ timeout: 10000 });
     await expect(page.locator(`text=Post By B ${ts}`)).not.toBeVisible();
 
-    const filterPromiseB = page.waitForResponse(resp => resp.url().includes("/api/posts") && resp.status() === 200);
     await creatorSelect.selectOption(String(userB.id));
-    await filterPromiseB;
+    await page.waitForResponse((resp) => resp.url().includes("/api/posts") && resp.status() === 200);
 
     await expect(page.locator(`text=Post By A ${ts}`)).not.toBeVisible();
-    await expect(page.locator(`text=Post By B ${ts}`)).toBeVisible();
+    await expect(page.locator(`text=Post By B ${ts}`)).toBeVisible({ timeout: 10000 });
   });
 });

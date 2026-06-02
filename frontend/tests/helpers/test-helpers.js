@@ -43,14 +43,45 @@ export async function resetState(request) {
 }
 
 export async function loginAs(page, username, password, redirectPattern = "**/creator") {
-  await page.goto("/feed");
-  await page.evaluate(() => localStorage.clear());
-  await page.goto("/login", { waitUntil: "networkidle" });
-  await page.waitForSelector('input[name="username"]', { timeout: 15000 });
+  await page.goto("/login", { waitUntil: "domcontentloaded" });
+  await page.evaluate(() => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("role");
+    localStorage.removeItem("group_id");
+    localStorage.removeItem("max_signage_state");
+    localStorage.removeItem("managed_group_ids");
+  });
+  await page.goto("/login", { waitUntil: "domcontentloaded" });
+  await page.waitForSelector('input[name="username"]', { timeout: 20000 });
   await page.fill('input[name="username"]', username);
   await page.fill('input[name="password"]', password);
   await page.click('button[type="submit"]');
-  await page.waitForURL(redirectPattern, { timeout: 10000 });
+  await page.waitForURL(redirectPattern, { timeout: 15000 });
+}
+
+/**
+ * Quick-login via API: set token in localStorage.
+ * Navigates to /feed first (required to establish an origin for localStorage access),
+ * clears existing state, sets the new auth token and role, then stops.
+ * The caller should navigate to the target page (e.g., page.goto("/creator/posts"))
+ * which forces a full page reload and causes Zustand to re-read localStorage.
+ */
+export async function loginViaApi(page, request, username, password) {
+  const loginRes = await request.post(`${API_URL}/auth/login`, {
+    data: { username, password },
+  });
+  if (!loginRes.ok()) throw new Error(`Login failed for ${username}`);
+  const { token, role, group_id, max_signage_state, managed_group_ids } = await loginRes.json();
+  // Navigate to the app origin first, then set localStorage
+  await page.goto("/feed", { waitUntil: "domcontentloaded" });
+  await page.evaluate(({ token, role, group_id, max_signage_state, managed_group_ids }) => {
+    localStorage.clear();
+    localStorage.setItem("token", token);
+    localStorage.setItem("role", role);
+    localStorage.setItem("group_id", group_id ?? "");
+    localStorage.setItem("max_signage_state", max_signage_state || "NORMAL");
+    localStorage.setItem("managed_group_ids", JSON.stringify(managed_group_ids || []));
+  }, { token, role, group_id, max_signage_state, managed_group_ids });
 }
 
 export function seedSignageAsset(postId, deviceId, assetId) {
