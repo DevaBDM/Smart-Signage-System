@@ -168,7 +168,7 @@ async function createLiveStream({
 
 /**
  * Create a real HTTP + Socket.IO server on a random port.
- * Returns { server, port, socketCleanup, getPort, ready }.
+ * Returns { server, cleanup, ready } where `await ready` resolves to the port number.
  */
 function createTestServer() {
   const initSocket = require("../src/websocket/socket");

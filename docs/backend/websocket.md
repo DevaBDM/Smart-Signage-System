@@ -43,6 +43,7 @@ sequenceDiagram
 - Unknown device tokens are rejected immediately
 - Once a device has a token, all future connections must present it
 - Device ID in heartbeat must match `socket.verifiedDeviceId`
+- Device ID in `sensor_update` and `error_log` must match `socket.verifiedDeviceId`
 
 ---
 
@@ -90,13 +91,13 @@ sequenceDiagram
 
 Payload: `{ device_id, motion, brightness, rain }`
 
-Directly inserts a `SensorLog` record. Errors are silently caught (`.catch(() => {})`) to prevent socket disconnection on DB issues.
+Verifies `device_id` matches `socket.verifiedDeviceId`, then inserts a `SensorLog` record. On mismatch the socket is disconnected immediately. Errors are silently caught (`.catch(() => {})`) to prevent socket disconnection on DB issues.
 
 ### `error_log`
 
 Payload: `{ device_id, error_type, message }`
 
-Inserts an `ErrorLog` record for remote monitoring.
+Verifies `device_id` matches `socket.verifiedDeviceId`, then inserts an `ErrorLog` record. On mismatch the socket is disconnected immediately.
 
 ### `playlist_ack`
 
