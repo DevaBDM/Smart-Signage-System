@@ -1,4 +1,4 @@
-# Chapter 3
+# Chapter 3 {.title}
 
 # Methodology
 
@@ -60,6 +60,7 @@ We derived the functional requirements from the problem statement in
 Section 1.2 and the research gaps in Table 2.3. Table 3.1 lists the
 primary functional requirements and their priorities.
 
+<caption>Functional requirements.</caption>
 | ID | Requirement | Priority | Validation Method |
 |----|----|----|----|
 | FR-1 | The system shall sense ambient light, motion, and weather input via Arduino sensors | High | Hardware prototype; serial monitor verification |
@@ -73,10 +74,10 @@ primary functional requirements and their priorities.
 | FR-9 | The system shall prevent concurrent device control conflicts via control locks | Medium | Backend integration tests; priority ordering tests |
 | FR-10 | The system shall support offline playback with 72-hour content cache | Medium | Simulated server disconnection test; cache verification |
 
-Functional requirements.
 
 ### Non-Functional Requirements
 
+<caption>Non-functional requirements.</caption>
 | ID | Requirement | Target | Validation Method |
 |----|----|----|----|
 | NFR-1 | Sensor data latency (Arduino to Debian node) | \< 1 s | Serial monitor timestamp analysis |
@@ -90,7 +91,6 @@ Functional requirements.
 | NFR-9 | Security vulnerability severity | Zero P0 (critical) | Security audit; penetration testing |
 | NFR-10 | Data persistence reliability | ACID compliance | Prisma transaction tests; PostgreSQL WAL verification |
 
-Non-functional requirements.
 
 ## High-Level Architecture
 
@@ -169,6 +169,7 @@ buildings and 10 open areas, served by a single Ubuntu server with
 dual-NIC Layer 3 isolation. Table 3.3 summarizes the component
 inventory.
 
+<caption>Campus-wide component inventory.</caption>
 | Component | Quantity per Node | Campus Total | Notes |
 |----|----|----|----|
 | Debian edge node (simulated Pi) | 1 | 130 | Laptops or Raspberry Pi 4B in production |
@@ -182,7 +183,6 @@ inventory.
 | Edge network switch | \- | 10 | One per building cluster |
 | Central server | \- | 1 | Dual-NIC Ubuntu 22.04 LTS |
 
-Campus-wide component inventory.
 
 Our prototype validated the architecture at reduced scale: two Debian 13
 laptops (one running Anthias simulation, one running MPV simulation),
@@ -271,6 +271,4 @@ refactor), demonstrating our structured commit history over the
 development period.</p></figcaption>
 </figure>
 
-**Fig. 3.2** Terminal capture of the Git log showing the last 20 commits
-with Conventional Commit prefixes (feat, fix, docs, test, refactor),
-demonstrating our structured commit history over the development period.
+\newpage

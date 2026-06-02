@@ -1,4 +1,4 @@
-# Chapter 2
+# Chapter 2 {.title}
 
 # Literature Review and Related Work
 
@@ -97,6 +97,7 @@ per-screen recurring costs that scale linearly with deployment size.
 Vendor lock-in further traps content and schedules in proprietary
 formats, making migration costly.
 
+<caption>Commercial digital signage platform comparison.</caption>
 | Platform | Monthly Cost/Screen | Annual Cost (130 screens) | 5-Year TCO | Free Tier | Open Source | Sensor Integration | On-Premises | RBAC | Live Stream | Network Design |
 |----|----|----|----|----|----|----|----|----|----|----|
 | Yodeck | \$13.99 | \$21,824 | \$109,120 | No | No | No | No | No | No | No |
@@ -105,7 +106,6 @@ formats, making migration costly.
 | ScreenCloud | \$20.00 | \$31,200 | \$156,000 | No | No | No | No | No | No | No |
 | Our System | \$0.00 | \$0 | \$249,000 (hardware + energy) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 
-Commercial digital signage platform comparison.
 
 ### Research Gaps Identified
 
@@ -192,6 +192,7 @@ management and network communication.
 We evaluated four serial protocols for the Pi-Arduino link: USB CDC,
 UART via GPIO, I2C, and SPI.
 
+<caption>Serial protocol comparison for the Pi-Arduino data link.</caption>
 | Protocol | Max Speed | Wiring | Hot-Plug | Max Distance | Linux Driver | Python Library | Complexity | Selected |
 |----|----|----|----|----|----|----|----|----|
 | USB CDC | 12 Mbps | 1 cable | Yes | 5 m | Native (`cdc_acm`) | `pyserial` | Low | **Yes** |
@@ -199,7 +200,6 @@ UART via GPIO, I2C, and SPI.
 | I2C | 3.4 Mbps | 2 wires + GND | No | 1 m | Native (`i2c-dev`) | `smbus2` | High | No |
 | SPI | 25 Mbps | 4 wires | No | 0.5 m | Native (`spidev`) | `spidev` | High | No |
 
-Serial protocol comparison for the Pi-Arduino data link.
 
 We selected USB CDC for five reasons. First, it is plug-and-play: no
 manual pin configuration or level shifting is required (the Pi GPIO
@@ -394,6 +394,7 @@ between the campus-facing network and the signage-facing network.
 
 ## Research Gaps Summary
 
+<caption>Research gaps and corresponding project objectives.</caption>
 | \# | Research Gap | Objective Addressed | Section |
 |----|----|----|----|
 | 1 | No open-source platform combines sensing, CMS, and RBAC | Objective 2 (full-stack CMS with RBAC) | 4.3 |
@@ -404,10 +405,11 @@ between the campus-facing network and the signage-facing network.
 | 6 | No emergency broadcast with hardware trigger and group override | Objective 6 (emergency broadcast system) | 4.3.10 |
 | 7 | No concurrency control for simultaneous multi-user device access | Objective 7 (concurrency control) | 4.3.6 |
 
-Research gaps and corresponding project objectives.
 
 These gaps, combined with the cost analysis in Table 2.1, establish the
 clear need for a new system architecture that unifies environmental
 sensing, intelligent display control, secure content management, and
 live stream distribution in a single open-source platform. The following
 chapters describe how we designed and implemented such a system.
+
+\newpage

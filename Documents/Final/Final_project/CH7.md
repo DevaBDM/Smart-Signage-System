@@ -1,4 +1,4 @@
-# Chapter 7
+# Chapter 7 {.title}
 
 # Conclusion and Future Work
 
@@ -137,3 +137,5 @@ environmental sensing, intelligent display control, role-based content
 management, and security-hardened network design, we have built a
 foundation upon which future researchers and practitioners can extend
 the state of the art in intelligent building automation.
+
+\newpage

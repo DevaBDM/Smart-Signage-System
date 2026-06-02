@@ -1,4 +1,4 @@
-# Chapter 6
+# Chapter 6 {.title}
 
 # Discussion
 
@@ -189,6 +189,7 @@ Table 6.1 maps each of the seven research gaps identified in Chapter 2
 to the specific feature in our system that addresses it, and compares
 the outcome with the closest related work.
 
+<caption>Research gap mapping and comparison with related work.</caption>
 | \# | Research Gap | Our Solution | Closest Related Work | Our Advantage |
 |----|----|----|----|----|
 | 1 | No open-source platform combines sensing, CMS, and RBAC | Unified system with Arduino sensors + Node.js backend + React frontend + RBAC | Anthias \[1\]: CMS only, no sensing or RBAC | Three subsystems integrated; not siloed |
@@ -199,7 +200,6 @@ the outcome with the closest related work.
 | 6 | No emergency broadcast with hardware trigger | Physical button → local playback + group-wide Socket.IO broadcast | Rise Vision \[9\]: Template-based alerts only | Hardware trigger works offline; group override is automatic |
 | 7 | No concurrency control for multi-user access | Control locks with priority hierarchy, 423 Locked responses | All surveyed platforms: single admin or no locking | Prevents race conditions in multi-admin environments |
 
-Research gap mapping and comparison with related work.
 
 Our system is the first open-source digital signage platform to combine
 all seven capabilities in a single integrated implementation. While
@@ -213,3 +213,5 @@ in Chapter 1, assessed what is ready for production deployment,
 acknowledged the limitations of our prototype, and positioned our work
 against the existing literature. The following chapter concludes the
 report and outlines directions for future work.
+
+\newpage

@@ -459,3 +459,4 @@ https://learn.sparkfun.com/tutorials/
 \[120\] Conventional Commits, “Conventional Commits 1.0.0
 Specification,” Conventional Commits, 2024. \[Online\]. Available:
 https://www.conventionalcommits.org/
+\newpage

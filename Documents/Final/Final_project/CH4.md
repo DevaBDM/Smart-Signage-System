@@ -1,4 +1,4 @@
-# Chapter 4
+# Chapter 4 {.title}
 
 # System Design and Implementation
 
@@ -19,6 +19,7 @@ We selected the components for our prototype based on cost,
 availability, and capability. Table 4.1 lists the specifications and pin
 assignments for each component.
 
+<caption>Component specifications and Arduino pin assignments.</caption>
 | Component | Specification | Arduino Pin | Purpose |
 |----|----|----|----|
 | Arduino Mega 2560 | ATmega2560 @ 16 MHz, 256 KB flash, 8 KB SRAM, 54 digital I/O | \- | Sensor acquisition and preprocessing |
@@ -29,7 +30,6 @@ assignments for each component.
 | Debian laptop | Intel/AMD x86_64, 4 GB+ RAM, Debian 13 live USB | USB-B (to Arduino) | Simulated Raspberry Pi edge node |
 | Laptop screen | 15.6” LCD, 1920×1080 | HDMI (internal) | Digital signage display |
 
-Component specifications and Arduino pin assignments.
 
 We selected the Arduino Mega 2560 rather than the Uno because the Mega
 provides 54 digital I/O pins and 16 analog inputs, giving us sufficient
@@ -242,6 +242,7 @@ provides 1,022 usable IP addresses (4,094 total minus network,
 broadcast, and gateway addresses). This represents 686% headroom above
 the 130-node target, allowing for future expansion without renumbering.
 
+<caption>Structured IP allocation within 10.20.0.0/22.</caption>
 | Range | Purpose | Count |
 |----|----|----|
 | 10.20.0.1 – 10.20.0.19 | Infrastructure (gateway, DNS, NTP, management) | 19 |
@@ -249,7 +250,6 @@ the 130-node target, allowing for future expansion without renumbering.
 | 10.20.0.50 – 10.20.3.199 | Edge nodes (displays, sensors) | 150 |
 | 10.20.3.200 – 10.20.3.254 | Spare / future expansion | 55 |
 
-Structured IP allocation within 10.20.0.0/22.
 
 ### Layer 3 Isolation with Dual-NIC Server
 
@@ -299,6 +299,7 @@ edge switch saturation during bulk deployments.
 
 ### Bandwidth Engineering
 
+<caption>Bandwidth analysis by operational scenario.</caption>
 | Scenario | Concurrent Nodes | Per-Node Rate | Aggregate | Notes |
 |----|----|----|----|----|
 | Normal operation | 130 | 5 kbps (heartbeat) | 650 kbps | Negligible; WebSocket keepalive |
@@ -307,7 +308,6 @@ edge switch saturation during bulk deployments.
 | Live stream (1080p HLS) | 130 | 4 Mbps | 520 Mbps | Served from nginx cache; backend not involved |
 | Emergency broadcast | 130 | 200 KB (one-time) | 26 Mbps | Single multicast packet preferred |
 
-Bandwidth analysis by operational scenario.
 
 ### Failure Modes and Resilience
 
@@ -431,6 +431,7 @@ for users and device token assignment for IoT nodes.</p></figcaption>
 We implemented three roles with distinct capabilities, as summarized in
 Table 4.4.
 
+<caption>Role capabilities matrix.</caption>
 | Capability | Administrator | Creator | Viewer | Public |
 |----|----|----|----|----|
 | Manage all devices | Yes | No | No | No |
@@ -445,7 +446,6 @@ Table 4.4.
 | Approve pending devices | Yes | No | No | No |
 | Manage control locks | Yes | No | No | No |
 
-Role capabilities matrix.
 
 **Group-scoped permissions:** Users belong to one or more Groups via the
 `UserGroup` join table. Devices belong to exactly one Group. Posts can
@@ -590,6 +590,7 @@ with `path.resolve()` and checked against the upload root directory.
 
 Our system supports four stream types, summarized in Table 4.5.
 
+<caption>Stream types and relay architecture.</caption>
 | Type | Ingest Source | Relay Mechanism | Player Support |
 |----|----|----|----|
 | HLS | External `.m3u8` URL | Direct proxy + nginx segment caching | Anthias (Chromium), MPV |
@@ -597,7 +598,6 @@ Our system supports four stream types, summarized in Table 4.5.
 | YouTube | YouTube HLS URL | Proxy + yt-dlp resolution | Anthias (Chromium) |
 | RTMP | OBS/Encoder push to port 1935 | `node-media-server` → FFmpeg → HLS | Anthias (hls.js), MPV |
 
-Stream types and relay architecture.
 
 The RTMP ingest server listens on port 1935. When a stream is
 configured, the backend spawns an FFmpeg child process that transcodes
@@ -919,8 +919,7 @@ Our system supports two playback backends on a per-device basis,
 enabling administrators to choose the most appropriate player for each
 display’s content requirements.
 
-**Table 4.6** Anthias versus MPV comparison.
-
+<caption>Anthias versus MPV comparison.</caption>
 | Feature          | Anthias                         | MPV                      |
 |------------------|---------------------------------|--------------------------|
 | Rendering engine | Dockerized Chromium             | Native OpenGL/VAAPI      |
@@ -932,6 +931,7 @@ display’s content requirements.
 | Remote commands  | Anthias REST API                | Direct MPV IPC socket    |
 | Overlay support  | CSS-based                       | Lua scripting            |
 | Use case         | Rich interactive signage        | Fast-boot video playback |
+
 
 **Shared communication layer:** Both player types use the same
 `socket_client.py` for Socket.IO communication, the same
@@ -964,6 +964,7 @@ vectors at each layer.</p></figcaption>
 We conducted a security audit of the codebase and identified 12
 vulnerabilities, summarized in Table 4.7.
 
+<caption>Vulnerability inventory and remediation status.</caption>
 | ID | Severity | Component | Description | Remediation |
 |----|----|----|----|----|
 | V-01 | P0 (Critical) | Socket.IO | Unauthenticated device connections accepted any Pi on the network | Device token authentication; 64-char hex tokens |
@@ -979,7 +980,6 @@ vulnerabilities, summarized in Table 4.7.
 | V-11 | P2 (Medium) | API | No Content Security Policy headers | Added `helmet` middleware with CSP |
 | V-12 | P2 (Medium) | Network | nftables rules not persisted across reboots | `nftables-persistent` package + systemd service |
 
-Vulnerability inventory and remediation status.
 
 <figure>
 <img src="./assets/media/image39.png"
@@ -1013,3 +1013,5 @@ through the Debian-simulated edge nodes, network infrastructure, backend
 services, frontend interfaces, dual player architecture, and security
 hardening. The following chapter describes how we validated this
 implementation through automated testing and hardware verification.
+
+\newpage

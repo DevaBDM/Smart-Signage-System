@@ -19,6 +19,7 @@ using `prisma-erd-generator`.
 
 ## Appendix B - Complete REST API Endpoint Reference
 
+<caption>Complete REST API Endpoint Reference</caption>
 | Route | Method | Auth | Description | Key Query Params |
 |----|----|----|----|----|
 | `/api/auth/register` | POST | \- | First user bootstrap or admin creation | \- |
@@ -48,10 +49,12 @@ using `prisma-erd-generator`.
 | `/api/ai/chat` | POST | JWT | AI Q&A with post context grounding | \- |
 | `/api/health` | GET | \- | Server health check | \- |
 
+
 ## Appendix C - Socket.IO Event Protocol Reference
 
 Client → Server Events (Authenticated Pi)
 
+<caption>Socket.IO Client to Server Events</caption>
 | Event | Payload | Server Action |
 |----|----|----|
 | `authenticate` | `{ deviceToken: string }` | Verify token, register socket in deviceSockets Map |
@@ -60,8 +63,10 @@ Client → Server Events (Authenticated Pi)
 | `content_sync_complete` | `{ deviceId: number, postIds: number[] }` | Update Deployment status to `synced` |
 | `error_report` | `{ deviceId: number, code: string, message: string }` | Insert ErrorLog row |
 
+
 Server → Client Events (Pi Receivers)
 
+<caption>Socket.IO Server to Client Events</caption>
 | Event | Payload | Trigger |
 |----|----|----|
 | `auth_success` | `{ deviceId: number, tokenExpiry: number }` | Successful device token validation |
@@ -71,6 +76,7 @@ Server → Client Events (Pi Receivers)
 | `display_wake` | `{ reason: string }` | Motion detected, wake from standby |
 | `display_standby` | `{ reason: string }` | No motion timeout |
 | `duplicate_connection` | `{}` | Same token connects from second socket |
+
 
 ## Appendix D - Arduino Firmware (`sensors.ino`)
 
@@ -103,10 +109,10 @@ style="width:2.06226in;height:3.73333in" /><img src="./assets/media/image50.png"
 style="width:2.06319in;height:3.69715in" /><img src="./assets/media/image50.png"
 style="width:2.06166in;height:3.659in" />
 
+<caption>Code A.F</caption>
 | Code A.F |
 |----------|
 
-Code A.F
 
 **Code A.F -** Prisma schema excerpt showing User, Group, Device, Post,
 and SensorLog models with relationships, indexes, and enum definitions.
@@ -129,15 +135,16 @@ G.2 nftables Rules (`/etc/nftables.conf`)
 <img src="./assets/media/image52.png"
 style="width:5.464in;height:3.84295in" />
 
+<caption>Code A.G2</caption>
 | Code A.G2 |
 |-----------|
 
-Code A.G2
 
 **Code A.G2 -** nftables firewall rules implementing default-deny
 policy, allowing only HTTP/HTTPS from campus LAN, SSH from admin VLAN,
 and blocking Pi-initiated outbound connections.
 
+<caption>Frontend component hierarchy</caption>
 | Component | File | Props | State |
 |----|----|----|----|
 | `App` | `App.jsx` | \- | Router, auth provider |
@@ -151,10 +158,12 @@ and blocking Pi-initiated outbound connections.
 | `LoginPage` | `pages/LoginPage.jsx` | \- | `email`, `password`, `error` |
 | `LiveStreamManager` | `components/LiveStreamManager.jsx` | `streams` | `activeStream`, `previewUrl` |
 
+
 ## Appendix H - Frontend Component Hierarchy
 
 ## Appendix I - Systemd Service Units
 
+<caption>Systemd service units</caption>
 | Service | File | Purpose | Restart Policy |
 |----|----|----|----|
 | `socket-signage.service` | `socket_client.py` | Socket.IO client, heartbeat, sensor loop | `always`, 10 s delay |
@@ -163,8 +172,10 @@ and blocking Pi-initiated outbound connections.
 | `emergency-monitor.service` | `mvp-player.py` | Emergency override monitoring | `always`, 10 s delay |
 | `api-server.service` | `pm2` or `systemd` | Node.js Express server | `on-failure`, 30 s delay |
 
+
 ## Appendix J - Security Vulnerability Detail Cards
 
+<caption>Security vulnerability detail cards</caption>
 | CVE / ID | Severity | Location | Description | Remediation | Status |
 |----|----|----|----|----|----|
 | V-001 | P0 | `uploads.js` | Path traversal via `../` in filename | `path.basename()`, `sanitize-filename` | **Closed** |
@@ -177,8 +188,10 @@ and blocking Pi-initiated outbound connections.
 | V-008 | P1 | Frontend | Potential XSS in markdown rendering | `dompurify` + `react-markdown` | **Closed** |
 | V-009 | P2 | `devices.js` | No audit log for admin actions | `AuditLog` model + middleware (deferred) | Open |
 
+
 ## Appendix K - Risk Register
 
+<caption>Risk register</caption>
 | Risk ID | Risk | Probability | Impact | Mitigation | Owner |
 |----|----|----|----|----|----|
 | R-001 | Core switch failure | Low | High | Cold-spare switch, 4-hour replacement SLA | Network team |
@@ -190,8 +203,10 @@ and blocking Pi-initiated outbound connections.
 | R-007 | Emergency alert delivery delay | Low | High | Socket.IO broadcast, local fallback assets, UPS | Operations |
 | R-008 | Sensor calibration drift | Medium | Low | Annual recalibration, automated anomaly detection | Hardware team |
 
+
 ## Appendix L - Glossary of Terms
 
+<caption>Glossary of terms</caption>
 | Term | Definition |
 |----|----|
 | **Anthias** | Docker-based digital signage player for Raspberry Pi; runs Chromium in kiosk mode |
@@ -206,3 +221,5 @@ and blocking Pi-initiated outbound connections.
 | **RTMP** | Real-Time Messaging Protocol; Adobe streaming protocol for live video ingest |
 | **Socket.IO** | Real-time bidirectional event-based communication library |
 | Weber-Fechner | Psychophysical law stating perceived intensity is proportional to logarithm of stimulus |
+
+\newpage

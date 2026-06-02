@@ -1,4 +1,4 @@
-# Chapter 1
+#  Chapter 1 {.title}
 
 # Introduction
 
@@ -173,6 +173,7 @@ commercial alternatives with a functional, tested prototype.
 
 ### Specific Objectives
 
+<caption>Specific objectives and their validation evidence.</caption>
 | \#  | Objective                                                                                                                                    | Validation Evidence                                                                                                                                                                                                           |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | Develop an embedded sensing layer (motion + ambient light + emergency button) with adaptive display brightness and screen power control      | Prototype assembly with real Arduino Mega 2560, three HC-SR04 sensors, LDR module, and potentiometer; serial monitor confirming accurate sensor readings; end-to-end brightness adaptation tested on Debian 13 laptop screens |
@@ -184,7 +185,6 @@ commercial alternatives with a functional, tested prototype.
 | 7   | Implement robust concurrency control: control locks, priority synchronization, and deadlock prevention for simultaneous admin/creator access | Control lock acquisition flow diagram; multi-creator priority ordering tests; 423 Locked HTTP response validation                                                                                                             |
 | 8   | Validate the system through automated testing (backend + frontend E2E) and hardware verification protocols                                   | Jest test suite output (30+ tests); Playwright E2E report (25 tests, 55 screenshots); hardware assembly checklist; serial communication verification                                                                          |
 
-Specific objectives and their validation evidence.
 
 ## Scope and Delimitations
 
@@ -315,3 +315,5 @@ security analysis, software engineering practices, power analysis, cost
 analysis, literature review references, project summary, master
 bibliography, source code listings, data sheets, and a glossary of
 terms.
+
+\newpage

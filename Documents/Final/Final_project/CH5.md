@@ -1,4 +1,4 @@
-# Chapter 5
+# Chapter 5 {.title}
 
 # Results and Validation
 
@@ -258,6 +258,7 @@ TLS 1.3 handshake completed successfully on HTTPS endpoints.
 
 ## Objectives Achievement
 
+<caption>Objectives achievement summary</caption>
 | \# | Objective | Status | Evidence |
 |----|----|----|----|
 | 1 | Develop embedded sensing layer with adaptive brightness | Achieved | Real Arduino assembly; serial communication verified; brightness adaptation tested end-to-end on Debian laptop screens |
@@ -269,7 +270,6 @@ TLS 1.3 handshake completed successfully on HTTPS endpoints.
 | 7 | Implement concurrency control | Achieved | Control lock acquisition/rejection tested; priority hierarchy enforced; 423 Locked response validated |
 | 8 | Validate through automated testing and hardware verification | Achieved | 30+ Jest tests; 25 Playwright tests (55 screenshots); hardware assembly checklist completed; serial comms verified |
 
-Objectives achievement summary
 
 Five of eight objectives were fully achieved with direct prototype
 evidence. Objective 5 (network deployment) was partially achieved: the
@@ -281,6 +281,7 @@ deployment were not implemented due to budget and time constraints.
 
 ### Power Consumption by Component
 
+<caption>Power consumption by system state (calculated from datasheets).</caption>
 | Component | State | Power (W) | Notes |
 |----|----|----|----|
 | Debian node (simulated Pi) | Idle | 5–8 | Laptop CPU at low load, screen on |
@@ -292,7 +293,6 @@ deployment were not implemented due to budget and time constraints.
 | Server (laptop) | Idle | 10–15 | Node.js, PostgreSQL, nginx |
 | Server | Peak load | 25–35 | Multiple FFmpeg relays active |
 
-Power consumption by system state (calculated from datasheets).
 
 ### Campus-Wide Energy Scenarios
 
@@ -334,6 +334,7 @@ alt="Fig 5.6 — Campus-wide power distribution pie chart showing displays (82%)
 
 ### Cost Analysis
 
+<caption>Per-node bill of materials.</caption>
 | Component                 | Unit Cost (USD) | Quantity per Node | Subtotal |
 |---------------------------|-----------------|-------------------|----------|
 | Raspberry Pi 4B (4 GB)    | \$55            | 1                 | \$55     |
@@ -346,7 +347,6 @@ alt="Fig 5.6 — Campus-wide power distribution pie chart showing displays (82%)
 | USB cables + power supply | \$15            | 1                 | \$15     |
 | Per-node total            |                 |                   | \$410    |
 
-Per-node bill of materials.
 
 For a 130-node deployment, the hardware procurement cost is
 approximately \$53,300. Adding five-year energy costs (Scenario B:
@@ -376,3 +376,5 @@ This chapter has validated our Smart Digital Signage System through
 comprehensive automated testing, hardware verification, and cost
 analysis. The following chapter discusses the implications of our
 results and acknowledges the limitations of our prototype.
+
+\newpage
