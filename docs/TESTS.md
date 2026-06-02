@@ -1,6 +1,6 @@
 # Test Suite Reference
 
-This document describes the complete test suite for the Smart Digital Signage project: backend tests (Jest + Supertest) and frontend tests (Playwright).
+This document describes the complete test suite for the Smart Digital Signage project: **56 backend tests** (Jest + Supertest, 7 suites) and **73 frontend tests** (Playwright, Chromium).
 
 ---
 
@@ -11,217 +11,190 @@ This document describes the complete test suite for the Smart Digital Signage pr
 | Node.js | `>=18.0.0` | Enforced by backend `engines` field |
 | PostgreSQL | `>=14` | Dev + isolated test database |
 | npm | bundled | |
+| FFmpeg | `>=5.x` | Required for stream relay integration tests |
 
 ---
 
-## 1. Test Database Setup
+## 1. Quick Start
 
-Create a dedicated test database so tests do not interfere with development data.
-
-```bash
-# Create database
-createdb -U postgres signage_test
-# or via SQL:
-psql -U postgres -c "CREATE DATABASE signage_test;"
-```
-
-Create a test user and grant permissions:
-
-```sql
-CREATE USER signage_admin WITH PASSWORD 'yourpassword';
-GRANT ALL PRIVILEGES ON DATABASE signage_test TO signage_admin;
-ALTER DATABASE signage_test OWNER TO signage_admin;
-\c signage_test
-GRANT ALL ON SCHEMA public TO signage_admin;
-```
-
-Push the Prisma schema to the test database:
+Both test suites handle database setup **automatically** — no manual DB creation required.
 
 ```bash
+# Backend
 cd backend
-$env:DATABASE_URL="postgresql://signage_admin:yourpassword@localhost:5432/signage_test"
-npx prisma db push
+npm install
+npm test           # 56 tests, 7 suites
+
+# Frontend
+cd frontend
+npm install
+npx playwright install
+npm run test:e2e   # 73 tests, Chromium
 ```
+
+### What happens automatically
+
+| Step | Backend (`npm test`) | Frontend (`npm run test:e2e`) |
+|------|---------------------|-------------------------------|
+| DB creation | `jestGlobalSetup.js` creates `signage_test` if missing via `pg` module | `globalSetup.cjs` creates `signage_test` if missing |
+| Schema | `prisma db push` runs automatically | `prisma db push` runs automatically |
+| Server start | Supertest imports Express app directly | Playwright starts test backend (port 5001) + Vite (port 5173) |
+| DB cleanup | `setup.js` cleans tables via `beforeEach` | `globalSetup.cjs` cleans + seeds on start; `resetState()` between describe blocks |
+
+---
+
+## 2. Environment Setup
 
 Your `backend/.env` must contain:
 
 ```env
-DATABASE_URL="postgresql://signage_admin:yourpassword@localhost:5432/signage_db"
 TEST_DATABASE_URL="postgresql://signage_admin:yourpassword@localhost:5432/signage_test"
 JWT_SECRET=your_super_secret_key_here
 ```
 
----
-
-## 2. Install Dependencies
-
-```bash
-# Backend
-cd backend && npm install
-
-# Frontend
-cd frontend && npm install
-
-# Playwright browsers (required for frontend tests)
-cd frontend && npx playwright install
-```
+The test user (`signage_admin`) must exist in PostgreSQL and have `CREATEDB` privilege, or the global setup falls back to the `postgres` superuser.
 
 ---
 
-## 3. Running the Full Suite
+## 3. Running Tests
 
 ### Backend
 
 ```bash
 cd backend
-npm test           # Run all backend tests against TEST_DATABASE_URL
+npm test           # Full suite (7 suites, 56 tests)
 npm run test:watch # Watch mode
+npx jest tests/smoke.test.js   # Single file
 ```
 
 ### Frontend
 
 ```bash
 cd frontend
-npm run test:e2e   # Run all Playwright specs
+npm run test:e2e   # Full suite (73 tests, Chromium)
+npx playwright test tests/auth.spec.js          # Single file
+npx playwright test tests/creator/              # Directory
+npx playwright test --ui                        # Playwright UI
 ```
 
-This command:
-1. Runs `globalSetup.cjs` to clean and seed the test database
-2. Starts the test backend on `localhost:5001` (`../backend/start-test-server.js`)
-3. Starts the Vite dev server on `localhost:5173`
-4. Executes all tests in `frontend/tests/`
+### Screenshots
 
-> **Note:** If you already have servers running, Playwright reuses them when not in CI mode.
+Frontend tests automatically capture screenshots on failure:
 
----
-
-## 4. Running Individual Tests
-
-### Backend — single file
-
-```bash
-cd backend
-npx jest tests/smoke.test.js
-npx jest tests/deviceAuth.test.js
-npx jest tests/liveStreams.crud.test.js
-npx jest tests/streamRelay.lifecycle.test.js
-npx jest tests/userService.priority.test.js
-npx jest tests/youtubeRelay.test.js
 ```
-
-### Frontend — single file or pattern
-
-```bash
-cd frontend
-npx playwright test tests/auth.spec.js
-npx playwright test tests/admin/devices.spec.js
-npx playwright test tests/creator/
-npx playwright test --ui   # Open Playwright UI for debugging
+frontend/test-results/
+└── <test-name>-chromium/
+    └── test-failed-1.png
 ```
 
 ---
 
-## 5. Backend Test Reference
+## 4. Backend Test Reference
 
-All backend tests use **Jest** with **Supertest** and hit the test database.
+All backend tests use **Jest** with **Supertest** against the test database.
 
 | File | Type | Coverage |
 |------|------|----------|
-| `tests/smoke.test.js` | Integration | Posts CRUD, group access control, device registration/heartbeat, content sync, auth login/register |
-| `tests/deviceAuth.test.js` | Integration (Socket.IO) | Pi device socket authentication, heartbeat ack, content_sync ack, real HTTP + Socket.IO server per test |
-| `tests/liveStreams.crud.test.js` | Integration | Live stream CRUD endpoints, group-scoped listing, URL validation |
-| `tests/streamRelay.lifecycle.test.js` | Unit (mocked) | Stream relay orchestration with mocked `child_process.spawn`, `fs`, `@ffmpeg-installer`, `@ffprobe-installer`, and `prisma` |
-| `tests/userService.priority.test.js` | Unit (service layer) | `updateUser` priority swap logic, role-based constraints |
-| `tests/youtubeRelay.test.js` | Unit (mocked) | YouTube URL resolution via mocked `yt-dlp`/`youtube-dl` child process stdout |
+| `tests/smoke.test.js` | Integration | Posts CRUD, group access, device approval, signage publish, auth |
+| `tests/deviceAuth.test.js` | Integration (Socket.IO) | Pi device socket auth, heartbeat, token generation, spoofing rejection |
+| `tests/liveStreams.crud.test.js` | Integration | Live stream CRUD, group scoping, URL validation, key rotation |
+| `tests/streamRelay.lifecycle.test.js` | Unit (mocked) | Stream relay start/stop/bootstrap with mocked FFmpeg |
+| `tests/streamRelay.integration.test.js` | Integration (real FFmpeg) | Generates test video, spawns real FFmpeg HLS relay, verifies segments |
+| `tests/userService.priority.test.js` | Unit (service layer) | Priority swap algorithm, role-based constraints |
+| `tests/youtubeRelay.test.js` | Unit (mocked) | YouTube URL resolution via `yt-dlp` mock |
 
 ### Backend Test Architecture
 
 ```
-backend/tests/
-├── setup.js              # Jest setup: validates TEST_DATABASE_URL, cleans DB before each test
-├── helpers.js            # Factories: createGroup, createUser, createPost, createPostImage, createDevice
-├── smoke.test.js
-├── deviceAuth.test.js
-├── liveStreams.crud.test.js
-├── streamRelay.lifecycle.test.js
-├── userService.priority.test.js
-└── youtubeRelay.test.js
+backend/
+├── jest.config.js              # Jest config with globalSetup
+├── jestGlobalSetup.js          # Auto-create DB, push Prisma schema
+└── tests/
+    ├── setup.js                # Clean DB beforeEach, disconnect afterAll
+    ├── helpers.js              # Factories: createGroup, createUser, createPost, createDevice, createTestServer, waitForEvent
+    ├── smoke.test.js
+    ├── deviceAuth.test.js
+    ├── liveStreams.crud.test.js
+    ├── streamRelay.lifecycle.test.js
+    ├── streamRelay.integration.test.js
+    ├── userService.priority.test.js
+    └── youtubeRelay.test.js
 ```
 
 **Key design decisions:**
 
-- `setup.js` runs `beforeAll` to validate `TEST_DATABASE_URL` and `afterEach` to clean tables respecting FK order.
-- `app.js` / `index.js` split allows Supertest to import the Express app without starting a server.
-- `deviceAuth.test.js` creates a real HTTP server on a random port and connects a Socket.IO client to test end-to-end Pi auth.
-- `streamRelay.lifecycle.test.js` and `youtubeRelay.test.js` are heavily mocked to avoid spawning real FFmpeg/yt-dlp processes.
+- `app.js` / `index.js` split allows Supertest to import the Express app without starting a full server.
+- `helpers.js` provides shared `createTestServer()` (HTTP + Socket.IO on random port) and `waitForEvent()`.
+- `streamRelay.integration.test.js` uses **real FFmpeg** to generate a test video and verify HLS segment output.
+- Database is cleaned between each test via `beforeEach` in `setup.js`.
 
 ---
 
-## 6. Frontend Test Reference
+## 5. Frontend Test Reference
 
-All frontend tests use **Playwright**. They fall into two modes:
+All frontend tests use **Playwright** with two modes:
 
-- **API-only (`request`)** — Fast, no browser navigation; hits `localhost:5001/api` directly.
-- **Browser UI (`page`)** — Full end-to-end; navigates the React app, fills forms, clicks buttons, verifies DOM state.
+- **API-only (`request`)** — Fast, no browser; hits `localhost:5001/api` directly.
+- **Browser UI (`page`)** — Full end-to-end; navigates the React app, fills forms, clicks buttons.
 
 | File | Mode | Coverage |
 |------|------|----------|
-| `tests/auth.spec.js` | **Browser UI** | Login form submission, redirect to `/admin`, `localStorage` token/role verification |
-| `tests/admin/devices.spec.js` | API + UI | Device lifecycle: register, approve, list, delete; RBAC verification |
-| `tests/admin/groups.spec.js` | **Browser UI** | Admin login, group CRUD via dashboard UI, form validation |
-| `tests/admin/users.spec.js` | API | User lifecycle: create, update role, list, delete; creator vs admin scoping |
-| `tests/creator/designer.spec.js` | **Browser UI** | Post designer loads, visual canvas mode, markdown slide mode, toolbar visibility |
-| `tests/creator/live-stream.spec.js` | API | Live stream creation with HLS URL, group-scoped listing |
-| `tests/creator/posts.spec.js` | API + UI | Post CRUD with image upload, scheduling, duration, publishing to signage |
-| `tests/creator/signage.spec.js` | API + UI | Publish post to signage, approve pending device, verify deployment payload |
-| `tests/smoke/pi-live-stream.spec.js` | Manual | **Requires a real Raspberry Pi.** Verifies Pi receives `LIVE_STREAM` deployment payload. |
+| `tests/auth.spec.js` | **Browser UI** | Login form, redirect, localStorage token/role verification |
+| `tests/admin/devices.spec.js` | API + UI | Device lifecycle: register, approve, list, delete, RBAC |
+| `tests/admin/groups.spec.js` | **Browser UI** | Group CRUD via dashboard, signage state changes, delete protection |
+| `tests/admin/users.spec.js` | API | User lifecycle: create, update, list, delete, priority swap, managed groups |
+| `tests/creator/designer.spec.js` | **Browser UI** | Visual canvas mode, markdown mode, templates, export |
+| `tests/creator/live-stream.spec.js` | **Browser UI** | Live stream CRUD, attach to post, feed publishing |
+| `tests/creator/posts.spec.js` | API + UI | Post CRUD with image upload, filters, bulk actions, horizontal isolation |
+| `tests/creator/signage.spec.js` | API + UI | Publish to signage, asset management, playback controls, urgency filter |
+| `tests/smoke/pi-live-stream.spec.js` | Manual | **Requires a real Pi.** Verifies Pi receives `LIVE_STREAM` payload. |
 
 ### Frontend Test Architecture
 
 ```
-frontend/tests/
-├── globalSetup.cjs              # Cleans test DB and seeds test-admin + test-creator accounts
-├── helpers/
-│   └── test-helpers.js          # loginTestAdmin, loginAs, resetState, seedSignageAsset,
-│                                 # seedVideoPost, seedSignageDeployment, createPendingDevice,
-│                                 # mockImagePath, miniPngBuffer
-├── auth.spec.js
-├── admin/
-│   ├── devices.spec.js
-│   ├── groups.spec.js
-│   └── users.spec.js
-├── creator/
-│   ├── designer.spec.js
-│   ├── live-stream.spec.js
-│   ├── posts.spec.js
-│   └── signage.spec.js
-└── smoke/
-    └── pi-live-stream.spec.js
+frontend/
+├── playwright.config.js         # Config with webServer, screenshots on failure, outputDir
+└── tests/
+    ├── globalSetup.cjs          # Auto-create DB, push schema, seed test-admin + test-creator
+    ├── helpers/
+    │   └── test-helpers.js      # loginTestAdmin, loginAs, loginViaApi, resetState, seedSignageAsset, ...
+    ├── auth.spec.js
+    ├── admin/
+    │   ├── devices.spec.js
+    │   ├── groups.spec.js
+    │   └── users.spec.js
+    ├── creator/
+    │   ├── designer.spec.js
+    │   ├── live-stream.spec.js
+    │   ├── posts.spec.js
+    │   └── signage.spec.js
+    └── smoke/
+        └── pi-live-stream.spec.js
 ```
 
-**Key design decisions:**
+**Key helpers:**
 
-- `playwright.config.js` starts **two** `webServer` processes: the test backend (`../backend/start-test-server.js` on port 5001) and the Vite dev server (port 5173). Tests can use either endpoint.
-- `globalSetup.cjs` runs once before all tests to wipe the database and seed two accounts (`test-admin` / `test-creator`).
-- `workers: 1` + `test.describe.configure({ mode: "serial" })` in every spec ensures tests do not race against shared DB state.
-- `loginTestAdmin(request)` is self-healing: tries login first, falls back to first-user registration if the account does not exist.
-- Browser UI tests use `baseURL: "http://localhost:5173"` so `page.goto("/login")` hits the React app.
-- API-only tests use `API_URL = "http://localhost:5001/api"` and the `request` fixture.
-- `resetState(request)` hits the backend `/api/test/reset` endpoint to deep-reset DB between serial describe blocks.
+| Helper | Purpose |
+|--------|---------|
+| `loginTestAdmin(request)` | Self-healing: tries login, falls back to first-user registration |
+| `loginAs(page, user, pass)` | Full UI login flow with localStorage cleanup |
+| `loginViaApi(page, request, user, pass)` | API login, sets localStorage directly, bypasses UI |
+| `resetState(request)` | Calls `/api/test/reset` to deep-reset DB |
+| `createPendingDevice(groupId)` | Seeds a pending device via backend script |
 
 ---
 
-## 7. Test Data Isolation
+## 6. Test Data Isolation
 
 ```
 Dev server  (port 5000)  -> signage_db   (real data)
-Test server (port 5001)  -> signage_test (auto-seeded by globalSetup.cjs / start-test-server.js)
-Backend Jest             -> signage_test (cleaned between tests by setup.js)
+Test server (port 5001)  -> signage_test (auto-created + seeded)
+Backend Jest             -> signage_test (cleaned between tests)
 ```
 
 ---
 
-## 8. Lint & Format
+## 7. Lint & Format
 
 ```bash
 # Backend
@@ -237,62 +210,31 @@ npm run format    # Prettier
 
 ---
 
-## 9. Troubleshooting
+## 8. Troubleshooting
 
 ### `relation "X" does not exist`
-
-Push the Prisma schema to the test database:
-
+Run `npx prisma db push` manually (global setup handles this but may fail if DB is locked):
 ```bash
 cd backend
 $env:DATABASE_URL="postgresql://signage_admin:yourpassword@localhost:5432/signage_test"
 npx prisma db push
 ```
 
-### `permission denied for schema public`
-
-```sql
-\c signage_test
-GRANT ALL ON SCHEMA public TO signage_admin;
-```
-
 ### `Executable doesn't exist at ... chrome-headless-shell.exe`
-
 ```bash
 cd frontend
 npx playwright install
 ```
 
 ### `ERR_CONNECTION_REFUSED at http://localhost:5001/api/health`
-
-Playwright timed out waiting for the test backend. Check:
-- `TEST_DATABASE_URL` is set in `backend/.env`
-- PostgreSQL is running
-- Run `node ../backend/start-test-server.js` manually to see the error
+Check PostgreSQL is running and `TEST_DATABASE_URL` is set in `backend/.env`.
 
 ### `Timeout waiting for disconnect` (backend)
-
-`deviceAuth.test.js` requires a clean socket connection. If a previous test left the socket open, restart the test runner.
-
-### Backend lint: `node/no-unsupported-features/es-syntax`
-
-Ensure `backend/package.json` has:
-
-```json
-"engines": { "node": ">=18.0.0" }
-```
-
-### Frontend lint: `process is not defined`
-
-Ensure `frontend/eslint.config.js` contains:
-
-```js
-globals: { ...globals.browser, process: 'readonly' }
-```
+`deviceAuth.test.js` requires a clean socket connection. Restart the test runner.
 
 ---
 
-## 10. CI Example (GitHub Actions)
+## 9. CI Example (GitHub Actions)
 
 ```yaml
 name: Test Suite
@@ -315,9 +257,6 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
       - run: cd backend && npm ci
-      - run: cd backend && npx prisma db push
-        env:
-          DATABASE_URL: postgresql://signage_admin:yourpassword@localhost:5432/signage_test
       - run: cd backend && npm test
         env:
           TEST_DATABASE_URL: postgresql://signage_admin:yourpassword@localhost:5432/signage_test
@@ -338,9 +277,6 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
       - run: cd backend && npm ci
-      - run: cd backend && npx prisma db push
-        env:
-          DATABASE_URL: postgresql://signage_admin:yourpassword@localhost:5432/signage_test
       - run: cd frontend && npm ci
       - run: cd frontend && npx playwright install
       - run: cd frontend && npm run test:e2e
@@ -351,4 +287,4 @@ jobs:
 
 ---
 
-_Last updated: May 2026_
+_Last updated: June 2026_

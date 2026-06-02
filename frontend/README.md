@@ -409,13 +409,14 @@ frontend/
 │   ├── creator/                   # Creator workflow tests
 │   ├── smoke/
 │   │   └── pi-live-stream.spec.js # Pi/Anthias smoke tests
-│   ├── globalSetup.cjs            # Test bootstrap: seed DB, start servers
-│   └── helpers/
-│       └── test-helpers.js        # Login, reset, seed utilities
+│   ├── globalSetup.cjs            # Auto-create DB, push schema, seed accounts
+│   ├── helpers/
+│   │   └── test-helpers.js        # loginTestAdmin, loginAs, loginViaApi, resetState, seed helpers
+│   └── test-results/              # Screenshots captured on test failure (auto-generated)
 │
 ├── .env                           # VITE_API_URL, VITE_PROXY_TARGET
 ├── vite.config.js                 # Dev proxy to backend, HMR
-├── playwright.config.js           # E2E test configuration
+├── playwright.config.js           # E2E test configuration (screenshot: only-on-failure)
 ├── eslint.config.js
 ├── prettier.config.js
 ├── index.html

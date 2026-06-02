@@ -308,6 +308,7 @@ Signage states have a strict priority: `EMERGENCY` > `SECURITY_RISK` > `BREAKING
 backend/
 ├── prisma/
 │   └── schema.prisma          # Database schema (models, enums, indexes, relations)
+├── jestGlobalSetup.js         # Jest global setup: auto-create test DB, push Prisma schema
 ├── src/
 │   ├── index.js               # Bootstrap: HTTP server, Socket.IO, stream relay, RTMP
 │   ├── app.js                 # Express config: routes, CORS, static files, error handler
@@ -369,7 +370,8 @@ backend/
 │       └── (Joi/Zod schemas if any)
 ├── uploads/                     # Runtime: images/, videos/, temp/
 ├── streams/                     # Runtime: HLS segment output
-├── tests/                       # Jest + Supertest suites
+├── jestGlobalSetup.js           # Jest global setup: auto-create test DB, push Prisma schema
+├── tests/                       # Jest + Supertest suites (56 tests, 7 suites)
 ├── .env                         # Environment variables
 ├── package.json
 └── README.md                    # This file
