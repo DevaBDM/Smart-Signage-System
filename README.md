@@ -133,7 +133,7 @@ The project is documented at three levels:
 |-----------|------|---------------|
 | **Backend** | `backend/README.md` | What the backend is, why it exists, architecture, design philosophy, request flow, auth model, tech stack |
 | **Frontend** | `frontend/README.md` | What the frontend is, role-based UI, component architecture, auth flow, design tokens, tech stack |
-| **Pi Agents** | `pi-scripts/ReadMe.md` | What the Pi does, player types (Anthias vs MPV), network topology, offline resilience |
+| **Pi Agents** | `pi-scripts/README.md` | What the Pi does, player types (Anthias vs MPV), network topology, offline resilience |
 | **Setup Scripts** | `pi-scripts/SETUP_SCRIPTS.md` | Automated bash setup scripts for rapid Pi deployment |
 
 ### 3. Component-Level Documentation
