@@ -1,6 +1,53 @@
-# Chapter 2 {.title}
+#  Chapter 2 {.title}
 
 # Literature Review and Related Work
+
+This chapter surveys the existing literature across seven domains
+relevant to the Smart Digital Signage System: theoretical frameworks for
+information dissemination and human-computer interaction, digital
+signage platforms (open-source and commercial), IoT edge computing
+architectures, power management techniques, live streaming protocols,
+and role-based access control systems. Forty-four verified references
+are analyzed to establish the academic foundation and identify research
+gaps that our project addresses.
+
+## Theoretical Framework
+
+### Information Dissemination Theory
+
+The system's content delivery model is grounded in Shannon-Weaver Communication Theory,
+which models communication as a source — encoder — channel — decoder — receiver pipeline.
+In our system, the content creator serves as the source, the Markdown and Fabric.js design pipeline with Sharp and FFmpeg processing acts as the encoder, the REST API and Socket.IO transport over the isolated 10.20.0.0/22 LAN form the channel, the Anthias web viewer or MPV native player on each Raspberry Pi acts as the decoder, and the end-user viewing the display is the receiver. Noise in this model includes network latency, packet loss, and display brightness mismatch, which are mitigated by offline caching, a 30-second heartbeat grace period, and adaptive brightness control.
+
+### Human-Computer Interaction Principles for Public Displays
+
+The interface design follows the Attention-Interest-Desire-Action (AIDA) model adapted
+for passive display consumption. Attention is captured through motion-triggered wake from
+screen-saver state when the ultrasonic sensor detects presence within 100 cm. Interest is
+maintained through content rotation with urgency-based priority ordering where emergency
+announcements precede normal content. Desire is created through visually rich Fabric.js-designed
+posts with safe-zone layout guides ensuring readability on any display size. Action is
+facilitated through the AI-assisted Q&A widget on the public feed page for deeper content
+engagement.
+
+### Adaptive Control Systems Theory
+
+The brightness adjustment loop implements a closed-loop feedback control system where the LDR sensor measures ambient illuminance as a 10-bit ADC value, the brightness_control.py controller maps this reading to a backlight PWM duty cycle using logarithmic Weber-Fechner mapping, the ddcutil or brightnessctl actuator adjusts the display brightness register via DDC/CI or CEC protocol against a per-configuration setpoint calibrated to the display's minimum readable luminance, and the sensor re-reads every 2 seconds to provide continuous feedback that maintains perceptual brightness stability.
+
+## Conceptual Framework
+
+The conceptual framework maps system components to theoretical constructs from the literature:
+
+| Theoretical Construct     | System Component  | Implementation                                                         |
+| ------------------------- | ----------------- | ---------------------------------------------------------------------- |
+| Information Dissemination | Content Pipeline  | Creator -> Post -> SignageDeployment -> Pi sync -> Display rendering   |
+| Access Control (RBAC)     | Auth Model        | JWT roles (admin/creator/viewer) + per-device 64-char hex tokens       |
+| Distributed Systems       | Edge Architecture | Pi agents with local content cache, 72-hour offline playback SLA       |
+| Feedback Control          | Brightness Loop   | LDR sensor -> Arduino -> Pi -> brightnessctl -> Display output         |
+| Emergency Communication   | Broadcast System  | emergency_trigger event -> Socket.IO -> all devices in affected groups |
+| Client-Server             | Network Topology  | Dual-NIC server with Layer 3 isolation, 10.20.0.0/22 signage subnet    |
+
+This framework establishes that our system is not merely a software application but a socio-technical system where hardware sensing, network isolation, content management, and human factors are interdependent. Each theoretical construct is realized through a specific implementation component, forming a traceable chain from academic foundation to deployed functionality.
 
 ## Digital Signage Platforms
 
@@ -64,30 +111,20 @@ Screenly OSE), PiSignage, and Xibo.
 We also evaluated four commercial platforms to understand the cost and
 capability landscape our system must compete with:
 
-- **Yodeck** \[7\] charges \$7.99 per screen per month for basic
-  features and \$13.99 for professional features. For 130 screens, this
-  translates to \$21,824 annually. Yodeck offers drag-and-drop layout
-  editing, scheduling, offline sync, and API access. However, it has no
-  sensor integration, offers no on-premises deployment (cloud-only), and
-  lacks role-based group scoping.
-
-- **NoviSign** \[8\] targets the retail and hospitality verticals with
-  pricing between \$20.00 and \$41.00 per screen per month. At \$30 per
-  screen, a 130-display campus would pay \$46,800 annually. NoviSign
-  provides touch interactivity, social media widgets, and an analytics
-  dashboard, but it lacks ambient light sensing, occupancy management,
-  and imposes vendor lock-in.
-
-- **Rise Vision** \[9\] focuses on the education market at \$10.50 to
-  \$13.50 per screen per month, yielding approximately \$18,720 annually
-  for 130 screens. It integrates with Google Workspace and offers
-  emergency alert templates, but it has no sensor-driven brightness
-  control, no device authentication, and is cloud-dependent.
-
-- **ScreenCloud** \[10\] charges \$20.00 per screen per month with no
-  free tier, resulting in \$31,200 annually for 130 screens. It provides
-  an app marketplace and social media integrations but lacks power
-  management, on-premises source access, and sensor integration.
+Yodeck charges \$7.99 to \$13.99 per screen per month, translating to
+\$21,824 annually for 130 screens, and offers drag-and-drop layout
+editing, scheduling, and API access, but lacks sensor integration,
+on-premises deployment, and role-based group scoping. NoviSign targets
+retail and hospitality at \$20 to \$41 per screen per month (\$46,800
+annually for 130 screens) with touch interactivity and analytics, but
+lacks ambient light sensing, occupancy management, and imposes vendor
+lock-in. Rise Vision focuses on education at \$10.50 to \$13.50 per
+screen per month (\$18,720 annually) with Google Workspace integration
+and emergency alert templates, but has no sensor-driven brightness
+control, no device authentication, and is cloud-dependent. ScreenCloud
+charges \$20 per screen per month (\$31,200 annually) with an app
+marketplace and social media integrations but lacks power management and
+on-premises source access.
 
 Across all commercial platforms, we identified five common limitations:
 no ambient light sensing or adaptive brightness, no occupancy-based
@@ -97,7 +134,7 @@ per-screen recurring costs that scale linearly with deployment size.
 Vendor lock-in further traps content and schedules in proprietary
 formats, making migration costly.
 
-<caption>Commercial digital signage platform comparison.</caption>
+<caption>Commercial Digital Signage Platform comparison.</caption>
 | Platform | Monthly Cost/Screen | Annual Cost (130 screens) | 5-Year TCO | Free Tier | Open Source | Sensor Integration | On-Premises | RBAC | Live Stream | Network Design |
 |----|----|----|----|----|----|----|----|----|----|----|
 | Yodeck | \$13.99 | \$21,824 | \$109,120 | No | No | No | No | No | No | No |
@@ -111,27 +148,16 @@ formats, making migration costly.
 
 Our survey of open-source platforms, commercial systems, and research
 prototypes revealed seven critical capabilities that no existing
-platform combines:
-
-- **Zero licensing cost** through fully open-source implementation.
-
-- **Environmental sensor integration** for brightness, motion, and
-  weather input.
-
-- **Role-based access control with group scoping** for multi-department
-  campuses.
-
-- **Device token authentication** to secure IoT edge nodes.
-
-- **Campus-scale network security design** with documented hardening.
-
-- **Dual player architecture** supporting both browser-based and native
-  video playback.
-
-- **Integrated live streaming** with RTMP-to-HLS relay at zero cost.
-
-Table 2.1 quantifies these gaps across the evaluated platforms. Our
-system is the only one that satisfies all seven requirements.
+platform combines: zero licensing cost through fully open-source
+implementation, environmental sensor integration for brightness and
+motion input, role-based access control with group scoping for
+multi-department campuses, device token authentication to secure IoT
+edge nodes, campus-scale network security design with documented
+hardening, a dual player architecture supporting both browser-based and
+native video playback, and integrated live streaming with RTMP-to-HLS
+relay at zero cost. the table quantifies these gaps across the evaluated
+platforms. Our system is the only one that satisfies all seven
+requirements.
 
 ## IoT and Edge Computing for Building Automation
 
@@ -272,17 +298,15 @@ yielding additional energy savings in the region where displays spend
 most of their operating hours.
 
 <figure>
-<img src="./assets/media/image5.png"
+<img src="./assets/media/fig2_3_brightness_curve.png"
 style="width:5.83333in;height:4.16667in"
-alt="Fig 2.1 — Logarithmic brightness adaptation curve based on the Weber-Fechner law (solid) compared with linear mapping (dashed), showing the energy savings zone at low ambient light levels." />
-<figcaption><p>Logarithmic brightness adaptation curve based on the
-Weber-Fechner law (solid) compared with linear mapping (dashed), showing
-the energy savings zone at low ambient light levels.</p></figcaption>
+alt="Figure 2.3 — Logarithmic brightness adaptation curve showing the energy savings zone at low ambient light levels." />
+<figcaption><p>Logarithmic brightness adaptation curve based on the Weber-Fechner law.</p></figcaption>
+
+
 </figure>
 
-**Fig. 2.1** Logarithmic brightness adaptation curve based on the
-Weber-Fechner law (solid) compared with linear mapping (dashed), showing
-the energy savings zone at low ambient light levels.
+**Figure 2.3:** Logarithmic brightness adaptation curve showing the energy savings zone at low ambient light levels.
 
 ### CEC and DDC/CI Protocols for Display Control
 
@@ -355,7 +379,7 @@ all.
 Our approach integrates RTMP-to-HLS relay at zero additional cost,
 supports four source types (RTMP, HLS, RTSP, and YouTube), and performs
 server-side transcoding to offload work from the Pi clients. This is a
-unique capability among open-source digital signage platforms.
+unique capability among open-source Digital Signage Platforms.
 
 ## Multi-Tenancy and Role-Based Access Control
 
@@ -406,10 +430,14 @@ between the campus-facing network and the signage-facing network.
 | 7 | No concurrency control for simultaneous multi-user device access | Objective 7 (concurrency control) | 4.3.6 |
 
 
-These gaps, combined with the cost analysis in Table 2.1, establish the
+These gaps, combined with the cost analysis in the table establishes the
 clear need for a new system architecture that unifies environmental
 sensing, intelligent display control, secure content management, and
 live stream distribution in a single open-source platform. The following
 chapters describe how we designed and implemented such a system.
+
+## Chapter Summary
+
+This chapter reviewed the theoretical and empirical foundations of digital signage, IoT edge computing, and power management. By comparing existing commercial and open-source platforms, we identified seven critical research gaps, including lack of sensor integration and secure multi-tenancy. These findings provided the academic justification for the system's adaptive and role-based architecture.
 
 \newpage

@@ -2,6 +2,13 @@
 
 # Introduction
 
+This chapter establishes the foundation for the Smart Digital Signage
+System by examining the evolution of campus communication infrastructure,
+identifying the limitations of existing commercial and open-source
+solutions, and formally stating the problems this project addresses. We
+present the general and specific objectives, define the scope of the
+study, and highlight the significance and contributions of this work.
+
 ## Background and Motivation
 
 ### Evolution of Campus Communication
@@ -39,12 +46,9 @@ that may be irrelevant to the current audience or even invisible due to
 glare from changing ambient light \[3\].
 
 <figure>
-<img src="./assets/media/image2.jpeg"
+<img src="./assets/media/fig1_1_bulletin_board.jpg"
 style="width:5.83333in;height:2.72079in" />
-<figcaption><p>Traditional campus bulletin board with paper notices,
-illustrating the limitations of static communication: manual updates, no
-remote management, and no targeting by audience or
-location.</p></figcaption>
+<figcaption><p>Traditional campus bulletin board with paper notices.</p></figcaption>
 </figure>
 
 ### Limitations of Current Commercial and Open-Source Digital Signage
@@ -54,7 +58,7 @@ proprietary commercial platforms and open-source alternatives.
 Commercial systems such as Screenly, Xibo, and Scala provide polished
 management dashboards, cloud hosting, and technical support, but impose
 recurring licensing fees that can exceed \$1,000 per display per year
-\[4\]. For a 130-display campus, this translates to \$130,000 in annual
+\[4\]. For large-scale campus environments, this translates to \$130,000 in annual
 licensing alone - before hardware, installation, or energy costs.
 Furthermore, commercial platforms typically offer limited or no
 integration with environmental sensors, treating each display as a
@@ -93,11 +97,9 @@ normal operation. The lack of a centralized emergency broadcast channel
 represents a genuine safety gap \[10\].
 
 <figure>
-<img src="./assets/media/image3.jpeg"
+<img src="./assets/media/fig1_2_display_full_brightness.jpg"
 style="width:5.83333in;height:2.71968in" />
-<figcaption><p>Commercial digital signage installation showing a
-fixed-brightness LCD display, illustrating energy waste and visual glare
-in low ambient light conditions.</p></figcaption>
+<figcaption><p>Commercial display at fixed brightness in empty hallway.</p></figcaption>
 </figure>
 
 ### The Convergence Opportunity
@@ -125,40 +127,21 @@ security hardening) \[14\].
 
 ## Problem Statement
 
-This project addresses the design and implementation of a Smart Digital
-Signage System that overcomes the three critical gaps identified in
-Section 1.1.2 through an integrated hardware–software architecture
-spanning sensor instrumentation, embedded processing, network
-infrastructure, backend services, frontend dashboards, and display
-control.
+The investigation of existing campus-scale and urban digital signage implementations has identified several critical problems that impede efficient communication and resource management.
 
-The specific problems we addressed are:
+### Evidence from Local Field Observations
 
-**P1 - Energy waste from fixed-brightness operation:** Digital displays
-on modern campuses consume 30–150 W per unit depending on size and
-backlight technology \[15\]. With 130 displays operating 16 hours daily,
-fixed-brightness operation at peak intensity results in an estimated
-annual energy consumption of 95,600 kWh and electricity costs exceeding
-\$11,400 at \$0.12/kWh. The absence of ambient light feedback means
-displays run at unnecessary brightness during low-light periods, wasting
-an estimated 25–40% of display energy \[16\].
+To ground the problem statement in empirical evidence, a field survey was conducted through direct observation of existing digital notice boards in Woldia City, specifically at the **Adago** and **Piasa** locations. This observational study confirmed several systemic failures in current implementations:
+- **Excessive Brightness:** Boards were found to operate at 100% luminance regardless of ambient light conditions, causing significant visual glare at night and substantial energy waste.
+- **Management Errors:** The displays exhibited unmanaged operational states, including frozen content and system errors, demonstrating a lack of remote monitoring and automated recovery.
+- **Information Lag:** Content was frequently outdated, confirming that existing processes for information dissemination are slow and inefficient due to the lack of a centralized platform.
 
-**P2 - Disconnected, unmanaged display nodes:** Each display operates
-without awareness of its surroundings or connection to a central
-management authority. Content updates require physical access or
-per-device remote login. There is no mechanism for occupancy-driven
-content selection, scheduling, or automatic power management.
+These observations directly support the identified problems:
 
-**P3 - Security gap in unauthenticated IoT device communication:**
-Raspberry Pi edge nodes receiving content from a central server
-typically do so without any authentication mechanism. A malicious actor
-on the same network could inject content, change playback, or disrupt
-service without detection \[17\].
-
-**P4 - High total cost of ownership (TCO):** Commercial licensing alone
-exceeds \$1,000 per display per year. For a 130-display campus, this
-represents \$130,000 annually in software costs alone, before hardware,
-energy, installation, and maintenance are considered \[4\].
+- **Energy waste from fixed-brightness operation:** Digital displays consume between 30 and 150 W per unit. In large-scale institutional deployments, such as 130 displays operating 16 hours daily, fixed-brightness operation results in an estimated annual energy consumption of 95,600 kWh and electricity costs exceeding $11,400. The lack of responsiveness to environmental light levels leads to inefficient power utilization and reduced hardware lifespan.
+- **Disconnected and unmanaged display nodes:** Display infrastructure often operates as a collection of isolated units with no awareness of their physical surroundings or connection to a central authority. This necessitates physical access or per-device remote login for even minor content updates, creating significant maintenance burdens and operational overhead.
+- **Security vulnerabilities in unauthenticated communication:** Communication between signage nodes and servers often occurs without cryptographic authentication. This vulnerability allows unauthorized actors on the network to inject content, manipulate playback, or disrupt services, representing a genuine threat to the integrity of organizational information.
+- **Prohibitive Total Cost of Ownership (TCO):** Commercial licensing and support for enterprise signage platforms can exceed $1,000 per display per year. For large-scale campus environments, the resulting $130,000 annual software expense is unsustainable for many institutions, especially when combined with high installation and maintenance costs.
 
 ## Objective
 
@@ -171,27 +154,51 @@ command and control, live stream distribution, emergency broadcast with
 hardware trigger, and a hardened campus network - replacing costly
 commercial alternatives with a functional, tested prototype.
 
+<figure>
+<img src="./assets/media/fig1_3_system_block_diagram.png"
+style="width:6.64851in;height:3.62542in" />
+<figcaption><p>Figure 1.3: Smart Digital Signage System high-level overview with network topology.</p></figcaption>
+</figure>
+
 ### Specific Objectives
 
-<caption>Specific objectives and their validation evidence.</caption>
-| \#  | Objective                                                                                                                                    | Validation Evidence                                                                                                                                                                                                           |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Develop an embedded sensing layer (motion + ambient light + emergency button) with adaptive display brightness and screen power control      | Prototype assembly with real Arduino Mega 2560, three HC-SR04 sensors, LDR module, and potentiometer; serial monitor confirming accurate sensor readings; end-to-end brightness adaptation tested on Debian 13 laptop screens |
-| 2   | Build a centralized full-stack CMS with RBAC, group-scoped permissions, and real-time device control                                         | Admin and creator dashboards with role-based routing; 30+ backend integration tests passing; Socket.IO device authentication tests; control lock priority logic tests                                                         |
-| 3   | Implement live stream distribution (HLS, RTSP, YouTube, RTMP ingest) at zero licensing cost                                                  | Stream relay pipeline with FFmpeg; health monitoring; live stream CRUD operations tested via Playwright E2E                                                                                                                   |
-| 4   | Design a dual player architecture (Anthias + MPV) supporting per-device backend selection and shared communication                           | Device comparison table; content sync verification; dual backend selection in admin dashboard                                                                                                                                 |
-| 5   | Deploy a production-ready campus network design (subnet 10.20.0.0/22, dual-NIC Layer 3 isolation) with documented security hardening         | Network topology diagram; nftables firewall rules; vulnerability assessment with 12 remediated issues; RBAC permission matrix                                                                                                 |
-| 6   | Build an emergency broadcast system with hardware trigger, group-wide override, and automatic fallback                                       | Physical emergency button presses trigger immediate local playback on Debian 13 node; group state change propagates to all devices via Socket.IO; disconnection fallback tested                                               |
-| 7   | Implement robust concurrency control: control locks, priority synchronization, and deadlock prevention for simultaneous admin/creator access | Control lock acquisition flow diagram; multi-creator priority ordering tests; 423 Locked HTTP response validation                                                                                                             |
-| 8   | Validate the system through automated testing (backend + frontend E2E) and hardware verification protocols                                   | Jest test suite output (30+ tests); Playwright E2E report (25 tests, 55 screenshots); hardware assembly checklist; serial communication verification                                                                          |
+1.  **Develop an embedded sensing layer:** Implement a sensor bridge using an Arduino Mega 2560 with motion (HC-SR04), ambient light (LDR), and emergency button inputs. Validation is evidenced by the physical prototype assembly, serial monitor logs confirming accurate readings, and end-to-end brightness adaptation tested on Debian 13 node screens.
+2.  **Build a centralized full-stack CMS:** Create a management platform with role-based access control (RBAC), group-scoped permissions, and real-time device control. Validation includes functional admin/creator dashboards, 56 passing backend integration tests, and successful Socket.IO device authentication.
+3.  **Implement live stream distribution:** Deploy a media relay pipeline supporting HLS, RTSP, YouTube, and RTMP ingest at zero licensing cost. Validation is evidenced by the integrated FFmpeg relay, health monitoring services, and live stream CRUD operations verified via Playwright E2E tests.
+4.  **Design a dual player architecture:** Engineer a unified control layer supporting both Anthias (browser-based) and MPV (native-media) playback engines with per-device backend selection. Validation includes the content synchronization protocol and dual-backend configuration options in the management dashboard.
+5.  **Deploy a secure campus network design:** Implement a production-ready network topology using the 10.20.0.0/22 subnet with dual-NIC Layer 3 isolation and nftables hardening. Validation is evidenced by the documented firewall rules, network topology diagrams, and a vulnerability assessment with 12 remediated issues.
+6.  **Build an emergency broadcast system:** Develop a multi-trigger emergency system with hardware buttons, group-wide overrides, and automatic local fallback. Validation includes physical button tests triggering immediate playback on edge nodes and group-state propagation via Socket.IO.
+7.  **Implement robust concurrency control:** Design a control-lock mechanism with priority synchronization and deadlock prevention for multi-user access. Validation is evidenced by the control-lock acquisition flow, priority ordering tests, and HTTP 403 response validation for unauthorized overrides.
+8.  **Validate the system through comprehensive testing:** Conduct automated backend testing, frontend E2E testing, and hardware verification protocols. Validation is confirmed by 56 Jest backend tests, 73 Playwright E2E tests with 47 screenshots, and hardware assembly verification checklists.
 
 
 ## Scope and Delimitations
 
-### In scope
+### Geographical Scope
 
-We designed a campus-wide deployment architecture capable of supporting
-130 nodes across 20 buildings and 10 open areas. We built a functional
+The system is designed for deployment at **Woldia University (Main Campus)**, targeting a scalable architecture supporting up to 130+ nodes across academic buildings, open areas, and administrative centers. While Woldia University serves as the primary deployment and validation environment, the system's modular architecture is designed to be **generalized for any institutional environments**, including hospitals, commercial facilities, and corporate offices, where centralized information dissemination and energy management are required.
+
+### User Scope
+
+Three user categories are supported:
+- **Administrators:** IT staff who manage devices, groups, and user accounts
+- **Content Creators:** Departmental staff who publish content to assigned display groups
+- **Public Viewers:** Students, faculty, and visitors who browse the public feed
+
+### Functional Scope
+
+The system covers embedded sensing (motion, brightness, emergency button),
+content management (posts, media, scheduling), role-based access control
+(admin/creator/viewer), real-time device control via Socket.IO, live
+streaming (HLS/RTSP/YouTube/RTMP), emergency broadcast, and public feed
+with AI-assisted Q&A.
+
+### Period of Study
+
+November 2025 to June 2026 (8 months): 5 months development, 2 months
+testing and validation, 1 month documentation.
+
+### In scope
 prototype comprising two edge display nodes (simulated using laptops
 running Debian 13 live USB sessions) connected to our central server,
 with a real Arduino Mega 2560 sensor bridge providing motion, ambient
@@ -225,19 +232,19 @@ would require months of continuous operation at scale.
 Our Smart Digital Signage System achieves a projected 60% TCO reduction
 compared to commercial platforms by eliminating licensing fees, reducing
 energy consumption through adaptive brightness, and using open-source
-components throughout the stack. For a 130-display campus, this
+components throughout the stack. For large-scale campus environments, this
 represents approximately \$390,000 in savings over five years.
 
 ### Novel Contributions
 
-We make the following contributions:
+The project makes these contributions:
 
 **Device token authentication for Pi-class edge nodes:** We closed a
 critical security gap by implementing 64-character hex device tokens
 generated server-side on first contact, stored in a sidecar file on each
 node, and validated on every Socket.IO connection. This is the first
 documented implementation of per-device token authentication in an
-open-source digital signage platform \[17\].
+open-source Digital Signage Platform \[17\].
 
 **Dual player architecture with per-device backend selection:** We
 designed a unified control layer that supports both Anthias (Dockerized
@@ -259,17 +266,16 @@ campus IT staff.
 
 ### Who Benefits
 
-Universities, public institutions, hospitals, and any organization
+Universities, public institutions, hospitals, and any organizations
 running multi-display networks benefit from lower TCO, reduced energy
 consumption, unified management, and improved emergency preparedness.
 Our open-source implementation eliminates vendor lock-in and enables
 customization for domain-specific requirements.
 
 <figure>
-<img src="./assets/media/image4.png"
+<img src="./assets/media/fig1_3_system_block_diagram.png"
 style="width:6.64851in;height:3.62542in" />
-<figcaption><p>High level view of the smart signage system, with
-network, device and users overview</p></figcaption>
+<figcaption><p>Smart Digital Signage System overview with network topology.</p></figcaption>
 </figure>
 
 ## Report Structure
@@ -277,7 +283,7 @@ network, device and users overview</p></figcaption>
 The remainder of this report is organized as follows.
 
 **Chapter 2 - Literature Review and Related Work** surveys existing
-digital signage platforms, IoT edge computing architectures, power
+Digital Signage Platforms, IoT edge computing architectures, power
 management techniques, live streaming protocols, and role-based access
 control systems. We identify seven research gaps that our project
 addresses.
@@ -295,12 +301,12 @@ Playwright-captured screenshots, the dual player architecture, and the
 security implementation.
 
 **Chapter 5 - Results and Validation** report our functional testing
-results (30+ backend tests, 25 frontend E2E tests), hardware
+results (56 backend tests, 73 frontend E2E tests), hardware
 verification, network verification, objectives achievement assessment,
 and performance and cost analysis.
 
 **Chapter 6 - Discussion** closes the problem-solution loop, describing
-how each problem from Section 1.2 is solved, assessing implementation
+how each problem from Chapter 1 is solved, assessing implementation
 readiness, acknowledging limitations, and comparing our system with
 related work.
 
@@ -315,5 +321,9 @@ security analysis, software engineering practices, power analysis, cost
 analysis, literature review references, project summary, master
 bibliography, source code listings, data sheets, and a glossary of
 terms.
+
+## Chapter Summary
+
+This chapter established the foundation for the Smart Digital Signage System by analyzing the evolution of campus communication and the limitations of current solutions. We defined the problem statement, objectives, and scope, highlighting the need for an energy-efficient, secure, and cost-effective platform. The significance of this work was presented in the context of institutional digital transformation.
 
 \newpage

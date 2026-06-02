@@ -44,7 +44,7 @@ You can control the document assembly without editing any code by modifying `bui
 The system manages complex numbering automatically:
 
 *   **`<!-- SECTION_BREAK_ROMAN -->`**: Starts a new section with **Roman Numerals (i, ii, iii)**. Perfect for Declaration, Acknowledgements, and the Table of Contents.
-*   **`<!-- SECTION_BREAK_ARABIC -->`**: Starts a new section with **Arabic Numerals (1, 2, 3)** and restarts the count at 1. Use this at the start of **Chapter 1**.
+*   **`<!-- SECTION_BREAK_ARABIC -->`**: Starts a new section with **Arabic Numerals (1, 2, 3)** and restarts the count at 1. Use this at the start of **the relevant chapter**.
 *   **`\\newpage`**: Inserts a standard page break.
 
 ### 2. Universal Styling

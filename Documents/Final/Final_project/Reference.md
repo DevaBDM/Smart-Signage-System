@@ -40,7 +40,8 @@ Rise Vision, 2024. \[Online\]. Available: https://www.risevision.com/
 \[10\] ScreenCloud Ltd., “ScreenCloud Digital Signage Platform,”
 ScreenCloud, 2024. \[Online\]. Available: https://screencloud.com/
 
-------------------------------------------------------------------------
+
+
 
 \[11\]–\[25\] Edge Computing, Sensors, and Power Management
 
@@ -103,7 +104,8 @@ p. 110987, 2020.
 Context-Aware Display Brightness Optimization,” *Building and
 Environment*, vol. 198, p. 107876, 2021.
 
-------------------------------------------------------------------------
+
+
 
 \[26\]–\[35\] Access Control, Security, and Networking
 
@@ -144,7 +146,8 @@ Available: https://tools.ietf.org/html/rfc7230
 Protocol Version 1.3,” IETF, 2018. \[Online\]. Available:
 https://tools.ietf.org/html/rfc8446
 
-------------------------------------------------------------------------
+
+
 
 \[36\]–\[47\] Web Technologies and Frontend Frameworks
 
@@ -188,7 +191,8 @@ Zustand, 2024. \[Online\]. Available: https://docs.pmnd.rs/zustand/
 Documentation,” Fabric.js, 2024. \[Online\]. Available:
 http://fabricjs.com/
 
-------------------------------------------------------------------------
+
+
 
 \[48\]–\[78\] Media, Streaming, and DevOps
 
@@ -298,7 +302,8 @@ https://chrony-project.org/
 \[78\] Grafana Labs, “Grafana Documentation,” Grafana, 2024. \[Online\].
 Available: https://grafana.com/docs/
 
-------------------------------------------------------------------------
+
+
 
 \[79\]–\[88\] Hardware Datasheets and Manufacturer Documentation
 
@@ -341,7 +346,8 @@ https://www.cisco.com/c/en/us/products/switches/catalyst-9300-series-switches/
 \[88\] Ubiquiti Networks, “UniFi Switch Pro 48 PoE Data Sheet,”
 Ubiquiti, 2024. \[Online\]. Available: https://ui.com/
 
-------------------------------------------------------------------------
+
+
 
 \[89\]–\[120\] Open Source Projects, Books, and Online Resources
 

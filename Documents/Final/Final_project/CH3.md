@@ -1,66 +1,73 @@
-# Chapter 3 {.title}
+#  Chapter 3 {.title}
 
 # Methodology
 
+This chapter describes the research methodology, system requirements,
+high-level architecture, and development and testing approach used to
+design and validate the Smart Digital Signage System. We adopt a
+Design-Based Research methodology with iterative build-test cycles, and
+document both functional and non-functional requirements derived from
+the problem statement in the preceding chapters.
+
 ## Research Approach
 
-We adopted an iterative prototyping methodology for this capstone
-project, organized into four two-month phases over an eight-month
-development cycle. This approach allowed us to build, test, and refine
-each subsystem incrementally while maintaining a working prototype at
-every stage.
+### Research Design: Design-Based Research (DBR)
 
-- **Phase 1 - Requirements and Architecture (Months 1–2):** We conducted
-  a comprehensive survey of existing digital signage platforms,
-  identified seven critical research gaps documented in Chapter 2, and
-  established the system requirements. We produced the high-level
-  architecture diagram, selected the technology stack, and designed the
-  database schema.
+The project adopts a Design-Based Research (DBR) methodology — an iterative
+approach that integrates design, development, and empirical evaluation within
+authentic real-world contexts. DBR is selected over pure experimental or survey
+methods because the project's primary goal is constructing a functional artifact
+(the signage system) while simultaneously deriving design principles through
+repeated build-test cycles. The DBR process follows five phases:
 
-- **Phase 2 - Core Backend and Frontend (Months 3–4):** We implemented
-  the Node.js backend with Express.js routing, Prisma ORM models, JWT
-  authentication, and the Socket.IO real-time bus. In parallel, we built
-  the React frontend with Vite, Zustand state management, and role-based
-  routing. We established the Jest testing framework for the backend and
-  the Playwright E2E framework for the frontend.
+1. **Analysis:** Problem identification through literature review of 44
+   verified references and local requirements survey (questionnaires,
+   interviews with campus IT staff, observation of existing display
+   infrastructure). This phase established the seven research gaps
+   documented in the preceding chapters.
+2. **Design:** System architecture design including component selection
+   (Arduino Mega 2560, Raspberry Pi 4B, HC-SR04 sensors), network topology
+   (10.20.0.0/22 subnet, dual-NIC Layer 3 isolation), database schema (15
+   Prisma models), and API specification (12 REST route modules).
+3. **Development:** Iterative implementation organized into four two-month
+   sprints: (a) core backend and frontend, (b) hardware integration and
+   sensor firmware, (c) Pi agent software and media pipeline, (d) security
+   hardening and testing infrastructure.
+4. **Evaluation:** Validation through automated test suites (56 backend tests
+   across 7 suites + 73 frontend E2E tests), hardware verification protocols
+   (assembly checklist, multimeter measurements, serial communication tests),
+   and performance benchmarks (brightness response latency, stream relay
+   throughput, offline playback duration).
+5. **Iteration:** Refinement based on test failures, sensor calibration data,
+   and network throughput measurements. Each iteration produced a working
+   prototype that incrementally added functionality.
 
-- **Phase 3 - Hardware Integration and Sensor Layer (Months 5–6):** We
-  assembled the Arduino Mega 2560 sensor bridge with three HC-SR04
-  ultrasonic sensors, an LDR module, a potentiometer, and an emergency
-  push button. We flashed the Arduino firmware, established USB serial
-  communication at 9600 baud to our Debian 13 laptops (simulating
-  Raspberry Pi edge nodes), and implemented the brightness adaptation
-  algorithm using the operating system’s display brightness API. We
-  tested the emergency button trigger and verified end-to-end
-  sensor-to-screen data flow.
+### Technology Stack Justification
 
-- **Phase 4 - System Integration, Testing, and Documentation (Months
-  7–8):** We integrated all subsystems - sensor layer, backend,
-  frontend, and simulated edge nodes - into a unified prototype. We ran
-  the full automated test suite (30+ backend tests, 25 frontend E2E
-  tests), performed hardware verification, documented the network
-  architecture, and produced this report.
+Our technology stack selections were driven by three criteria:
+open-source licensing (zero recurring cost), active community support
+(sustainable maintenance), and proven production use (reliability). We
+selected Node.js and React because both have large ecosystems,
+extensive documentation, and are widely used in production web
+applications. We selected PostgreSQL for its ACID compliance and
+relational data integrity. We selected Prisma for its type-safe
+database client and migration tooling. We selected Socket.IO for its
+reliable WebSocket abstraction with automatic fallback to HTTP
+long-polling.
 
-- Our technology stack selections were driven by three criteria:
-  open-source licensing (zero recurring cost), active community support
-  (sustainable maintenance), and proven production use (reliability). We
-  selected Node.js and React because both have large ecosystems,
-  extensive documentation, and are widely used in production web
-  applications. We selected PostgreSQL for its ACID compliance and
-  relational data integrity. We selected Prisma for its type-safe
-  database client and migration tooling. We selected Socket.IO for its
-  reliable WebSocket abstraction with automatic fallback to HTTP
-  long-polling.
+### Open-Source over Commercial
+
+Vendor independence, customizability, cost, full source control.
 
 ## System Requirements
 
 ### Functional Requirements
 
 We derived the functional requirements from the problem statement in
-Section 1.2 and the research gaps in Table 2.3. Table 3.1 lists the
+Chapter 1 and the research gaps identified in Chapter 2. Table 3.1 lists the
 primary functional requirements and their priorities.
 
-<caption>Functional requirements.</caption>
+<caption>Table 3.1: Functional requirements.</caption>
 | ID | Requirement | Priority | Validation Method |
 |----|----|----|----|
 | FR-1 | The system shall sense ambient light, motion, and weather input via Arduino sensors | High | Hardware prototype; serial monitor verification |
@@ -94,79 +101,110 @@ primary functional requirements and their priorities.
 
 ## High-Level Architecture
 
-Our system follows a centralized client-server architecture with four
-principal tiers: environmental sensing, edge processing, backend
-services, and frontend presentation. Figure 3.1 illustrates the complete
-system topology.
+### UML System Models
+
+The system architecture is documented through five Unified Modeling Language (UML)
+diagrams covering static structure, dynamic behavior, and physical deployment:
+
+| UML Diagram | Purpose | System Representation |
+|-------------|---------|----------------------|
+| **Use Case Diagram** | Actor-system interactions | Four actors (Admin, Creator, Viewer, Pi Device) with use cases for content publishing, device approval, emergency broadcast, and feed browsing |
+| **Activity Diagram** | Workflow logic | Post creation through approval, signage deployment, Pi content sync, and display playback |
+| **Sequence Diagram** | Real-time interaction | Socket.IO handshake: Pi heartbeat, token assignment, sensor_update loop, emergency_trigger propagation |
+| **Class Diagram** | Static structure | Prisma entities: Group, User, Device, Post, SignageDeployment, SensorLog with relationships and cardinalities |
+| **Deployment Diagram** | Physical topology | Dual-NIC server, 130+ Pi nodes across 20 buildings, core/edge switches, Arduino sensor nodes, isolated 10.20.0.0/22 LAN |
 
 <figure>
-<img src="./assets/media/image6.png"
-style="width:6.47237in;height:5.67034in"
-alt="Fig 1.3 — High-level system block diagram showing the end-to-end data flow from sensors through Arduino, Debian edge node, Socket.IO, Node.js backend, PostgreSQL database, and React frontend." />
-<figcaption><p>High-level system block diagram showing the end-to-end
-data flow from sensors through Arduino, Debian edge node, Socket.IO,
-Node.js backend, PostgreSQL database, and React
-frontend.</p></figcaption>
+<img src="./assets/media/uml_usecase.png"
+style="width:5in;height:3.75in"
+alt="Use case diagram showing four actors and their system interactions." />
+<figcaption><p>Use case diagram showing Admin, Creator, Viewer, and Pi Device actors with their system interactions.</p></figcaption>
 </figure>
 
 <figure>
-<img src="./assets/media/image7.png"
+<img src="./assets/media/uml_activity.png"
+style="width:5in;height:3.75in"
+alt="Activity diagram showing post creation workflow through Pi content sync to display." />
+<figcaption><p>Activity diagram showing the post creation, approval, deployment, and display playback workflow.</p></figcaption>
+</figure>
+
+<figure>
+<img src="./assets/media/uml_sequence.png"
+style="width:5.5in;height:4.25in"
+alt="Sequence diagram showing Socket.IO handshake between Pi and server." />
+<figcaption><p>Sequence diagram showing the Socket.IO heartbeat, token assignment, sensor update, and emergency trigger flow.</p></figcaption>
+</figure>
+
+<figure>
+<img src="./assets/media/uml_class.png"
+style="width:5.5in;height:4.25in"
+alt="Class diagram showing Prisma entity relationships." />
+<figcaption><p>Class diagram showing Prisma entities: Group, User, Device, Post, SignageDeployment, and SensorLog with their relationships.</p></figcaption>
+</figure>
+
+<figure>
+<img src="./assets/media/uml_deployment.png"
+style="width:5.5in;height:3.85in"
+alt="Deployment diagram showing physical system topology." />
+<figcaption><p>Deployment diagram showing dual-NIC server, Pi nodes across the signage LAN, Arduino sensor layer, and network infrastructure.</p></figcaption>
+</figure>
+
+Our system follows a centralized client-server architecture with four
+principal tiers: environmental sensing, edge processing, backend
+services, and frontend presentation. the figure illustrates the complete
+system topology.
+
+<figure>
+<img src="./assets/media/fig1_3_system_block_diagram.png"
+style="width:6.47237in;height:5.67034in"
+alt="System block diagram with end-to-end data flow   frontend." />
+<figcaption><p>System block diagram with end-to-end data flow from sensors to display.</p></figcaption>
+
+
+
+</figure>
+
+<figure>
+<img src="./assets/media/fig3_1_system_topology.png"
 style="width:5.83333in;height:5.1614in"
-alt="Fig 3.1 — Complete system topology showing 130+ Debian edge nodes, central Ubuntu server with dual-NIC Layer 3 isolation, core and edge switches, and campus subnet 10.20.0.0/22." />
-<figcaption><p>Complete system topology showing 130+ Debian edge nodes,
-central Ubuntu server with dual-NIC Layer 3 isolation, core and edge
-switches, and campus subnet 10.20.0.0/22.</p></figcaption>
+alt="Complete system topology for 130-node deployment,  switches, and campus subnet 10.20.0.0/22." />
+<figcaption><p>Complete system topology for 130-node campus deployment.</p></figcaption>,
+
+
 </figure>
 
 ### End-to-End Data Flow
 
 The data flow through our system follows a deterministic path from
-physical sensing to screen rendering:
+physical sensing to screen rendering. The Arduino Mega 2560 reads three
+HC-SR04 distance sensors, one LDR module, one potentiometer, and one
+emergency push button every 500 ms in a deterministic loop, then formats
+the readings as a comma-separated text packet and transmits it over USB
+CDC serial at 9600 baud to the Debian 13 laptop simulating the Raspberry
+Pi edge node. The Debian node parses the serial packet, applies the
+Weber-Fechner logarithmic brightness mapping, adjusts the laptop screen
+brightness via the operating system's display brightness API, and
+evaluates the motion flag and emergency state. The node then connects to
+the central Node.js backend via Socket.IO, authenticating with a
+64-character hex device token, emitting heartbeats every 10 seconds, and
+receiving commands from the server.
 
-- **Sensing:** The Arduino Mega 2560 reads three HC-SR04 distance
-  sensors, one LDR module, one potentiometer, and one emergency push
-  button every 500 ms in a deterministic loop.
-
-- **Transmission:** The Arduino formats the readings as a
-  comma-separated text packet and transmits it over USB CDC serial at
-  9600 baud to the Debian 13 laptop simulating the Raspberry Pi edge
-  node.
-
-- **Edge Processing:** The Debian node parses the serial packet, applies
-  the Weber-Fechner logarithmic brightness mapping, and adjusts the
-  laptop screen brightness via the operating system’s display brightness
-  API. It also evaluates the motion flag and emergency state.
-
-- **Server Communication:** The Debian node connects to the central
-  Node.js backend via Socket.IO, authenticating with a 64-character hex
-  device token. It emits heartbeats every 10 seconds and receives
-  commands (publish, hide, next, emergency mode) from the server.
-
-- **Content Synchronization:** The Debian node polls the server every 60
-  seconds for new signage deployments, downloading only changed assets.
-  For our Anthias-simulated node, content is managed locally; for the
-  MPV-simulated node, files are cached in `~/signage_media/`.
-
-- **Backend Processing:** The Node.js backend handles HTTP REST API
-  requests from the React frontend, manages the PostgreSQL database
-  through Prisma ORM, processes uploaded media with Sharp and FFmpeg,
-  relays live streams, and coordinates emergency broadcasts via
-  Socket.IO room broadcasting.
-
-- **Frontend Presentation:** The React frontend renders role-appropriate
-  dashboards. Administrators manage devices, groups, and users. Creators
-  design content and publish signage. Viewers browse the public feed and
-  interact with the AI Q&A widget.
-
-- **Display Rendering:** The Debian node renders scheduled content on
-  its screen via Anthias (web-based, supporting HTML overlays) or MPV
-  (native, fast boot, supporting hardware decode).
+For content synchronization, the Debian node polls the server every 60
+seconds for new signage deployments, downloading only changed assets.
+The Node.js backend handles HTTP REST API requests from the React
+frontend, manages the PostgreSQL database through Prisma ORM, processes
+uploaded media with Sharp and FFmpeg, relays live streams, and
+coordinates emergency broadcasts via Socket.IO room broadcasting. The
+React frontend renders role-appropriate dashboards for administrators,
+creators, and viewers. Finally, the Debian node renders scheduled
+content on its screen via Anthias for web-based content or MPV for
+native video playback.
 
 ### Component Count and Scale
 
 Our campus-scale design targets 130 nodes distributed across 20
 buildings and 10 open areas, served by a single Ubuntu server with
-dual-NIC Layer 3 isolation. Table 3.3 summarizes the component
+dual-NIC Layer 3 isolation. the table summarizes the component
 inventory.
 
 <caption>Campus-wide component inventory.</caption>
@@ -194,23 +232,16 @@ serving as the display outputs.
 
 ### Iterative Development Process
 
-We followed a two-week sprint cycle with the following rhythm:
-
-- **Week 1:** Feature development. Each sprint focused on one subsystem
-  (e.g., authentication, media processing, sensor integration).
-
-- **Weekend:** Internal code review. All three group members reviewed
-  pull requests, focusing on correctness, test coverage, and
-  documentation.
-
-- **Week 2:** Testing and refinement. We wrote unit and integration
-  tests for new features, fixed bugs discovered during review, and
-  updated the sprint backlog.
-
-We maintained the project in a single Git monorepo with Conventional
-Commits for structured commit messages (`feat:`, `fix:`, `docs:`,
-`test:`, `refactor:`). This practice enabled us to generate changelogs
-automatically and trace every code change to its functional purpose.
+We followed a two-week sprint cycle where the first week focused on
+feature development for one subsystem at a time, the weekend was
+dedicated to internal code review by all three group members focusing on
+correctness, test coverage, and documentation, and the second week was
+spent on testing and refinement including writing unit and integration
+tests, fixing bugs discovered during review, and updating the sprint
+backlog. We maintained the project in a single Git monorepo with
+Conventional Commits for structured commit messages (`feat:`, `fix:`,
+`docs:`, `test:`, `refactor:`), enabling automated changelog generation
+and traceability from every code change to its functional purpose.
 
 ### Testing Strategy
 
@@ -219,13 +250,13 @@ Our testing strategy employed three complementary approaches:
 - **Backend Integration Testing:** We used Jest with Supertest against
   an isolated PostgreSQL test database (`signage_test`). Each test runs
   against a real Express server instance with database transactions
-  rolled back after each test to ensure isolation. We wrote 30+ tests
+  rolled back after each test to ensure isolation. We wrote 56 tests
   covering authentication, CRUD operations, media upload, deployment
   scheduling, Socket.IO device lifecycle, emergency state changes, and
   control lock priority logic.
 
 - **Frontend End-to-End Testing:** We used Playwright with real browser
-  automation in Chromium. Our test suite comprises 25 tests across two
+  automation in Chromium. Our test suite comprises 73 tests across two
   modes: API-only (`request` mode) for fast direct backend validation on
   port 5001, and full browser UI (`page` mode) for end-to-end form
   submission, navigation, and DOM verification. The tests produced 55
@@ -262,13 +293,17 @@ members using the following toolchain:
   execution
 
 <figure>
-<img src="./assets/media/image8.png"
+<img src="./assets/media/fig8_1_git_log.png"
 style="width:5.83333in;height:3.24074in"
-alt="Fig 3.2 — Terminal capture of the Git log showing the last 20 commits with Conventional Commit prefixes (feat, fix, docs, test, refactor), demonstrating our structured commit history over the development period." />
-<figcaption><p>Terminal capture of the Git log showing the last 20
-commits with Conventional Commit prefixes (feat, fix, docs, test,
-refactor), demonstrating our structured commit history over the
-development period.</p></figcaption>
+alt="Git log with conventional commit format   development period." />
+<figcaption><p>Git log showing conventional commit format.</p></figcaption>
+
+
+
 </figure>
+
+## Chapter Summary
+
+This chapter described the Design-Based Research methodology and the system requirements. We presented the high-level architecture through UML diagrams and documented the end-to-end data flow from physical sensing to display rendering. The methodology ensures a structured approach to building and validating a scalable campus-wide signage infrastructure.
 
 \newpage

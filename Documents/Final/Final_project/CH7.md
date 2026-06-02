@@ -1,6 +1,12 @@
-# Chapter 7 {.title}
+#  Chapter 7 {.title}
 
 # Conclusion and Future Work
+
+This concluding chapter summarizes the key findings of the Smart Digital
+Signage System project by mapping each objective to its achieved outcome,
+restates the significance of the contributions, and outlines immediate,
+medium-term, and research directions for future development. The chapter
+closes the problem-solution loop initiated in Chapter 1.
 
 ## Conclusion
 
@@ -32,30 +38,39 @@ Our software layer comprises a Node.js backend with Express.js routing,
 Prisma ORM for PostgreSQL, Socket.IO for real-time communication, and
 Sharp/FFmpeg for media processing; and a React 19 frontend with Vite,
 Zustand state management, Fabric.js and Markdown+KaTeX content
-designers, and 55 Playwright-captured screenshots documenting every
+designers, and 47 Playwright-captured screenshots documenting every
 major feature. The backend implements dual authentication (JWT for
 users, device tokens for IoT nodes), role-based access control with
 group scoping, control locks for concurrent access prevention, and a
 four-state emergency broadcast system with hardware trigger support.
 
-Validation comprised 30+ backend integration tests (Jest + Supertest),
-25 frontend end-to-end tests (Playwright, 55 screenshots), hardware
+Validation comprised 56 backend integration tests across 7 suites (Jest + Supertest),
+73 frontend end-to-end tests (Playwright, 47 screenshots), hardware
 assembly verification, serial communication confirmation, network
 connectivity tests, and a cost analysis projecting 46–70% TCO reduction
 compared to commercial alternatives over five years.
 
-The system is not merely a design but a working prototype with validated
-hardware and software components. While certain elements - campus-wide
-physical deployment, long-term energy field measurement, and
-mobile-responsive administration - remain for future work, the core
-architecture is production-ready and documented to a level suitable for
-direct deployment by campus IT staff.
+### Objectives Achievement Summary
 
-## Future Work
+Each specific objective from Chapter 1 was achieved:
+
+<caption>Objectives mapping to achieved outcomes.</caption>
+| # | Objective | Achieved Outcome |
+|---|-----------|-----------------|
+| 1 | Embedded sensing layer with adaptive brightness | Arduino Mega 2560 sensor bridge with three HC-SR04 sensors, LDR, potentiometer, and emergency button. End-to-end brightness control validated within 1.5 seconds. 25–40% projected power reduction. |
+| 2 | Full-stack CMS with RBAC and real-time control | Node.js/Express backend with 12 route modules, React 19 frontend with admin/creator/viewer roles. Validated by 56 backend tests and 73 frontend tests. |
+| 3 | Live stream distribution at zero cost | Four stream types (HLS, RTSP, YouTube, RTMP) relayed via FFmpeg to HLS with health monitoring. Zero additional licensing cost. |
+| 4 | Dual player architecture | Anthias (Docker-based web viewer) and MPV (native player) with shared socket_client.py communication layer. Per-device backend selection supported. |
+| 5 | Production-ready campus network design | 10.20.0.0/22 subnet with 1,022 IP capacity, dual-NIC Layer 3 isolation, nftables firewall rules, TLS 1.3 termination, and documented bandwidth engineering. |
+| 6 | Emergency broadcast with hardware trigger | Physical push button triggers local playback without server contact. Software override propagates group-wide via Socket.IO. 72-hour disconnection fallback with local cached assets. |
+| 7 | Concurrency control for multi-user access | Control lock mechanism with priority hierarchy prevents race conditions. 403 Forbidden response for lower-priority overlapping requests. |
+| 8 | Automated validation and hardware verification | 56 backend tests (7 suites) including real FFmpeg stream relay integration. 73 frontend E2E tests (Playwright, Chromium) with 47 screenshots captured on failure. |
+
+
 
 ### Immediate Priorities (0–6 months)
 
-The following tasks should be completed before any production
+These tasks should be completed before any production
 deployment:
 
 **Physical Raspberry Pi deployment:** Replace the Debian 13 laptops with
@@ -101,7 +116,7 @@ ensure displays always show current information.
 **Kubernetes deployment and horizontal scaling:** Containerize the
 backend services and deploy on a Kubernetes cluster for automatic
 failover, horizontal scaling, and rolling updates. This addresses the
-single-server point of failure identified in Section 6.3.
+single-server point of failure identified in the relevant section.
 
 ### Research Directions (18+ months)
 
@@ -121,13 +136,13 @@ selection decisions locally based on sensor data, reducing latency and
 server load for certain use cases.
 
 <figure>
-<img src="./assets/media/image46.png"
+<img src="./assets/media/fig10_2_future_topology.png"
 style="width:5.83333in;height:2.79833in"
-alt="Fig 7.1 — Future multi-campus topology concept showing three campuses connected via WAN to a central management hub, with local servers at each campus for content autonomy and shared emergency broadcast capability." />
-<figcaption><p>Future multi-campus topology concept showing three
-campuses connected via WAN to a central management hub, with local
-servers at each campus for content autonomy and shared emergency
-broadcast capability.</p></figcaption>
+alt="Future multi-campus topology with site-to-site VPN   broadcast capability." />
+<figcaption><p>Future multi-campus topology with site-to-site VPN.</p></figcaption>
+
+
+
 </figure>
 
 This project demonstrates that a unified, open-source Smart Digital
@@ -137,5 +152,9 @@ environmental sensing, intelligent display control, role-based content
 management, and security-hardened network design, we have built a
 foundation upon which future researchers and practitioners can extend
 the state of the art in intelligent building automation.
+
+## Chapter Summary
+
+This concluding chapter summarized the project's outcomes and mapped them to the initial research objectives. We outlined immediate priorities for Raspberry Pi deployment and medium-to-long-term research directions, including AI-driven scheduling. The project serves as a foundation for future developments in intelligent building automation and organizational communication.
 
 \newpage

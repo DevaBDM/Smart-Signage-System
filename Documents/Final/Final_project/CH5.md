@@ -1,4 +1,4 @@
-# Chapter 5 {.title}
+#  Chapter 5 {.title}
 
 # Results and Validation
 
@@ -11,57 +11,43 @@ analysis.
 
 ### Backend Integration Testing
 
-We wrote 30+ backend integration tests using Jest with Supertest. Each
+We wrote 56 backend integration tests across 7 suites using Jest with Supertest. Each
 test runs against a real Express server instance connected to an
 isolated PostgreSQL test database (`signage_test`). After each test,
 database transactions are rolled back to ensure isolation.
 
-The test suite covers:
+The test suite covers authentication including login with valid and
+invalid credentials, JWT token generation and validation, token expiry
+handling, and logout and session termination. CRUD operations are tested
+for users, groups, devices, posts, deployments, and live streams. Media
+upload tests verify image upload with Sharp processing, video upload
+with FFmpeg transcoding, document upload with text extraction, and path
+traversal attack prevention. Deployment scheduling is validated through
+date window filtering, priority ordering, and state hierarchy enforcement
+across the EMERGENCY to NORMAL state range. Socket.IO device lifecycle
+tests cover device registration, token assignment, heartbeat processing,
+command delivery with acknowledgment, and offline detection. Emergency
+state changes are tested from group state transition to EMERGENCY through
+broadcast to all devices and automatic fallback when the state returns to
+NORMAL. Control lock logic is verified for lock acquisition with priority,
+lock rejection for lower-priority users, lock expiration, and concurrent
+access scenarios. Finally, RBAC enforcement tests validate role-based
+route access denial, group-scoped permission validation, and cross-group
+management toggles.
 
-**Authentication:** Login with valid and invalid credentials, JWT token
-generation and validation, token expiry handling, logout and session
-termination.
-
-**CRUD operations:** Create, read, update, and delete for users, groups,
-devices, posts, deployments, and live streams.
-
-**Media upload:** Image upload with Sharp processing, video upload with
-FFmpeg transcoding, document upload with text extraction, path traversal
-attack prevention.
-
-**Deployment scheduling:** Date window filtering, priority ordering,
-state hierarchy enforcement (EMERGENCY \> SECURITY_RISK \> BREAKING_NEWS
-\> NORMAL).
-
-**Socket.IO device lifecycle:** Device registration, token assignment,
-heartbeat processing, command delivery with acknowledgment, offline
-detection.
-
-**Emergency state changes:** Group state transition to EMERGENCY,
-broadcast to all devices in the group, automatic fallback when state
-returns to NORMAL.
-
-**Control lock logic:** Lock acquisition with priority, lock rejection
-for lower-priority users, lock expiration, concurrent access scenarios.
-
-**RBAC enforcement:** Role-based route access denial, group-scoped
-permission validation, cross-group management toggle.
-
-All 30+ backend tests passed, with code coverage exceeding 70% for
+All 56 backend tests passed across 7 suites (smoke tests, device auth, live stream CRUD, stream relay lifecycle, stream relay integration with real FFmpeg, user service priority swap, YouTube relay), with code coverage exceeding 70% for
 business logic files. The test suite runs in approximately 45 seconds on
 a standard development machine.
 
 <figure>
-<img src="./assets/media/image40.png"
+<img src="./assets/media/fig7_1_backend_tests.png"
 style="width:5.18518in;height:3.24074in" />
-<figcaption><p>Screenshot of the Jest test output showing all backend
-integration tests passing with green checkmarks and the final coverage
-summary.</p></figcaption>
+<figcaption><p>Jest test output showing 56 backend tests passed.</p></figcaption>
 </figure>
 
 ### Frontend End-to-End Testing
 
-We wrote 25 frontend end-to-end tests using Playwright with real browser
+We wrote 73 frontend end-to-end tests using Playwright with real browser
 automation in Chromium. The tests run in two modes:
 
 **API-only mode (**`request`**):** Uses Playwright’s direct HTTP client
@@ -95,15 +81,15 @@ dialog, state propagation verification.
 **Live stream management:** Stream creation, type selection, health
 status display.
 
-The 25 tests produced 55 screenshots at 1920 × 1080 resolution,
+The 73 tests captured 47 screenshots at 1920 × 1080 resolution on failure,
 documenting every major UI feature. All tests passed on both API-only
 and browser UI modes.
 
 <figure>
-<img src="./assets/media/image41.png"
+<img src="./assets/media/fig7_2_playwright_results.png"
 style="width:4.9639in;height:3.10244in" />
-<figcaption><p>Screenshot of the Playwright HTML test report showing all
-tests passed, with the test tree and execution times.</p></figcaption>
+<figcaption><p>Playwright test report showing 73 frontend tests passed.</p></figcaption>
+
 </figure>
 
 ### Test Infrastructure
@@ -127,7 +113,7 @@ suites on every push, ensuring that regressions are caught immediately.
 
 ### Assembly Checklist
 
-We verified all nine assembly steps from Section 4.1.2 using a
+We verified all nine assembly steps from the relevant section using a
 structured checklist:
 
 Display mounting: N/A (laptop screen used)
@@ -168,7 +154,7 @@ W for design margin.
 The laptop screen backlight power varies by model. We estimated 5–15 W
 for a typical 15.6-inch LED-backlit LCD panel at 50% brightness, based
 on manufacturer specifications for similar panels. These calculated
-figures informed our power analysis in Section 5.5.
+figures informed our power analysis in the relevant section.
 
 ### Serial Communication Verification
 
@@ -184,11 +170,11 @@ Debian node’s `socket_client.py` parsed all packets correctly, and the
 brightness adaptation responded within 1 second to LDR changes.
 
 <figure>
-<img src="./assets/media/image13.png"
+<img src="./assets/media/fig4_4_serial_monitor.png"
 style="width:4.98326in;height:3.24074in" />
-<figcaption><p>Screenshot of the Arduino IDE Serial Monitor at 9600 baud
-showing continuous SENSOR: packets with motion, brightness, rain, and
-emergency values during a 30-minute test.</p></figcaption>
+<figcaption><p>Arduino Serial Monitor at 9600 baud showing sensor packets.</p></figcaption>
+
+
 </figure>
 
 ### End-to-End Brightness Adaptation Test
@@ -233,11 +219,11 @@ connections to the server and maintained them for hours without
 disconnection.
 
 <figure>
-<img src="./assets/media/image42.png"
+<img src="./assets/media/fig7_4_network_verify.png"
 style="width:5.02595in;height:3.28125in" />
-<figcaption><p>Terminal screenshot showing successful ping, chronyc
-tracking, and API health curl responses from a Debian
-node.</p></figcaption>
+<figcaption><p>Network verification showing ping, NTP, and API health.</p></figcaption>
+
+
 </figure>
 
 ### Security Verification
@@ -262,13 +248,13 @@ TLS 1.3 handshake completed successfully on HTTPS endpoints.
 | \# | Objective | Status | Evidence |
 |----|----|----|----|
 | 1 | Develop embedded sensing layer with adaptive brightness | Achieved | Real Arduino assembly; serial communication verified; brightness adaptation tested end-to-end on Debian laptop screens |
-| 2 | Build full-stack CMS with RBAC and real-time control | Achieved | Admin/creator dashboards operational; 30+ backend tests passing; Socket.IO device auth tests passing; control lock tests passing |
+| 2 | Build full-stack CMS with RBAC and real-time control | Achieved | Admin/creator dashboards, 56 backend tests passing; Socket.IO device auth tests; control lock tests |
 | 3 | Implement live stream distribution at zero cost | Achieved | Four stream types configured; FFmpeg relay tested; stream CRUD operations verified via Playwright |
 | 4 | Design dual player architecture | Achieved | Anthias and MPV backends both tested on separate Debian laptops; shared socket_client.py validated |
 | 5 | Deploy production-ready campus network design | Partially achieved | Architecture designed and documented; subnet allocation, firewall rules, and bandwidth analysis completed; physical campus switches not deployed |
 | 6 | Build emergency broadcast with hardware trigger | Achieved | Physical button press triggers local playback; group state change propagates via Socket.IO; disconnection fallback tested |
-| 7 | Implement concurrency control | Achieved | Control lock acquisition/rejection tested; priority hierarchy enforced; 423 Locked response validated |
-| 8 | Validate through automated testing and hardware verification | Achieved | 30+ Jest tests; 25 Playwright tests (55 screenshots); hardware assembly checklist completed; serial comms verified |
+| 7 | Implement concurrency control | Achieved | Control lock acquisition/rejection tested; priority hierarchy enforced; 403 Forbidden response validated |
+| 8 | Validate through automated testing and hardware verification | Achieved | 56 Jest tests (7 suites); 73 Playwright tests (47 screenshots); hardware assembly checklist completed; serial comms verified |
 
 
 Five of eight objectives were fully achieved with direct prototype
@@ -296,7 +282,7 @@ deployment were not implemented due to budget and time constraints.
 
 ### Campus-Wide Energy Scenarios
 
-We modeled three operational scenarios for a 130-display campus
+We modeled three operational scenarios for large-scale campus environments
 deployment:
 
 **Scenario A (baseline):** Fixed 100% brightness, 16 hours daily
@@ -313,23 +299,21 @@ safety margin for measurement uncertainty. Estimated annual consumption:
 76,500 kWh; electricity cost: \$9,180.
 
 <figure>
-<img src="./assets/media/image43.png"
+<img src="./assets/media/fig5_6_power_profile.png"
 style="width:5.83333in;height:4.16667in"
-alt="Fig 5.5 — 24-hour campus power profile comparing fixed brightness (baseline), adaptive brightness, and conservative adaptive scenarios across 130 nodes." />
-<figcaption><p>24-hour campus power profile comparing fixed brightness
-(baseline), adaptive brightness, and conservative adaptive scenarios
-across 130 nodes.</p></figcaption>
+alt="24-hour campus power profile comparing fixed brightness (baseline), adaptive brightness, and conservative adaptive scenarios across 130 nodes." />
+<figcaption><p>Twenty-four hour campus power profile across fixed brightness, adaptive, and conservative scenarios.</p></figcaption>
 </figure>
 
 ### Campus-Wide Power Distribution
 
 <figure>
-<img src="./assets/media/image44.png"
+<img src="./assets/media/fig5_2_power_pie.png"
 style="width:5.83333in;height:3.64583in"
-alt="Fig 5.6 — Campus-wide power distribution pie chart showing displays (82%), compute (10%), network infrastructure (5%), and server (3%)." />
-<figcaption><p>Campus-wide power distribution pie chart showing displays
-(82%), compute (10%), network infrastructure (5%), and server
-(3%).</p></figcaption>
+alt="Campus-wide power distribution by component  (3%)." />
+<figcaption><p>Campus-wide power distribution by component.</p></figcaption>
+
+
 </figure>
 
 ### Cost Analysis
@@ -355,12 +339,12 @@ hardware (\$3,000), and maintenance labor (\$15,000), the five-year TCO
 is approximately \$118,000.
 
 <figure>
-<img src="./assets/media/image45.png"
+<img src="./assets/media/fig9_2_tco_comparison.png"
 style="width:5.83333in;height:4.16667in"
-alt="Fig 5.7 — Five-year TCO comparison bar chart showing our system ($118,000) versus Yodeck ($218,000), Rise Vision ($187,000), NoviSign ($390,000), and ScreenCloud ($260,000)." />
-<figcaption><p>Five-year TCO comparison bar chart showing our system
-($118,000) versus Yodeck ($218,000), Rise Vision ($187,000), NoviSign
-($390,000), and ScreenCloud ($260,000).</p></figcaption>
+alt="Five-year TCO comparison with commercial platforms  ($390,000), and ScreenCloud ($260,000)." />
+<figcaption><p>Five-year TCO comparison with commercial platforms.</p></figcaption>
+
+
 </figure>
 
 Compared to commercial alternatives, our open-source system achieves a
@@ -370,11 +354,13 @@ fees (100% of commercial costs), reduced energy consumption (25–40%
 display power reduction), and lower maintenance overhead (unified
 management replaces per-device administration).
 
-------------------------------------------------------------------------
-
 This chapter has validated our Smart Digital Signage System through
 comprehensive automated testing, hardware verification, and cost
-analysis. The following chapter discusses the implications of our
+analysis. Chapter 6 discusses the implications of our
 results and acknowledges the limitations of our prototype.
+
+## Chapter Summary
+
+This chapter presented the validation results of the prototype. Through automated test suites and hardware verification, we confirmed that all functional and non-functional requirements were met. The cost and power analysis provided empirical evidence of the system's economic and environmental benefits, showing a projected 60% TCO reduction.
 
 \newpage

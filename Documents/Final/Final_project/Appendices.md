@@ -5,7 +5,7 @@ Comprehensive supplementary material for all chapters
 ## Appendix A - Database Entity-Relationship Diagram
 
 <figure>
-<img src="./assets/media/image47.png"
+<img src="./assets/media/fig_prisma_erd.png"
 style="width:5.83333in;height:3.25085in" />
 <figcaption><p>Prisma Schema Entity-Relationship
 Diagram.</p></figcaption>
@@ -80,7 +80,7 @@ Server → Client Events (Pi Receivers)
 
 ## Appendix D - Arduino Firmware (`sensors.ino`)
 
-<img src="./assets/media/image48.png"
+<img src="./assets/media/code_sensors_ino.png"
 style="width:5.68175in;height:8.55026in" alt="Code A.D" />
 
 Code A.D
@@ -93,7 +93,7 @@ potentiometer. Formats output as
 
 ## Appendix E - Raspberry Pi Agent Configuration (`config.py`)
 
-<img src="./assets/media/image49.png"
+<img src="./assets/media/code_config_py.png"
 style="width:5.83333in;height:5.23296in" alt="Code A.E" />
 
 Code A.E
@@ -104,9 +104,9 @@ overrides: `DEVICE_ID`, `DEVICE_NAME`, `LOCATION`, `SERVER_URL`,
 
 ## Appendix F - Prisma Schema Excerpt (Key Models)
 
-<img src="./assets/media/image50.png"
-style="width:2.06226in;height:3.73333in" /><img src="./assets/media/image50.png"
-style="width:2.06319in;height:3.69715in" /><img src="./assets/media/image50.png"
+<img src="./assets/media/code_prisma_schema.png"
+style="width:2.06226in;height:3.73333in" /><img src="./assets/media/code_prisma_schema.png"
+style="width:2.06319in;height:3.69715in" /><img src="./assets/media/code_prisma_schema.png"
 style="width:2.06166in;height:3.659in" />
 
 <caption>Code A.F</caption>
@@ -121,7 +121,7 @@ and SensorLog models with relationships, indexes, and enum definitions.
 
 G.1 dnsmasq Configuration (`/etc/dnsmasq.conf`)
 
-<img src="./assets/media/image51.png"
+<img src="./assets/media/code_dnsmasq_conf.png"
 style="width:4.81665in;height:3.85494in" alt="Code A.G1" />
 
 Code A.G1
@@ -132,7 +132,7 @@ forwarding, and domain resolution within the signage LAN
 
 G.2 nftables Rules (`/etc/nftables.conf`)
 
-<img src="./assets/media/image52.png"
+<img src="./assets/media/code_nftables_conf.png"
 style="width:5.464in;height:3.84295in" />
 
 <caption>Code A.G2</caption>

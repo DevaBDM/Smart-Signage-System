@@ -1,4 +1,4 @@
-# Chapter 4 {.title}
+#  Chapter 4 {.title}
 
 # System Design and Implementation
 
@@ -16,7 +16,7 @@ components.
 ### Component Selection and Specifications
 
 We selected the components for our prototype based on cost,
-availability, and capability. Table 4.1 lists the specifications and pin
+availability, and capability. the table lists the specifications and pin
 assignments for each component.
 
 <caption>Component specifications and Arduino pin assignments.</caption>
@@ -46,61 +46,42 @@ displays.
 
 ### Physical Assembly and Wiring
 
-We assembled the sensor bridge on a solderless breadboard following a
-nine-step procedure:
+We assembled the sensor bridge on a solderless breadboard in nine steps.
+First, we mounted the three HC-SR04 sensors with Sensor 1 and Sensor 3
+angled 45° outward for horizontal coverage and Sensor 2 perpendicular to
+the display plane. Second, we ran 5 V and ground rails along the
+breadboard edges using 22 AWG jumper wires, noting that the Arduino's
+5 V pin supplies up to 400 mA — sufficient for all sensors combined at
+approximately 50 mA peak. Third, we wired each HC-SR04 sensor with VCC
+to the 5 V rail, GND to ground, TRIG to digital outputs (D22, D24, D26),
+and ECHO to digital inputs (D23, D25, D27), adding 1 kΩ series resistors
+on the ECHO lines as a precaution.
 
-- **Mount sensors:** We placed the three HC-SR04 sensors on the
-  breadboard with their ultrasonic transducers facing outward. Sensor 1
-  (left) and Sensor 3 (right) were angled 45° outward to maximize
-  horizontal coverage. Sensor 2 (center) was mounted perpendicular to
-  the display plane.
-
-- **Connect power rails:** We ran 5 V and ground rails along the
-  breadboard edges, using 22 AWG jumper wires. The Arduino’s 5 V pin can
-  supply up to 400 mA, which is sufficient for all sensors combined (~50
-  mA peak).
-
-- **Wire HC-SR04 sensors:** Each sensor received VCC to the 5 V rail,
-  GND to the ground rail, TRIG to a digital output pin (D22, D24, D26),
-  and ECHO to a digital input pin (D23, D25, D27). We added 1 kΩ series
-  resistors on the ECHO lines as a precaution against voltage mismatch,
-  though the Arduino Mega 2560’s 5 V logic is fully compatible.
-
-- **Connect LDR module:** We connected the LDR module’s VCC to 5 V, GND
-  to ground, and the analog output to pin A0.
-
-- **Connect potentiometer:** We wired the potentiometer’s outer
-  terminals to 5 V and ground, and the wiper to pin A1.
-
-- **Connect emergency button:** We wired the push button between pin D2
-  and 5 V, with a 10 kΩ pull-down resistor to ground on D2. This
-  configuration ensures the pin reads LOW when the button is open and
-  HIGH when pressed.
-
-- **USB connection:** We connected the Arduino to the Debian laptop via
-  a USB A-to-B cable. The cable provides both serial communication and
-  power (up to 500 mA).
-
-- **Verification:** We performed a continuity check between 5 V and GND
-  to confirm no short circuits. We verified sensor orientation
-  (transducers facing outward) and checked that the HDMI output on the
-  laptop was active.
+Fourth, we connected the LDR module's VCC and GND to the power rails and
+its analog output to pin A0. Fifth, we wired the potentiometer's outer
+terminals to 5 V and ground and the wiper to pin A1. Sixth, we connected
+the emergency push button between pin D2 and 5 V with a 10 kΩ pull-down
+resistor, ensuring the pin reads LOW when open and HIGH when pressed.
+Seventh, we connected the Arduino to the Debian laptop via USB A-to-B
+cable for both serial communication and power. Finally, we performed a
+continuity check between 5 V and GND to confirm no short circuits,
+verified sensor orientation, and confirmed the HDMI output was active.
 
 <figure>
-<img src="./assets/media/image9.jpeg"
+<img src="./assets/media/fig4_1_prototype_assembly.jpg"
 style="width:5.83333in;height:2.72157in" />
-<figcaption><p>Photograph of our assembled prototype showing the Arduino
-Mega 2560 on a solderless breadboard with three HC-SR04 sensors,
-connected via USB to a Debian 13 laptop.</p></figcaption>
+<figcaption><p>Assembled Arduino Mega 2560 sensor bridge prototype on breadboard.</p></figcaption>
+
+
 </figure>
 
-<img src="./assets/media/image10.png"
+<figure>
+<img src="./assets/media/fig4_2a_sensor_wiring.png"
 style="width:3.19613in;height:2.75725in"
-alt="Fig 4.2 — Sensor wiring schematic showing Arduino Mega pin assignments for HC-SR04 (D22–D27), LDR (A0), potentiometer (A1), and emergency button (D2)." /><img src="./assets/media/image11.png"
+alt="Sensor wiring with Arduino Mega pin assignments (D22–D27), LDR (A0), potentiometer (A1), and emergency button (D2)." /><img src="./assets/media/fig4_2b_sensor_wiring.png"
 style="width:3.32207in;height:3.458in" />
-
-Sensor wiring schematic showing Arduino Mega pin assignments for HC-SR04
-(D22–D27), LDR (A0), potentiometer (A1), and emergency button (D2).
+<figcaption><p>Sensor wiring with Arduino Mega pin assignments (D22–D27), LDR (A0), potentiometer (A1), and emergency button (D2).</p></figcaption>
+</figure>
 
 ### Sensor Fusion and Preprocessing
 
@@ -108,50 +89,34 @@ We wrote the Arduino firmware (`sensors.ino`) to run a deterministic 2
 Hz main loop. Each iteration reads all sensors, computes derived values,
 and transmits a formatted packet over USB CDC serial at 9600 baud.
 
-- **HC-SR04 distance measurement:** For each sensor, the firmware drives
-  the TRIG pin HIGH for 10 µs to initiate an 8-pulse 40 kHz ultrasonic
-  burst. It then measures the ECHO pulse duration using `pulseIn()` with
-  a 30 ms timeout. The distance in centimeters is computed as
-  `d = (t_echo × 0.0343) / 2`, where the speed of sound is 343 m/s at
-  20°C.
+For each HC-SR04 sensor, the firmware drives the TRIG pin HIGH for 10 µs
+to initiate an 8-pulse 40 kHz ultrasonic burst, then measures the ECHO
+pulse duration using `pulseIn()` with a 30 ms timeout. The distance in
+centimeters is computed as `d = (t_echo × 0.0343) / 2`. For motion
+detection, the firmware sets the motion flag to 1 if any of the three
+sensors reports a distance less than 100 cm, with debouncing requiring
+three consecutive positive readings to trigger motion and ten consecutive
+negative readings to clear it.
 
-- **Motion detection:** The firmware sets the motion flag to 1 if any of
-  the three sensors reports a distance less than 100 cm. This threshold
-  corresponds to a typical hallway width of 200 cm, detecting a person
-  at mid-distance. To prevent rapid toggling, we implemented debouncing:
-  three consecutive positive readings are required to trigger the motion
-  state (1.5 seconds at 2 Hz), and ten consecutive negative readings are
-  required to clear it (5 seconds).
-
-- **Brightness normalization:** The LDR module outputs an analog value
-  from 0 to 1023 (10-bit ADC). We map this to a normalized range \[0,
-  1\] for transmission to the Debian node, where the Weber-Fechner
-  logarithmic mapping computes the target screen brightness.
-
-- **Emergency button:** The firmware reads pin D2 every iteration. When
-  the button is pressed (pin reads HIGH), it immediately sets the
-  emergency flag to 1 in the outgoing packet. This gives the Debian node
-  a maximum detection latency of 500 ms (one loop iteration).
-
-- **Serial packet format:** Each transmission uses the format
-  `SENSOR,motion,brightness,rain,emergency\n`, where `motion` is 0 or 1,
-  `brightness` is the normalized LDR value (0–100), `rain` is the
-  normalized potentiometer value (0–100), and `emergency` is 0 or 1.
+The LDR module outputs an analog value from 0 to 1023, which we normalize
+to a 0–1 range for transmission and subsequent logarithmic brightness
+mapping. The emergency button is read every iteration on pin D2, giving
+a maximum detection latency of 500 ms.
+Each transmission uses the format
+`SENSOR,motion,brightness,rain,emergency\n`, where motion is 0 or 1,
+brightness is the normalized LDR value (0–100), rain is the normalized
+potentiometer value (0–100), and emergency is 0 or 1.
 
 <figure>
-<img src="./assets/media/image12.jpeg"
+<img src="./assets/media/fig4_3_mounted_sensors.jpg"
 style="width:5.83333in;height:2.71998in" />
-<figcaption><p>Photograph of the sensor array mounted near the laptop
-screen, showing the three HC-SR04 sensors positioned for left, center,
-and right coverage.</p></figcaption>
+<figcaption><p>Sensor array mounted near the laptop screen with three HC-SR04 sensors for left, center, and right coverage.</p></figcaption>
 </figure>
 
 <figure>
-<img src="./assets/media/image13.png"
+<img src="./assets/media/fig4_4_serial_monitor.png"
 style="width:4.98326in;height:3.24074in" />
-<figcaption><p>Screenshot of the Arduino IDE Serial Monitor at 9600
-baud, showing five consecutive SENSOR: packets with motion, brightness,
-rain, and emergency values.</p></figcaption>
+<figcaption><p>Arduino Serial Monitor at 9600 baud showing five consecutive SENSOR: packets with motion, brightness, rain, and emergency values.</p></figcaption>
 </figure>
 
 ### Adaptive Brightness Algorithm
@@ -226,11 +191,11 @@ We verified the systemd configuration by running
 (running) state.
 
 <figure>
-<img src="./assets/media/image14.png"
+<img src="./assets/media/fig4_5_systemd_status.png"
 style="width:4.96391in;height:3.24074in" />
-<figcaption><p>Screenshot of the systemd status output showing
-socket-signage.service as active (running), confirming automatic startup
-on boot.</p></figcaption>
+<figcaption><p>Systemd service status showing active running state.</p></figcaption>
+
+
 </figure>
 
 ## Network and Infrastructure Design
@@ -266,12 +231,12 @@ firewall rules, TLS termination, and rate limiting. This design prevents
 a compromised campus workstation from directly attacking signage nodes.
 
 <figure>
-<img src="./assets/media/image15.png"
+<img src="./assets/media/fig3_2_network_topology.png"
 style="width:6.38228in;height:6.6809in"
-alt="Fig 4.6 — Network topology diagram showing the dual-NIC Ubuntu server, core switches, edge switches, and Debian nodes in the 10.20.0.0/22 signage subnet." />
-<figcaption><p>Network topology diagram showing the dual-NIC Ubuntu
-server, core switches, edge switches, and Debian nodes in the
-10.20.0.0/22 signage subnet.</p></figcaption>
+alt="Network topology diagram with dual-NIC Layer 3 isolation  10.20.0.0/22 signage subnet." />
+<figcaption><p>Network topology diagram with dual-NIC isolation.</p></figcaption>
+
+
 </figure>
 
 ### Core Services
@@ -335,12 +300,12 @@ NIC (NIC-2) accepts only API, RTMP, HLS, DHCP, and DNS traffic from the
 signage subnet, with explicit drops for all other ports and protocols.
 
 <figure>
-<img src="./assets/media/image16.png"
+<img src="./assets/media/fig6_4_firewall_rules.png"
 style="width:5.86328in;height:4.31482in"
-alt="Fig 4.7 — Firewall rules diagram showing NIC-1 campus-facing rules (SSH/HTTP/HTTPS/NTP) and NIC-2 signage-facing rules (API/RTMP/HLS/DHCP/DNS)." />
-<figcaption><p>Firewall rules diagram showing NIC-1 campus-facing rules
-(SSH/HTTP/HTTPS/NTP) and NIC-2 signage-facing rules
-(API/RTMP/HLS/DHCP/DNS).</p></figcaption>
+alt="Firewall rules for NIC-1 campus and NIC-2 signage interfaces  (API/RTMP/HLS/DHCP/DNS)." />
+<figcaption><p>Firewall rules for NIC-1 campus and NIC-2 signage interfaces.</p></figcaption>
+
+
 </figure>
 
 ## Backend System Implementation
@@ -355,15 +320,17 @@ separation ensures that business logic is independent of the transport
 layer and database schema, making the system testable and maintainable.
 
 <figure>
-<img src="./assets/media/image17.png"
+<img src="./assets/media/fig3_3_backend_layers.png"
 style="width:4.46031in;height:6.73025in"
-alt="Fig 4.8 — Backend layered architecture diagram showing the data flow from Routes through Middleware, Services, Repositories, Prisma ORM, to PostgreSQL." />
-<figcaption><p>Backend layered architecture diagram showing the data
-flow from Routes through Middleware, Services, Repositories, Prisma ORM,
-to PostgreSQL.</p></figcaption>
+alt="Backend layered architecture data flow  to PostgreSQL." />
+<figcaption><p>Backend layered architecture from routes to database.</p></figcaption>
+
+
 </figure>
 
 ### Database Design
+
+#### Schema Entities
 
 Our PostgreSQL database, managed through Prisma ORM, contains the
 following key entities:
@@ -394,6 +361,23 @@ Relationships include: User belongs to many Groups (many-to-many via
 many Groups (many-to-many via `PostGroup`), and Device has many
 SignageDeployments (one-to-many).
 
+#### Database Normalization (Third Normal Form)
+
+The Prisma schema follows Third Normal Form (3NF) with the following analysis:
+
+| Normal Form | Status | Evidence |
+|-------------|--------|----------|
+| **1NF (Atomicity)** | Achieved | Every column holds atomic values; no arrays or JSON blobs in relational tables. Repeating groups are separated: `PostImage`, `SignageAsset`, and `SignageDeployment` each form their own table linked to `Post` by foreign key |
+| **2NF (Partial Dependency)** | Achieved | All non-key attributes depend on the full primary key. Junction tables (`UserGroup`, `DeviceGroup`) use composite primary keys with no non-key columns, ensuring no partial dependencies exist |
+| **3NF (Transitive Dependency)** | Achieved | No non-key attribute depends on another non-key attribute. `SignageState` is an enum stored directly on `Group` and `Post` rather than derived from other fields. Scheduling fields (`start_date`, `end_date`) depend only on the entity's primary key |
+
+**Normalization trade-off:** Sensor logs (`SensorLog`) and error logs
+(`ErrorLog`) are intentionally denormalized with repeated `device_id` and
+`created_at` timestamps. This avoids expensive JOINs during high-frequency
+ingestion (up to 65 inserts per second across 130 devices polling every 2 seconds)
+and is justified by the append-only write pattern — logs are never updated after
+insertion.
+
 ### Authentication and Authorization
 
 We implemented a dual authentication system to secure both human users
@@ -419,17 +403,17 @@ the token against the database before accepting any commands or data
 from the device. Unapproved devices cannot receive content or commands.
 
 <figure>
-<img src="./assets/media/image18.png"
+<img src="./assets/media/fig6_3_auth_flow.png"
 style="width:5.83333in;height:5.337in"
-alt="Fig 4.9 — Authentication flow sequence diagram showing JWT login for users and device token assignment for IoT nodes." />
-<figcaption><p>Authentication flow sequence diagram showing JWT login
-for users and device token assignment for IoT nodes.</p></figcaption>
+alt="JWT user and device token authentication flow " />
+<figcaption><p>JWT user and device token authentication flow.</p></figcaption>
+
 </figure>
 
 ### User and Group Management
 
 We implemented three roles with distinct capabilities, as summarized in
-Table 4.4.
+the table.
 
 <caption>Role capabilities matrix.</caption>
 | Capability | Administrator | Creator | Viewer | Public |
@@ -455,14 +439,12 @@ Creator is a member of at least one of the target Groups. The
 `cross_group_management` toggle on the User record allows Administrators
 to bypass this check for specific trusted users.
 
-<img src="./assets/media/image19.png"
-style="width:2.9375in;height:3.60417in"
-alt="Fig 4.10 — RBAC permission matrix diagram showing the mapping of roles (admin, creator, viewer, public) to system capabilities." /><img src="./assets/media/image19.png"
-style="width:3.05556in;height:3.63889in"
-alt="Fig 4.10 — RBAC permission matrix diagram showing the mapping of roles (admin, creator, viewer, public) to system capabilities." />
-
-RBAC permission matrix diagram showing the mapping of roles (admin,
-creator, viewer, public) to system capabilities.
+<figure>
+<img src="./assets/media/fig6_5_rbac_matrix.png"
+style="width:3in;height:3.6in"
+alt="RBAC permission matrix for admin, creator, viewer, and public roles." />
+<figcaption><p>RBAC permission matrix for admin, creator, viewer, and public roles.</p></figcaption>
+</figure>
 
 ### Content Lifecycle Management
 
@@ -503,16 +485,14 @@ The priority hierarchy is: Emergency system (priority 20) \>
 Administrator (15) \> Creator (10) \> Viewer (5). A user can acquire a
 lock only if no higher-priority lock is active on the same device. If an
 equal or lower-priority lock exists, the request is rejected with HTTP
-423 (Locked), and the response indicates who holds the lock and when it
+403 (Forbidden), and the response indicates who holds the lock and when it
 expires.
 
 <figure>
-<img src="./assets/media/image20.png"
+<img src="./assets/media/fig4_12_control_lock_flow.png"
 style="width:5.93891in;height:3.00766in"
-alt="Fig 4.25 — Control lock acquisition flow sequence diagram showing Administrator A acquiring a lock on Device 3, and Creator B receiving a 423 Locked response." />
-<figcaption><p>Control lock acquisition flow sequence diagram showing
-Administrator A acquiring a lock on Device 3, and Creator B receiving a
-423 Locked response.</p></figcaption>
+alt="Control lock acquisition and 403 Forbidden rejection flow." />
+<figcaption><p>Control lock acquisition and 403 Forbidden rejection flow.</p></figcaption>
 </figure>
 
 **Multi-creator priority synchronization:** When two creators publish
@@ -574,12 +554,12 @@ DOCX/PPTX) and `pdf-parse-fork` (for PDF). The extracted text is stored
 in the Attachment record and provided as context to the AI Q&A system.
 
 <figure>
-<img src="./assets/media/image21.png"
+<img src="./assets/media/fig4_14_media_pipeline.png"
 style="width:5.83333in;height:1.75566in"
-alt="Fig 4.26 — Media processing pipeline flowchart showing image processing (Sharp), video processing (FFmpeg), and document text extraction (mammoth/pdf-parse-fork) paths." />
-<figcaption><p>Media processing pipeline flowchart showing image
-processing (Sharp), video processing (FFmpeg), and document text
-extraction (mammoth/pdf-parse-fork) paths.</p></figcaption>
+alt="Image, video, and document processing pipeline  extraction (mammoth/pdf-parse-fork) paths." />
+<figcaption><p>Image, video, and document processing pipeline with Sharp, FFmpeg, and text extraction.</p></figcaption>
+
+
 </figure>
 
 Static files are served from `/uploads/*` and `/streams/*` via Express
@@ -588,7 +568,7 @@ with `path.resolve()` and checked against the upload root directory.
 
 ### Live Stream Relay
 
-Our system supports four stream types, summarized in Table 4.5.
+Our system supports four stream types, summarized in the table.
 
 <caption>Stream types and relay architecture.</caption>
 | Type | Ingest Source | Relay Mechanism | Player Support |
@@ -608,11 +588,11 @@ logs the incident. Auto-restart is capped at five attempts within ten
 minutes to prevent infinite loops.
 
 <figure>
-<img src="./assets/media/image22.png"
+<img src="./assets/media/fig3_4_stream_relay.png"
 style="width:5.83333in;height:0.45205in"
-alt="Fig 4.11 — Stream relay pipeline diagram showing OBS → RTMP → FFmpeg → HLS segments → nginx → Anthias/MPV playback." />
-<figcaption><p>Stream relay pipeline diagram showing OBS → RTMP → FFmpeg
-→ HLS segments → nginx → Anthias/MPV playback.</p></figcaption>
+alt="Stream relay pipeline from RTMP ingest to HLS playback → RTMP → FFmpeg → HLS segments → nginx → Anthias/MPV playback." />
+<figcaption><p>Stream relay pipeline from RTMP ingest to HLS playback via FFmpeg.</p></figcaption> → RTMP → FFmpeg
+
 </figure>
 
 ###  Emergency Broadcast System
@@ -641,17 +621,17 @@ not clear automatically; it requires all assigned groups to return to
 `NORMAL` state before devices resume scheduled content.
 
 <figure>
-<img src="./assets/media/image23.png"
+<img src="./assets/media/fig4_13_emergency_states.png"
 style="width:5.83333in;height:2.95173in"
-alt="Fig 4.27 — Emergency broadcast state machine diagram showing transitions between Normal, Emergency, Disconnected, SecurityRisk, and BreakingNews states." />
-<figcaption><p>Emergency broadcast state machine diagram showing
-transitions between Normal, Emergency, Disconnected, SecurityRisk, and
-BreakingNews states.</p></figcaption>
+alt="Emergency broadcast state machine with three trigger sources  BreakingNews states." />
+<figcaption><p>Emergency broadcast state machine with Normal, Emergency, and Disconnection states.</p></figcaption>
+
+
 </figure>
 
 ###  Socket.IO Real-Time Bus
 
-Our Socket.IO implementation supports the following events:
+Our Socket.IO implementation supports these events:
 
 **Inbound events (Debian node → Server):** - `heartbeat` - device
 status, uptime, IP address, sensor readings (every 10 s) -
@@ -724,12 +704,12 @@ credentials against the backend, and stores the JWT and user profile in
 and redirects to the login page if expired.
 
 <figure>
-<img src="./assets/media/image24.png"
+<img src="./assets/media/01a-login-empty.png"
 style="width:5.83333in;height:3.28125in"
-alt="Fig 4.12 — Login page with empty username and password fields, campus branding visible; Sign In button disabled until both fields are filled." />
-<figcaption><p>Login page with empty username and password fields,
-campus branding visible; Sign In button disabled until both fields are
-filled.</p></figcaption>
+alt="Login page with empty credentials  filled." />
+<figcaption><p>Login page with empty username and password fields.</p></figcaption>
+
+
 </figure>
 
 **Group Management:** Administrators view all groups in a table with
@@ -737,11 +717,11 @@ inline editing for name, description, and signage state. New groups are
 created via a modal form.
 
 <figure>
-<img src="./assets/media/image25.png"
+<img src="./assets/media/11a-groups-table.png"
 style="width:5.83333in;height:3.28125in"
-alt="Fig 4.13 — Admin Groups page listing all campus groups with display state, member count, and assigned devices." />
-<figcaption><p>Admin Groups page listing all campus groups with display
-state, member count, and assigned devices.</p></figcaption>
+alt="Admin Groups with state and member counts " />
+<figcaption><p>Admin Groups page with state and member counts.</p></figcaption>
+
 </figure>
 
 **User Management:** Administrators view all users with their roles and
@@ -749,11 +729,11 @@ group assignments. Inline editing supports role changes and group
 membership updates.
 
 <figure>
-<img src="./assets/media/image26.png"
+<img src="./assets/media/12a-users-table.png"
 style="width:5.83333in;height:3.28125in"
-alt="Fig 4.14 — Admin Users page showing all registered accounts with roles, groups, and permissions." />
-<figcaption><p>Admin Users page showing all registered accounts with
-roles, groups, and permissions</p></figcaption>
+alt="Admin Users with role and permission controls " />
+<figcaption><p>Admin Users page with role and permission controls.</p></figcaption>
+
 </figure>
 
 **Device Management:** The devices page lists all registered and pending
@@ -762,12 +742,12 @@ tokens), view device status (online/offline, last seen), and send
 playback commands (next, previous, start).
 
 <figure>
-<img src="./assets/media/image27.png"
+<img src="./assets/media/13a-device-settings.png"
 style="width:5.83333in;height:3.28125in"
-alt="Fig 4.15 — Admin Devices page showing the registered hardware fleet with online/offline status, register form, and settings inspector." />
-<figcaption><p>Admin Devices page showing the registered hardware fleet
-with online/offline status, register form, and settings
-inspector.</p></figcaption>
+alt="Admin Devices with online/offline status  inspector." />
+<figcaption><p>Admin Devices page with online/offline status indicators.</p></figcaption>
+
+
 </figure>
 
 ### Creator Dashboard
@@ -779,29 +759,29 @@ URL slug, and attachments. The form supports image upload with cropping,
 video upload with trimming, and document upload for AI context.
 
 <figure>
-<img src="./assets/media/image28.png"
+<img src="./assets/media/05b-posts-list.png"
 style="width:5.83333in;height:3.28125in"
-alt="Fig 4.16 — Creator Posts page with the new-post editor on the left and the post list with filters on the right." />
-<figcaption><p>Creator Posts page with the new-post editor on the left
-and the post list with filters on the right.</p></figcaption>
+alt="Creator Posts with editor and post list " />
+<figcaption><p>Creator Posts page with editor and post list.</p></figcaption>
+
 </figure>
 
 <figure>
-<img src="./assets/media/image29.png"
+<img src="./assets/media/05f-media-crop-ui.png"
 style="width:5.83333in;height:3.28125in"
-alt="Fig 4.17a — Image cropping interface with aspect ratio locking to 16:9 for signage compatibility, drag and zoom controls visible." />
-<figcaption><p>Image cropping interface with aspect ratio locking to
-16:9 for signage compatibility, drag and zoom controls
-visible.</p></figcaption>
+alt="Image cropping with 16:9 aspect ratio lock  visible." />
+<figcaption><p>Image cropping interface with 16:9 aspect ratio lock.</p></figcaption>
+
+
 </figure>
 
 <figure>
-<img src="./assets/media/image30.png"
+<img src="./assets/media/05g-media-trim-ui.png"
 style="width:5.83333in;height:3.28125in"
-alt="Fig 4.17b — Video trimming slider used to extract specific clips before attaching to a post, start and end handles visible." />
-<figcaption><p>Video trimming slider used to extract specific clips
-before attaching to a post, start and end handles
-visible.</p></figcaption>
+alt="Video trimming slider for clip extraction  visible." />
+<figcaption><p>Video trimming slider for clip extraction.</p></figcaption>
+
+
 </figure>
 
 **Visual Designer (Fabric.js):** Creators can design signage slides with
@@ -809,11 +789,11 @@ draggable text, shapes, and images on a canvas. The designer supports
 layering, opacity, and export to PNG.
 
 <figure>
-<img src="./assets/media/image31.png"
+<img src="./assets/media/06a-designer-empty.png"
 style="width:5.69269in;height:3.28125in" />
-<figcaption><p>Creator Visual Designer with an empty Fabric.js canvas
-and toolbar on the top for adding text, shapes, and
-images.</p></figcaption>
+<figcaption><p>Fabric.js visual designer with empty canvas and toolbar.</p></figcaption>
+
+
 </figure>
 
 **Textual Designer (Markdown + KaTeX):** Creators can compose text-heavy
@@ -821,23 +801,23 @@ slides using Markdown syntax with live KaTeX math rendering. The
 exported result is a styled HTML slide.
 
 <figure>
-<img src="./assets/media/image32.png"
+<img src="./assets/media/14a-designer-md-empty.png"
 style="width:5.83333in;height:3.10245in" />
-<figcaption><p>Designer in Markdown mode with empty editor on the top
-and live-preview panel on the buttom, supporting KaTeX math
-notation.</p></figcaption>
+<figcaption><p>Markdown designer with editor and live preview pane.</p></figcaption>
+
+
 </figure>
 
 **Signage Publishing:** Creators select target groups and set scheduling
 parameters (start date, end date, priority) before publishing.
 
 <figure>
-<img src="./assets/media/image33.png"
+<img src="./assets/media/07c-signage-published.png"
 style="width:5.83333in;height:3.28125in"
-alt="Fig 4.20 — Signage Publish page listing publishable posts on the left and target devices on the right, with duration and priority controls." />
-<figcaption><p>Signage Publish page listing publishable posts on the
-left and target devices on the right, with duration and priority
-controls.</p></figcaption>
+alt="Signage Publish with post and device selectors  controls." />
+<figcaption><p>Signage Publish page with post and device selectors.</p></figcaption>
+
+
 </figure>
 
 **Live Stream Management:** Creators can add, edit, and monitor live
@@ -845,11 +825,11 @@ streams. The interface displays stream health status and provides embed
 codes.
 
 <figure>
-<img src="./assets/media/image34.png"
+<img src="./assets/media/08a-livestream-list.png"
 style="width:5.83333in;height:3.28125in"
-alt="Fig 4.21 — Live Streams page with the list of existing streams showing source type and status, plus the creation form." />
-<figcaption><p>Live Streams page with the list of existing streams
-showing source type and status, plus the creation form.</p></figcaption>
+alt="Live Streams with status and creation controls " />
+<figcaption><p>Live Streams page with status indicators and creation controls.</p></figcaption>
+
 </figure>
 
 ### Public Feed and Viewer Interface
@@ -859,11 +839,11 @@ responsive grid layout. Clicking a post navigates to `/post/:id` for the
 full content view.
 
 <figure>
-<img src="./assets/media/image35.png"
+<img src="./assets/media/09a-feed.png"
 style="width:5.83333in;height:3.28125in"
-alt="Fig 4.22 — Public feed showing all campus announcements sorted by priority and recency, no login required." />
-<figcaption><p>Public feed showing all campus announcements sorted by
-priority and recency, no login required.</p></figcaption>
+alt="Public feed with priority-sorted announcements " />
+<figcaption><p>Public feed with priority-sorted announcements.</p></figcaption>
+
 </figure>
 
 ### AI Q&A Widget
@@ -874,11 +854,11 @@ history, and extracted document text to the OpenAI GPT API. Responses
 stream in real time.
 
 <figure>
-<img src="./assets/media/image36.png"
+<img src="./assets/media/15b-post-ai-chat-open.png"
 style="width:5.83333in;height:3.28125in"
-alt="Fig 4.23 — AI chat window opened on a post detail page, ready for user questions grounded on post text and attachments." />
-<figcaption><p>AI chat window opened on a post detail page, ready for
-user questions grounded on post text and attachments.</p></figcaption>
+alt="AI chat window on post detail page " />
+<figcaption><p>AI chat window on post detail page.</p></figcaption>
+
 </figure>
 
 ### Emergency Handling UI
@@ -888,12 +868,12 @@ group’s signage state to `EMERGENCY`. A confirmation dialog prevents
 accidental activation.
 
 <figure>
-<img src="./assets/media/image37.png"
+<img src="./assets/media/10a-emergency-groups.png"
 style="width:5.83333in;height:3.28125in"
-alt="Fig 4.24 — Groups page showing the Emergency Broadcast group in EMERGENCY state with red indicator and inline state controls." />
-<figcaption><p>Groups page showing the Emergency Broadcast group in
-EMERGENCY state with red indicator and inline state
-controls.</p></figcaption>
+alt="Groups page with Emergency state indicator  controls." />
+<figcaption><p>Groups page with Emergency state indicator and inline controls.</p></figcaption>
+
+
 </figure>
 
 ### State Management
@@ -947,22 +927,20 @@ appropriate control commands are sent accordingly.
 We identified four trust boundaries in our system architecture: the
 Campus LAN (untrusted), the Server DMZ (semi-trusted), the Database Zone
 (trusted), and the Signage LAN (trusted but vulnerable to physical
-access). Figure 4.28 illustrates these boundaries and the attack
+access). the figure shows these boundaries and the attack
 surfaces at each layer.
 
 <figure>
-<img src="./assets/media/image38.png"
+<img src="./assets/media/fig6_1_attack_surface.png"
 style="width:5.83333in;height:1.28618in"
-alt="Fig 4.28 — Attack surface diagram showing trust boundaries: Campus LAN → Server DMZ → Database Zone → Signage LAN, with identified attack vectors at each layer." />
-<figcaption><p>Attack surface diagram showing trust boundaries: Campus
-LAN → Server DMZ → Database Zone → Signage LAN, with identified attack
-vectors at each layer.</p></figcaption>
+alt="Attack surface map with trust boundaries and vectors LAN → Server DMZ → Database Zone → Signage LAN, with identified attack vectors at each layer." />
+<figcaption><p>Attack surface map with trust boundaries and attack vectors.</p></figcaption>
 </figure>
 
 ### Vulnerabilities Addressed
 
 We conducted a security audit of the codebase and identified 12
-vulnerabilities, summarized in Table 4.7.
+vulnerabilities, summarized in the table.
 
 <caption>Vulnerability inventory and remediation status.</caption>
 | ID | Severity | Component | Description | Remediation |
@@ -982,12 +960,12 @@ vulnerabilities, summarized in Table 4.7.
 
 
 <figure>
-<img src="./assets/media/image39.png"
+<img src="./assets/media/fig6_2_socket_auth.png"
 style="width:7.30918in;height:8.33763in"
-alt="Fig 4.29 — Screenshot of the Socket.IO authentication code showing device token verification in the connection handshake handler." />
-<figcaption><p>Screenshot of the Socket.IO authentication code showing
-device token verification in the connection handshake
-handler.</p></figcaption>
+alt="Socket.IO authentication code with device token verification  handler." />
+<figcaption><p>Socket.IO authentication code with device token verification.</p></figcaption>
+
+
 </figure>
 
 ### Network Hardening
@@ -1005,13 +983,15 @@ remediated before system validation. The three P2 (medium)
 vulnerabilities were documented as accepted risks with mitigating
 controls. No P0 or P1 vulnerabilities remain in the production codebase.
 
-------------------------------------------------------------------------
-
 This chapter has presented the complete design and implementation of the
 Smart Digital Signage System, from the physical Arduino sensor bridge
 through the Debian-simulated edge nodes, network infrastructure, backend
 services, frontend interfaces, dual player architecture, and security
-hardening. The following chapter describes how we validated this
+hardening. Chapter 5 describes how we validated this
 implementation through automated testing and hardware verification.
+
+## Chapter Summary
+
+This chapter detailed the technical implementation of the hardware and software layers. We described the Arduino sensor bridge assembly, the simulated edge node configuration, and the backend services. The integration of real-time communication, media processing, and dual-player support demonstrates the system's ability to operate as an intelligent, responsive edge platform.
 
 \newpage

@@ -1,4 +1,4 @@
-<img src="./assets/media/image1.jpeg"
+<img src="./assets/media/woldia_logo.jpg"
 style="width:2.26744in;height:1.33705in" />
 
 **WOLDIA UNIVERSITY** {.Cover}
@@ -11,7 +11,7 @@ style="width:2.26744in;height:1.33705in" />
 
 **COMPUTER ENGINEERING STREAM** {.Cover}
 
-**TITLE: DESIGN AND IMPLEMENTATION OF SMART SIGNAGE SYSTEM FOR THE PURPOSE OF ORGANIZATIONAL INFORMATION DISCRIMINATION** {.Cover}
+**TITLE: DESIGN AND IMPLEMENTATION OF SMART DIGITAL SIGNAGE SYSTEM FOR THE PURPOSE OF ORGANIZATIONAL INFORMATION DISSEMINATION** {.Cover}
 
 **PREPARED BY:** {.Cover}
 
@@ -19,7 +19,7 @@ style="width:2.26744in;height:1.33705in" />
 
 1.  **DAWIT BERHAN WDU1304696** {.Cover}
 
-2.  **CHARAKA WAKSHUM WDU1300748** {.Cover}
+2.  **CHEREKA WAKSHUM WDU1300748** {.Cover}
 
 3.  **ARSEMA DANIEL WDU1300391** {.Cover}
 
@@ -34,10 +34,10 @@ style="width:2.26744in;height:1.33705in" />
 <!-- SECTION_BREAK_ROMAN -->
 # Declaration {.title}
 
-Here by, declare that the work entitles design and implementation of
-smart signage system for the purpose of organizational information
-discrimination is our original work, we have not copied from any other
-student’s work or from any other source except where due reference or
+We hereby declare that the work entitled "Design and Implementation of
+Smart Digital Signage System for the Purpose of Organizational Information
+Dissemination" is our original work. We have not copied from any other
+student's work or from any other source except where due reference or
 acknowledgment is made explicitly in the text, nor has any part been
 written for us by another person.
 
@@ -92,47 +92,9 @@ with each member contributing to every subsystem.
 \newpage
 # Abstract {.title}
 
-Modern organizations rely on digital signage for information
-dissemination, yet existing solutions suffer from four critical gaps:
-displays operate at fixed brightness regardless of ambient conditions,
-each node is managed independently without unified control, IoT devices
-receive content without authentication, and commercial platforms impose
-prohibitive licensing costs exceeding \$1,000 per display annually. This
-capstone project addresses these gaps through the design and
-implementation of a Smart Digital Signage System that integrates
-environmental sensing, role-based content management, real-time device
-control, live stream distribution, and security-hardened network
-infrastructure.
+University campuses lack an integrated, cost-effective digital signage platform that combines environmental sensing, role-based content management, offline resilience, and emergency broadcast capabilities, while existing commercial solutions carry prohibitive licensing costs and open-source alternatives omit sensor integration and device authentication. This project employed a Design-Based Research methodology with iterative build-test cycles utilizing an Arduino Mega 2560 sensor bridge, Raspberry Pi 4B edge nodes, a Node.js/Express backend with Socket.IO real-time messaging, a React 19 frontend with role-based dashboards, PostgreSQL with Prisma ORM, FFmpeg for stream relay, and a dual-player architecture supporting both Anthias and MPV playback engines. The system was validated through 56 backend tests across 7 suites including real FFmpeg stream relay integration, and 73 frontend end-to-end tests, demonstrating 25–40% power reduction via adaptive brightness, sub-second emergency broadcast propagation, 72-hour offline content playback, and a projected 60% five-year total cost of ownership reduction compared to commercial alternatives over 130 nodes. Twelve security vulnerabilities were remediated across four critical and five high-severity categories, confirming that an open-source, sensor-integrated, multi-tenant digital signage platform with hardware-triggered emergency broadcast, device-token security, and concurrency control is both technically feasible and economically advantageous at zero licensing cost.
 
-We assembled an Arduino Mega 2560 sensor bridge with three HC-SR04
-ultrasonic distance sensors, a light-dependent resistor, a
-potentiometer, and an emergency push button on a solderless breadboard.
-Two laptops running Debian 13 live USB sessions simulated Raspberry Pi
-edge nodes, with their screens serving as the digital signage displays.
-The Arduino transmitted sensor data over USB serial at 9600 baud to the
-Debian nodes, enabling real-time adaptive brightness control via the
-operating system’s brightness API, occupancy detection for contextual
-content scheduling, and an emergency broadcast system triggered by a
-hardware push button.
-
-The backend was implemented in Node.js with Express.js, using Prisma ORM
-with PostgreSQL for data persistence, Socket.IO for real-time device
-command and control, and FFmpeg with Sharp for media processing. The
-frontend was built in React 19 with Vite, featuring role-based
-dashboards for administrators and content creators, a public feed with
-AI-assisted Q&A, and a dual-designer architecture supporting both visual
-(Fabric.js) and textual (Markdown + KaTeX) content creation.
-
-Validation comprised 30+ backend integration tests using Jest and
-Supertest, 25 frontend end-to-end tests using Playwright producing 55
-screenshots, and hardware verification confirming sensor data accuracy,
-serial communication stability, and end-to-end brightness adaptation.
-Our cost analysis projects a 60% total cost of ownership reduction
-compared to commercial alternatives over a five-year deployment horizon.
-
-**Keywords:** digital signage, IoT, environmental sensing, adaptive
-brightness, RBAC, Raspberry Pi, Arduino, Socket.IO, live streaming,
-campus network, emergency broadcast, full-stack development
+**Keywords:** digital signage; IoT; RBAC; Raspberry Pi; adaptive brightness; campus network; Socket.IO; sensor integration; emergency broadcast; offline resilience
 
 \newpage
 # Table of Contents {.title}
