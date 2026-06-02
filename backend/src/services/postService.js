@@ -25,7 +25,7 @@ const primaryMediaDuration = (mediaRows, fallback = 10) => {
   return fallback;
 };
 
-const ALLOWED_MEDIA_PATH_PREFIX = "/uploads/";
+const { resolvePublicPath } = require("../utils/mediaProcessor");
 
 const parseProcessedMedia = (body) => {
   const raw = body?.processed_media;
@@ -34,9 +34,15 @@ const parseProcessedMedia = (body) => {
   if (!Array.isArray(parsed)) return null;
   for (const m of parsed) {
     const p = m?.image_path;
-    if (typeof p !== "string" || !p.startsWith(ALLOWED_MEDIA_PATH_PREFIX)) {
+    if (typeof p !== "string") {
       throw Object.assign(
-        new Error(`Invalid processed_media path: ${p}`),
+        new Error(`Invalid processed_media path`),
+        { statusCode: 400 }
+      );
+    }
+    if (!resolvePublicPath(p)) {
+      throw Object.assign(
+        new Error(`Invalid or forbidden processed_media path: ${p}`),
         { statusCode: 400 }
       );
     }
@@ -603,7 +609,16 @@ async function syncPostsToMaxSignageState(userId, newMaxState, emitter) {
     data: { signage_state: newMaxState },
   });
 
-  const adminActor = { role: "admin" };
+  const adminActor = {
+    id: 0,
+    role: "admin",
+    group_id: null,
+    can_manage_other_posts: true,
+    creator_priority: 999,
+    control_lock_minutes: 120,
+    max_signage_state: "EMERGENCY",
+    managed_group_ids: [],
+  };
 
   for (const post of posts) {
     const deviceIds = post.signage_deployments.map((d) => d.device_id);

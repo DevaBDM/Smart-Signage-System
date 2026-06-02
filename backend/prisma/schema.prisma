@@ -178,7 +178,6 @@ model Device {
   all_groups            Boolean             @default(false)
   status                String              @default("offline")
   last_seen             DateTime?
-  current_playlist      Int?
   is_approved           Boolean             @default(false)
   pending_name          String?
   pending_ip            String?

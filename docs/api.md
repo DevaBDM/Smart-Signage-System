@@ -285,7 +285,7 @@ All error responses follow:
 
 Status codes used:
 - `400` — bad input, validation failure, or Prisma error
-- `401` — missing/invalid token (except auth middleware bug: returns 400 for invalid token)
+- `401` — missing/invalid token
 - `403` — insufficient permissions, control lock, unapproved device
 - `404` — resource not found
 - `502` — Pi command failed (publish endpoint)

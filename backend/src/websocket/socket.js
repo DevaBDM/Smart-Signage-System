@@ -138,6 +138,12 @@ module.exports = (httpServer) => {
     // ── Pi → Server: sensor data ─────────────────────────────
     socket.on("sensor_update", async (data) => {
       // data: { device_id, motion, brightness, rain }
+      const sensorId = Number(data.device_id);
+      if (socket.verifiedDeviceId && sensorId !== socket.verifiedDeviceId) {
+        socket.disconnect(true);
+        return;
+      }
+
       await prisma.sensorLog
         .create({
           data: {
@@ -153,6 +159,12 @@ module.exports = (httpServer) => {
     // ── Pi → Server: error report ─────────────────────────────
     socket.on("error_log", async (data) => {
       // data: { device_id, error_type, message }
+      const errorDeviceId = Number(data.device_id);
+      if (socket.verifiedDeviceId && errorDeviceId !== socket.verifiedDeviceId) {
+        socket.disconnect(true);
+        return;
+      }
+
       await prisma.errorLog
         .create({
           data: {

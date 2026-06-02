@@ -22,7 +22,7 @@ const sendSignageCommand = async (device_id, payload) =>
   piBridge.emitToDeviceAck(device_id, "signage_command", payload, 12000);
 
 // Device pull endpoint used by the Pi's periodic sync.
-router.get("/device/:device_id/deployments", authDevice, async (req, res) => {
+router.get("/device/:device_id/deployments", authDevice, asyncHandler(async (req, res) => {
   const requestedDeviceId = Number(req.params.device_id);
   if (req.device.id !== requestedDeviceId) {
     return res.status(403).json({ error: "Device token does not match requested device." });
@@ -95,7 +95,7 @@ router.get("/device/:device_id/deployments", authDevice, async (req, res) => {
       };
     }),
   );
-});
+}));
 
 // Publish a post to signage → notifies Pi via Socket.IO
 router.post("/publish", auth(["admin", "creator"]), asyncHandler(async (req, res) => {
@@ -107,7 +107,7 @@ router.post("/publish", auth(["admin", "creator"]), asyncHandler(async (req, res
 router.get(
   "/devices/:device_id/assets",
   auth(["admin", "creator"]),
-  async (req, res) => {
+  asyncHandler(async (req, res) => {
     const device = await getAllowedDevice(req, res);
     if (!device) return;
     const trackedAssets = await prisma.signageAsset.findMany({
@@ -211,14 +211,14 @@ router.get(
         post_id: asset.post_id,
       })),
     });
-  },
+  }),
 );
 
 // Playback controls: next, previous, or start a specific asset.
 router.post(
   "/devices/:device_id/control",
   auth(["admin", "creator"]),
-  async (req, res) => {
+  asyncHandler(async (req, res) => {
     const actor = await getActor(req.user);
     const device = await getAllowedDevice(req, res);
     if (!device) return;
@@ -247,14 +247,14 @@ router.post(
         await applyControlLock(actor, device.id, command);
     }
     res.status(result.ok ? 200 : 503).json(result);
-  },
+  }),
 );
 
 // Hide/show a display asset without deleting it from Anthias.
 router.patch(
   "/devices/:device_id/assets/:asset_id",
   auth(["admin", "creator"]),
-  async (req, res) => {
+  asyncHandler(async (req, res) => {
     const actor = await getActor(req.user);
     const device = await getAllowedDevice(req, res);
     if (!device) return;
@@ -285,7 +285,7 @@ router.patch(
       await applyControlLock(actor, device.id, enabled ? "show_asset" : "hide_asset");
     }
     res.status(result.ok ? 200 : 503).json(result);
-  },
+  }),
 );
 
 // Permanently delete an asset from Anthias.
@@ -308,7 +308,7 @@ router.delete(
 );
 
 // Get signage playlists
-router.get("/playlists", auth(["admin"]), async (req, res) => {
+router.get("/playlists", auth(["admin"]), asyncHandler(async (req, res) => {
   const playlists = await prisma.playlist.findMany({
     include: {
       items: {
@@ -318,6 +318,6 @@ router.get("/playlists", auth(["admin"]), async (req, res) => {
     },
   });
   res.json(playlists);
-});
+}));
 
 module.exports = router;
