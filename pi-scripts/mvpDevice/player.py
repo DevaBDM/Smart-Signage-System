@@ -65,23 +65,47 @@ def _ensure_no_content_image():
         return False
 
 class MpvController:
-    """Talk to MPV over its Unix IPC socket."""
+    """Talk to MPV over its Unix IPC socket using a persistent connection."""
 
     def __init__(self, socket_path=MPV_SOCKET):
         self.socket_path = socket_path
+        self._sock = None
 
-    def _send(self, cmd_list):
+    def _connect(self):
+        if self._sock is not None:
+            try:
+                self._sock.send(b"\n")
+                return True
+            except Exception:
+                self._disconnect()
         try:
             sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             sock.settimeout(2.0)
             sock.connect(self.socket_path)
+            self._sock = sock
+            return True
+        except Exception:
+            self._sock = None
+            return False
+
+    def _disconnect(self):
+        if self._sock is not None:
+            try:
+                self._sock.close()
+            except Exception:
+                pass
+            self._sock = None
+
+    def _send(self, cmd_list):
+        if not self._connect():
+            return None
+        try:
             payload = json.dumps({"command": cmd_list}) + "\n"
-            sock.send(payload.encode())
-            response = sock.recv(4096).decode()
-            sock.close()
+            self._sock.send(payload.encode())
+            response = self._sock.recv(4096).decode()
             return json.loads(response) if response else None
-        except Exception as e:
-            # print(f"[mpv] IPC error: {e}")
+        except Exception:
+            self._disconnect()
             return None
 
     def loadfile(self, path, options=None):

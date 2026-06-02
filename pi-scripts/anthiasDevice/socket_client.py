@@ -21,6 +21,7 @@ _current_token = DEVICE_TOKEN or ""
 
 # Emergency mode state (like Device3's media.is_emergency())
 _emergency_active = False
+_emergency_lock = threading.Lock()
 
 # Disconnection timeout tracking
 _disconnected_active = False
@@ -28,12 +29,14 @@ _last_server_contact = time.time()
 
 
 def _is_emergency():
-    return _emergency_active
+    with _emergency_lock:
+        return _emergency_active
 
 
 def _set_emergency(active):
     global _emergency_active
-    _emergency_active = active
+    with _emergency_lock:
+        _emergency_active = active
     _emergency_flag = "/tmp/signage_emergency_active"
     try:
         if active:
