@@ -32,13 +32,27 @@ def load_build_configuration():
     """
     if not os.path.exists(CONFIG_FILE):
         default_config = {
-            "order": [
-                "TOP_part.md", "CH1.md", "CH2.md", "CH3.md", 
-                "CH4.md", "CH5.md", "CH6.md", "CH7.md", 
-                "Reference.md", "Appendices.md"
-            ],
-            "output_docx": "Final_Document_Built.docx",
-            "reference_docx": "Final_Document.docx"
+            "reference_docx": "Final_Document.docx",
+            "profiles": [
+                {
+                    "name": "Main Document",
+                    "order": [
+                        "TOP_part.md", "CH1.md", "CH2.md", "CH3.md", 
+                        "CH4.md", "CH5.md", "CH6.md", "CH7.md", 
+                        "Reference.md", "Appendices.md"
+                    ],
+                    "output_docx": "Final_Document_Built.docx"
+                },
+                {
+                    "name": "Minimal Summary",
+                    "order": [
+                        "TOP_part.md", "CH1_min.md", "CH2_min.md", "CH3_min.md", 
+                        "CH4_min.md", "CH5_min.md", "CH6_min.md", "CH7_min.md", 
+                        "Reference_min.md", "Appendices_min.md"
+                    ],
+                    "output_docx": "Final_Document_Summary.docx"
+                }
+            ]
         }
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(default_config, f, indent=4)
@@ -72,19 +86,33 @@ def create_word_field(parent_paragraph, instruction):
     fldChar_end.set(ns.qn('w:fldCharType'), 'end')
     r_element.append(fldChar_end)
 
-def add_automated_caption(paragraph, label):
+def add_automated_caption(paragraph, label, section_label=None, reset=False):
     """
     Creates a numbered caption (e.g., Table 4-1: ) using Word Sequence fields.
+    If section_label is provided (e.g., 'A'), uses 'Figure A.1:' format.
+    Uses 'reset=True' to restart the sequence at 1 (e.g. for the first figure of an appendix).
     """
     paragraph.text = ""
     paragraph.add_run(f"{label} ")
     
-    # Use StyleRef to get the current chapter number from Heading 1
-    create_word_field(paragraph, ' STYLEREF 1 \\s ')
-    paragraph.add_run("-")
+    if section_label:
+        # Appendix Mode: Use literal letter and reset sequence if requested
+        paragraph.add_run(f"{section_label}.")
+        
+        # We MUST use the standard 'Figure' / 'Table' name so it shows in the LOF/LOT
+        instruction = f' SEQ {label} \\* ARABIC '
+        if reset:
+            instruction += ' \\r 1 '
+        
+        create_word_field(paragraph, instruction)
+    else:
+        # Chapter Mode: Use StyleRef to get the current chapter number from Heading 1
+        create_word_field(paragraph, ' STYLEREF 1 \\s ')
+        paragraph.add_run("-")
+        # Use Seq to get the incrementing number within the chapter
+        # \s 1 resets the sequence at each Heading 1
+        create_word_field(paragraph, f' SEQ {label} \\* ARABIC \\s 1 ')
     
-    # Use Seq to get the incrementing number within the chapter
-    create_word_field(paragraph, f' SEQ {label} \\* ARABIC \\s 1 ')
     paragraph.add_run(": ")
 
 def insert_list_placeholder_field(paragraph, list_type):
@@ -213,34 +241,60 @@ def post_process_docx(file_path):
     print(f"Polishing {file_path}...")
     doc = Document(file_path)
     
+    # Track Appendix Letter for custom numbering (e.g., Figure A.1)
+    current_appendix_label = None
+    needs_reset_fig = False
+    needs_reset_tbl = False
+
     # 1. Replace markers with active Word features
     for paragraph in doc.paragraphs:
         text = paragraph.text.strip()
         
+        if "CUSTOM_HDR_STYLE_" in text:
+            match = re.search(r'CUSTOM_HDR_STYLE_(.*?)_(.*)', text)
+            if match:
+                style_name, content = match.groups()
+                # Update Appendix state
+                if "Appendix" in content:
+                    app_match = re.search(r'Appendix\s+([A-Z])', content)
+                    if app_match:
+                        new_label = app_match.group(1)
+                        if new_label != current_appendix_label:
+                            current_appendix_label = new_label
+                            needs_reset_fig = True
+                            needs_reset_tbl = True
+                else:
+                    # If it's a chapter or other major heading, exit Appendix mode
+                    if content.startswith("Chapter"):
+                        current_appendix_label = None
+                
+                paragraph.text = content.strip()
+                
+                # Only force into TOC if it's a major title or cover element
+                # 'subtitle' and others should follow the reference doc's style rules
+                show_in_toc = style_name.lower() in ["title", "cover"]
+                apply_named_style(doc, paragraph, style_name, is_header=show_in_toc)
+                continue 
+
         if text.startswith("AUTO_FIG:"):
             caption_content = text.replace("AUTO_FIG:", "").strip()
             if caption_content:
-                add_automated_caption(paragraph, "Figure")
+                add_automated_caption(paragraph, "Figure", current_appendix_label, needs_reset_fig)
                 paragraph.add_run(caption_content)
                 apply_named_style(doc, paragraph, "Caption")
+                needs_reset_fig = False # Reset only once per appendix letter
             else:
                 paragraph.text = "" 
                 
         elif text.startswith("AUTO_TBL:"):
             caption_content = text.replace("AUTO_TBL:", "").strip()
             if caption_content:
-                add_automated_caption(paragraph, "Table")
+                add_automated_caption(paragraph, "Table", current_appendix_label, needs_reset_tbl)
                 paragraph.add_run(caption_content)
                 apply_named_style(doc, paragraph, "Caption")
+                needs_reset_tbl = False # Reset only once per appendix letter
             else:
                 paragraph.text = "" 
-                
-        elif "CUSTOM_HDR_STYLE_" in text:
-            match = re.search(r'CUSTOM_HDR_STYLE_(.*?)_(.*)', text)
-            if match:
-                style_name, content = match.groups()
-                paragraph.text = content.strip()
-                apply_named_style(doc, paragraph, style_name, is_header=True)
                 
         elif "CUSTOM_TXT_STYLE_" in text:
             match = re.search(r'CUSTOM_TXT_STYLE_(.*?)_(.*)', text)
@@ -314,7 +368,8 @@ def preprocess_markdown(text):
     Converts custom signals into intermediate placeholders for post-processing.
     """
     # 1. Handle Custom Styles: # Header {.Style} and Text {.Style}
-    text = re.sub(r'^#\s+(.*?)\s+\{\.(.*?)\}', r'# CUSTOM_HDR_STYLE_\2_\1', text, flags=re.MULTILINE)
+    # Matches any level of header (one or more #)
+    text = re.sub(r'^(#+)\s+(.*?)\s+\{\.(.*?)\}', r'\1 CUSTOM_HDR_STYLE_\3_\2', text, flags=re.MULTILINE)
     text = re.sub(r'^(?!#)(.*?)\s+\{\.(.*?)\}', r'CUSTOM_TXT_STYLE_\2_\1', text, flags=re.MULTILINE)
 
     # 2. Handle Tab Markers (Convert lines with [tab] to raw OpenXML paragraphs)
@@ -358,7 +413,7 @@ def preprocess_markdown(text):
             else:
                 caption_text = re.sub(r'</?caption>', '', stripped, flags=re.IGNORECASE).strip()
             
-            clean_name = re.sub(r'^(Table)\s*[\d\.\-]*[:\s]*', '', caption_text, flags=re.IGNORECASE).strip()
+            clean_name = re.sub(r'^(Table)\s*[A-Z0-9\.\-]*[:\s]*', '', caption_text, flags=re.IGNORECASE).strip()
             if clean_name:
                 processed_lines.append(f'AUTO_TBL: {clean_name}')
                 processed_lines.append('') # Crucial spacing
@@ -372,7 +427,7 @@ def preprocess_markdown(text):
         img_tag = match.group(1)
         caption_html = match.group(2)
         caption_text = re.sub(r'<[^>]+>', '', caption_html).strip()
-        clean_caption = re.sub(r'^(Figure|Fig)\s*[\d\.\-]*[:\s]*', '', caption_text, flags=re.IGNORECASE).strip()
+        clean_caption = re.sub(r'^(Figure|Fig)\s*[A-Z0-9\.\-]*[:\s]*', '', caption_text, flags=re.IGNORECASE).strip()
         src = re.search(r'src="([^"]+)"', img_tag).group(1)
         width = re.search(r'width:([\d\.]+)in', img_tag)
         height = re.search(r'height:([\d\.]+)in', img_tag)
@@ -388,7 +443,7 @@ def preprocess_markdown(text):
         alt_match = re.search(r'alt="([^"]*)"', full_tag)
         alt_text = alt_match.group(1) if alt_match else ""
         if "width" in full_tag or "height" in full_tag:
-            clean_alt = re.sub(r'^(Figure|Fig)\s*[\d\.\-]*[:\s]*', '', alt_text, flags=re.IGNORECASE).strip()
+            clean_alt = re.sub(r'^(Figure|Fig)\s*[A-Z0-9\.\-]*[:\s]*', '', alt_text, flags=re.IGNORECASE).strip()
             if clean_alt:
                 alt_text = "AUTO_FIG: " + clean_alt
         width = re.search(r'width:([\d\.]+)in', full_tag)
@@ -416,59 +471,70 @@ def execute_build():
     Main orchestration function for the build system.
     """
     config = load_build_configuration()
-    assembly_order = config.get("order", [])
-    output_docx = config.get("output_docx", "Final_Document_Built.docx")
+    profiles = config.get("profiles", [])
     style_reference = config.get("reference_docx", "Final_Document.docx")
     
-    print("--- Starting Final Document Build ---")
+    if not profiles:
+        print("  ! Error: No build profiles found in configuration.")
+        return
+
+    print(f"--- Starting Document Build System ({len(profiles)} profiles) ---")
     
-    try:
-        # Step 1: Combine and Preprocess
-        with open(TEMP_MD_FILE, "w", encoding="utf-8") as output_markdown:
-            for filename in assembly_order:
-                if os.path.exists(filename):
-                    print(f"  + Processing {filename}")
-                    with open(filename, "r", encoding="utf-8") as source_file:
-                        source_text = source_file.read()
-                        processed_text = preprocess_markdown(source_text)
-                        output_markdown.write(processed_text + "\n\n")
-                else:
-                    print(f"  ! Warning: {filename} missing, skipping.")
+    for profile in profiles:
+        name = profile.get("name", "Unnamed")
+        assembly_order = profile.get("order", [])
+        output_docx = profile.get("output_docx", f"{name}.docx")
         
-        # Step 2: Convert to Word via Pandoc
-        print(f"Converting to Word via Pandoc...")
-        pandoc_cmd = [
-            "pandoc", TEMP_MD_FILE, 
-            "-o", output_docx, 
-            "--from", "markdown+implicit_figures+table_captions+raw_attribute", 
-            "--resource-path", ".", 
-            "--standalone"
-        ]
+        print(f"\n>> Building Profile: {name}")
+        print(f"   Target: {output_docx}")
         
-        if os.path.exists(style_reference):
-            print(f"  Using style reference: {style_reference}")
-            pandoc_cmd.extend(["--reference-doc", style_reference])
-        
-        conversion_result = subprocess.run(pandoc_cmd)
-        
-        if conversion_result.returncode == 0:
-            # Step 3: Polish in Python (Styles, Sections, Footers)
-            post_process_docx(output_docx)
+        try:
+            # Step 1: Combine and Preprocess
+            with open(TEMP_MD_FILE, "w", encoding="utf-8") as output_markdown:
+                for filename in assembly_order:
+                    if os.path.exists(filename):
+                        print(f"     + Processing {filename}")
+                        with open(filename, "r", encoding="utf-8") as source_file:
+                            source_text = source_file.read()
+                            processed_text = preprocess_markdown(source_text)
+                            output_markdown.write(processed_text + "\n\n")
+                    else:
+                        print(f"     ! Warning: {filename} missing, skipping.")
             
-            # Step 4: Final Automation (Background Word Field Update)
-            refresh_all_fields_via_word(output_docx)
+            # Step 2: Convert to Word via Pandoc
+            print(f"     Converting to Word via Pandoc...")
+            pandoc_cmd = [
+                "pandoc", TEMP_MD_FILE, 
+                "-o", output_docx, 
+                "--from", "markdown+implicit_figures+table_captions+raw_attribute", 
+                "--resource-path", ".", 
+                "--standalone"
+            ]
             
-            print(f"Build Successful! Created: {output_docx}")
-        else:
-            print("  ! Pandoc conversion failed.")
+            if os.path.exists(style_reference):
+                pandoc_cmd.extend(["--reference-doc", style_reference])
             
-        # Cleanup
-        if os.path.exists(TEMP_MD_FILE):
-            os.remove(TEMP_MD_FILE)
+            conversion_result = subprocess.run(pandoc_cmd)
             
-    except Exception as e:
-        print(f"Error during build process: {e}")
-        sys.exit(1)
+            if conversion_result.returncode == 0:
+                # Step 3: Polish in Python (Styles, Sections, Footers)
+                post_process_docx(output_docx)
+                
+                # Step 4: Final Automation (Background Word Field Update)
+                refresh_all_fields_via_word(output_docx)
+                
+                print(f"   - SUCCESS: Created {output_docx}")
+            else:
+                print(f"   ! ERROR: Pandoc conversion failed for {name}.")
+                
+            # Cleanup
+            if os.path.exists(TEMP_MD_FILE):
+                os.remove(TEMP_MD_FILE)
+                
+        except Exception as e:
+            print(f"   ! CRITICAL ERROR building {name}: {e}")
+
+    print("\n--- Build System Finished ---")
 
 if __name__ == "__main__":
     execute_build()

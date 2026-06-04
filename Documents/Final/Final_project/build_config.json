@@ -1,16 +1,37 @@
 {
-    "order": [
-        "TOP_part.md",
-        "CH1.md",
-        "CH2.md",
-        "CH3.md",
-        "CH4.md",
-        "CH5.md",
-        "CH6.md",
-        "CH7.md",
-        "Reference.md",
-        "Appendices.md"
-    ],
-    "output_docx": "Final_Document_Built.docx",
-    "reference_docx": "Final_Document.docx"
+    "reference_docx": "Final_Document.docx",
+    "profiles": [
+        {
+            "name": "Main Document",
+            "order": [
+                "TOP_part.md",
+                "CH1.md",
+                "CH2.md",
+                "CH3.md",
+                "CH4.md",
+                "CH5.md",
+                "CH6.md",
+                "CH7.md",
+                "Reference.md",
+                "Appendices.md"
+            ],
+            "output_docx": "Final_Document_Built.docx"
+        },
+        {
+            "name": "Minimal Summary",
+            "order": [
+                "TOP_part_min.md",
+                "CH1_min.md",
+                "CH2_min.md",
+                "CH3_min.md",
+                "CH4_min.md",
+                "CH5_min.md",
+                "CH6_min.md",
+                "CH7_min.md",
+                "Reference_min.md",
+                "Appendices_min.md"
+            ],
+            "output_docx": "Final_Document_Summary.docx"
+        }
+    ]
 }
