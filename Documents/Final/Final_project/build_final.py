@@ -246,7 +246,12 @@ def post_process_docx(file_path):
             match = re.search(r'CUSTOM_TXT_STYLE_(.*?)_(.*)', text)
             if match:
                 style_name, content = match.groups()
-                paragraph.text = content.strip()
+                # Remove the style marker while preserving non-text runs (like images)
+                for run in paragraph.runs:
+                    if "CUSTOM_TXT_STYLE_" in run.text:
+                        # Only replace the marker part in the specific run that contains it
+                        run.text = run.text.replace(f"CUSTOM_TXT_STYLE_{style_name}_", "")
+                        break 
                 apply_named_style(doc, paragraph, style_name, is_header=False)
                 
         elif "TOCPLACEHOLDER" in text:
@@ -255,8 +260,14 @@ def post_process_docx(file_path):
             insert_list_placeholder_field(paragraph, "LOF")
         elif "LOTPLACEHOLDER" in text:
             insert_list_placeholder_field(paragraph, "LOT")
+                
+        # 2. Handle Tab Markers
+        if "[TAB]" in text.upper():
+            for run in paragraph.runs:
+                # Case-insensitive replacement
+                run.text = re.sub(r'\[TAB\]', '\t', run.text, flags=re.IGNORECASE)
 
-    # 2. Configure Section Numbering
+    # 3. Configure Section Numbering
     print(f"  Found {len(doc.sections)} sections. Applying numbering rules...")
     for index, section in enumerate(doc.sections):
         # Allow independent footers
@@ -306,7 +317,35 @@ def preprocess_markdown(text):
     text = re.sub(r'^#\s+(.*?)\s+\{\.(.*?)\}', r'# CUSTOM_HDR_STYLE_\2_\1', text, flags=re.MULTILINE)
     text = re.sub(r'^(?!#)(.*?)\s+\{\.(.*?)\}', r'CUSTOM_TXT_STYLE_\2_\1', text, flags=re.MULTILINE)
 
-    # 2. Handle Table Captions (Convert signals and ensure blank line for Pandoc)
+    # 2. Handle Tab Markers (Convert lines with [tab] to raw OpenXML paragraphs)
+    processed_lines = []
+    for line in text.split('\n'):
+        if '[tab]' in line.lower():
+            # Extract style if present: "Text [tab] Text {.Style}"
+            style_match = re.search(r'\{\.(.*?)\}', line)
+            style_xml = ""
+            clean_line = line
+            if style_match:
+                style_name = style_match.group(1)
+                style_xml = f'<w:pPr><w:pStyle w:val="{style_name}"/></w:pPr>'
+                clean_line = re.sub(r'\s*\{\..*?\}', '', line)
+            
+            # Split by [tab] and build XML runs
+            parts = re.split(r'\[tab\]', clean_line, flags=re.IGNORECASE)
+            xml_content = f'```{{=openxml}}\n<w:p>{style_xml}'
+            for i, part in enumerate(parts):
+                # Clean up bold/italic markers if they are being passed through raw
+                part = part.replace('**', '').replace('*', '')
+                xml_content += f'<w:r><w:t xml:space="preserve">{part}</w:t></w:r>'
+                if i < len(parts) - 1:
+                    xml_content += '<w:r><w:tab/></w:r>'
+            xml_content += '</w:p>\n```'
+            processed_lines.append(xml_content)
+        else:
+            processed_lines.append(line)
+    text = '\n'.join(processed_lines)
+
+    # 3. Handle Table Captions (Convert signals and ensure blank line for Pandoc)
     lines = text.split('\n')
     processed_lines = []
     for line in lines:
