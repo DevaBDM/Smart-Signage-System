@@ -147,7 +147,7 @@ These observations directly support the identified problems:
 
 ### General Objective
 
-To design, implement, and validate an open-source Smart Digital Signage
+To design, implement, and validate an Smart Digital Signage
 System that integrates environmental sensing, centralized content
 management with role-based access control (RBAC), real-time device
 command and control, live stream distribution, emergency broadcast with
