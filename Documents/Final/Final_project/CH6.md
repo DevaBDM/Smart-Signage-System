@@ -169,33 +169,83 @@ would provide empirical confirmation.
 
 ## Comparison with Related Work
 
-the following table maps each of the seven research gaps identified in the preceding chapters
-to the specific feature in our system that addresses it, compares the
-outcome with the closest related work, and discusses why our results
-differ.
+Our system represents a significant advancement over existing digital
+signage solutions by addressing seven distinct research gaps identified
+in the preceding chapters. The following analysis positions our
+contributions relative to the current state-of-the-art platforms and
+research prototypes.
 
-<caption>Research gap mapping and comparison with related work.</caption>
-| \# | Research Gap | Our Solution | Closest Related Work | Our Advantage | Why Our Results Differ |
-|----|----|----|----|----|----|
-| 1 | No open-source platform combines sensing, CMS, and RBAC | Unified system with Arduino sensors + Node.js backend + React frontend + RBAC | Anthias \[1\]: CMS only, no sensing or RBAC | Three subsystems integrated; not siloed | Existing platforms treat each function as an independent product; ours treats them as interdependent layers of the same architecture |
-| 2 | No platform integrates ambient light sensing with CMS | LDR → Arduino → Debian brightness API → screen, controlled by backend deployments | Park et al. \[23\]: Standalone prototype, no CMS, 18–25% savings | Sensing is part of content scheduling; brightness adapts to scheduled content | Our 25–40% projection exceeds Park et al.'s 18–25% because we add occupancy-based screen-off, not just brightness dimming |
-| 3 | No device token authentication for Pi-class nodes | 64-char hex tokens, server-generated, sidecar file storage | PiSignage \[2\]: Default credentials `pi:pi` | Cryptographic tokens vs. default passwords | PiSignage's shared default credentials are a known vulnerability; our per-device tokens eliminate credential sharing entirely |
-| 4 | No campus-scale network security design | Dual-NIC Layer 3 isolation, nftables, TLS 1.3, documented hardening | Stango et al. \[28\]: VLAN segmentation general technique | Applied specifically to digital signage with documented rules | Stango et al. reported 73% attack surface reduction; our approach achieves similar isolation with the added benefit of documented per-service nftables rules |
-| 5 | No open-source streaming at zero cost | RTMP→HLS relay, 4 stream types, FFmpeg health monitor | Anthias \[1\]: No streaming | Integrated streaming without per-screen fees | Existing open-source platforms require cloud transcoding services ($5–$41/screen/month); our server-side FFmpeg relay eliminates this cost entirely |
-| 6 | No emergency broadcast with hardware trigger | Physical button → local playback + group-wide Socket.IO broadcast | Rise Vision \[9\]: Template-based alerts only, cloud-dependent | Hardware trigger works offline; group override is automatic | Rise Vision's alerts require internet connectivity; our hardware trigger works with zero server contact, addressing the critical failure mode where the network is down during emergencies |
-| 7 | No concurrency control for multi-user access | Control locks with priority hierarchy, 403 Forbidden responses | All surveyed platforms: single admin or no locking | Prevents race conditions in multi-admin environments | Without locking, two creators sending simultaneous commands would produce undefined device behavior; our priority hierarchy (EMERGENCY > SECURITY_RISK > BREAKING_NEWS > NORMAL) ensures deterministic resolution |
+### Integrated Architecture vs. Siloed Platforms
+While platforms like **Anthias [1]** provide robust content management,
+they lack integrated environmental sensing and role-based access control
+(RBAC). Our solution unifies these functions into a single system where
+the Arduino sensor bridge, Node.js backend, and React frontend act as
+interdependent layers. Unlike existing platforms that treat these
+functions as independent products, our integrated architecture ensures
+that sensing data directly informs content scheduling and device
+security.
 
+### Adaptive Brightness and Energy Efficiency
+Existing research, such as the work by **Park et al. [23]**, has
+demonstrated standalone prototypes for brightness adaptation with
+energy savings of 18–25%. Our system improves upon this by integrating
+sensing directly into the CMS. By combining ambient light adaptation
+with occupancy-based screen-off triggers, we project a 25–40% reduction
+in display energy consumption—significantly higher than the savings
+reported in software-only or standalone hardware prototypes.
+
+### Device-Level Authentication and Security
+Most open-source platforms, including **PiSignage [2]**, suffer from a
+critical security gap due to the use of default credentials (e.g.,
+`pi:pi`). Our implementation introduces a per-device token
+authentication system using cryptographically random 64-character hex
+tokens. This eliminates the vulnerability of shared default credentials,
+ensuring that every command and sensor update is verified at the
+handshake and event levels.
+
+### Campus-Scale Network Hardening
+While **Stango et al. [28]** described general VLAN segmentation
+techniques for attack surface reduction, our project provides a
+concrete, documented implementation of dual-NIC Layer 3 isolation
+specifically for digital signage. By enforcing strict `nftables` rules
+and TLS 1.3 across the 10.20.0.0/22 subnet, we achieve professional-grade
+isolation that is tailored to institutional environments.
+
+### Zero-Cost Live Stream Distribution
+Current open-source platforms like **Anthias [1]** do not support native
+live streaming, often requiring users to pay for cloud transcoding
+services ranging from \$5 to \$41 per screen monthly. Our system
+integrates a server-side FFmpeg relay (RTMP to HLS) that supports four
+different stream types at zero licensing cost, eliminating recurring
+operational expenses for the institution.
+
+### Hardware-Triggered Emergency Broadcasting
+Commercial solutions like **Rise Vision [9]** provide template-based
+alerts, but these are typically cloud-dependent and fail if the campus
+network is down. Our system introduces a physical hardware trigger on
+the sensor bridge that can initiate local emergency playback even
+during network outages. This hybrid approach—combining local hardware
+triggers with group-wide Socket.IO propagation—ensures maximum
+reliability during critical events.
+
+### Deterministic Concurrency Control
+No other surveyed platform, open-source or commercial, implements
+explicit concurrency control for multi-user access. In environments with
+multiple administrators, simultaneous commands can lead to undefined
+device behavior. Our system solves this through priority-based control
+locks (e.g., EMERGENCY > SECURITY > NORMAL), ensuring that high-priority
+actions always take precedence and preventing race conditions during
+content updates.
 
 Our system is the first open-source digital signage platform to combine
 all seven capabilities in a single integrated implementation. While
-individual research prototypes have addressed subsets of these gaps
-(ambient light sensing, RBAC, streaming), no prior work unifies them
-into a deployable system with documented network security and hardware
-authentication. The key reason our results differ from related work is
-architectural: we treat the display node as a full edge computing
-platform rather than a passive media player, enabling sensor integration
-and autonomous operation that standalone software solutions cannot
-achieve.
+individual research prototypes have addressed subsets of these gaps,
+no prior work unifies them into a deployable system with documented
+network security and hardware authentication. The key reason our results
+differ from related work is architectural: we treat the display node as
+a full edge computing platform rather than a passive media player,
+enabling sensor integration and autonomous operation that standalone
+software solutions cannot achieve.
 
 This chapter has discussed how our system solves the problems identified
 in the preceding chapters, assessed what is ready for production deployment,

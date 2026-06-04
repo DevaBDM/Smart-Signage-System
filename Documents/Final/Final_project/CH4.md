@@ -77,10 +77,16 @@ style="width:5.83333in;height:2.72157in" />
 
 <figure>
 <img src="./assets/media/fig4_2a_sensor_wiring.png"
-style="width:3.19613in;height:2.75725in"
-alt="Sensor wiring with Arduino Mega pin assignments (D22–D27), LDR (A0), potentiometer (A1), and emergency button (D2)." /><img src="./assets/media/fig4_2b_sensor_wiring.png"
-style="width:3.32207in;height:3.458in" />
-<figcaption><p>Sensor wiring with Arduino Mega pin assignments (D22–D27), LDR (A0), potentiometer (A1), and emergency button (D2).</p></figcaption>
+style="width:5in;height:3.5in"
+alt="Sensor wiring diagram with Arduino Mega pin assignments (D22–D27), LDR (A0), potentiometer (A1), and emergency button (D2)." />
+<figcaption><p>Sensor wiring diagram with Arduino Mega pin assignments (D22–D27), LDR (A0), potentiometer (A1), and emergency button (D2).</p></figcaption>
+</figure>
+
+<figure>
+<img src="./assets/media/fig4_2b_sensor_wiring.png"
+style="width:5in;height:4.5in"
+alt="Proteus circuit simulation showing the detailed wiring and component connections." />
+<figcaption><p>Proteus circuit simulation of the sensor bridge connections.</p></figcaption>
 </figure>
 
 ### Sensor Fusion and Preprocessing

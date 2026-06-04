@@ -101,19 +101,36 @@ primary functional requirements and their priorities.
 
 ## High-Level Architecture
 
+The system's high-level architecture integrates hardware sensing, network
+infrastructure, and a centralized management platform to provide an
+intelligent and secure digital signage solution. Figure 3.1 illustrates
+ the comprehensive system overview and network topology.
+
+<figure>
+<img src="./assets/media/fig1_3_system_block_diagram.png"
+style="width:6in;height:3.5in" />
+<figcaption><p>Figure 3.1: Smart Digital Signage System high-level overview with network topology.</p></figcaption>
+</figure>
+
 ### UML System Models
 
 The system architecture is documented through five Unified Modeling Language (UML)
 diagrams covering static structure, dynamic behavior, and physical deployment:
 
-| UML Diagram | Purpose | System Representation |
-|-------------|---------|----------------------|
-| **Use Case Diagram** | Actor-system interactions | Four actors (Admin, Creator, Viewer, Pi Device) with use cases for content publishing, device approval, emergency broadcast, and feed browsing |
-| **Activity Diagram** | Workflow logic | Post creation through approval, signage deployment, Pi content sync, and display playback |
-| **Sequence Diagram** | Real-time interaction | Socket.IO handshake: Pi heartbeat, token assignment, sensor_update loop, emergency_trigger propagation |
-| **Class Diagram** | Static structure | Prisma entities: Group, User, Device, Post, SignageDeployment, SensorLog with relationships and cardinalities |
-| **Deployment Diagram** | Physical topology | Dual-NIC server, 130+ Pi nodes across 20 buildings, core/edge switches, Arduino sensor nodes, isolated 10.20.0.0/22 LAN |
+| UML Diagram            | Purpose                   | System Representation                                                                                                                          |
+| ---------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Use Case Diagram**   | Actor-system interactions | Four actors (Admin, Creator, Viewer, Pi Device) with use cases for content publishing, device approval, emergency broadcast, and feed browsing |
+| **Activity Diagram**   | Workflow logic            | Post creation through approval, signage deployment, Pi content sync, and display playback                                                      |
+| **Sequence Diagram**   | Real-time interaction     | Socket.IO handshake: Pi heartbeat, token assignment, sensor_update loop, emergency_trigger propagation                                         |
+| **Class Diagram**      | Static structure          | Prisma entities: Group, User, Device, Post, SignageDeployment, SensorLog with relationships and cardinalities                                  |
+| **Deployment Diagram** | Physical topology         | Dual-NIC server, 130+ Pi nodes across 20 buildings, core/edge switches, Arduino sensor nodes, isolated 10.20.0.0/22 LAN                        |
 
+<figure>
+<img src="./assets/media/fig1_3_system_block_diagram.png"
+style="width:6.47237in;height:5.67034in"
+alt="System block diagram with end-to-end data flow   frontend." />
+<figcaption><p>System block diagram with end-to-end data flow from sensors to display.</p></figcaption>
+</figure>
 <figure>
 <img src="./assets/media/uml_usecase.png"
 style="width:5in;height:3.75in"
@@ -159,18 +176,13 @@ system topology.
 style="width:6.47237in;height:5.67034in"
 alt="System block diagram with end-to-end data flow   frontend." />
 <figcaption><p>System block diagram with end-to-end data flow from sensors to display.</p></figcaption>
-
-
-
 </figure>
 
 <figure>
 <img src="./assets/media/fig3_1_system_topology.png"
 style="width:5.83333in;height:5.1614in"
 alt="Complete system topology for 130-node deployment,  switches, and campus subnet 10.20.0.0/22." />
-<figcaption><p>Complete system topology for 130-node campus deployment.</p></figcaption>,
-
-
+<figcaption><p>Complete system topology for 130-node campus deployment.</p></figcaption>
 </figure>
 
 ### End-to-End Data Flow

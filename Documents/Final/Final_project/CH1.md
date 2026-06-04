@@ -155,9 +155,9 @@ hardware trigger, and a hardened campus network - replacing costly
 commercial alternatives with a functional, tested prototype.
 
 <figure>
-<img src="./assets/media/fig1_3_system_block_diagram.png"
-style="width:6.64851in;height:3.62542in" />
-<figcaption><p>Figure 1.3: Smart Digital Signage System high-level overview with network topology.</p></figcaption>
+<img src="./assets/media/Core Diagram.png"
+style="width:6in;height:4.5in" />
+<figcaption><p>Figure 1.3: Smart Digital Signage System Core Architecture Overview.</p></figcaption>
 </figure>
 
 ### Specific Objectives
@@ -271,12 +271,6 @@ running multi-display networks benefit from lower TCO, reduced energy
 consumption, unified management, and improved emergency preparedness.
 Our open-source implementation eliminates vendor lock-in and enables
 customization for domain-specific requirements.
-
-<figure>
-<img src="./assets/media/fig1_3_system_block_diagram.png"
-style="width:6.64851in;height:3.62542in" />
-<figcaption><p>Smart Digital Signage System overview with network topology.</p></figcaption>
-</figure>
 
 ## Report Structure
 

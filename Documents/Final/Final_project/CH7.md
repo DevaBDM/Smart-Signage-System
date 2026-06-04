@@ -77,7 +77,10 @@ deployment:
 actual Raspberry Pi 4B devices and validate the entire software stack on
 ARM architecture. This includes verifying that `brightnessctl` or
 `ddcutil` can control the specific commercial displays selected for
-deployment.
+deployment. Transitioning to actual Pi hardware also enables the removal
+of the Arduino sensor bridge by connecting the HC-SR04 and LDR sensors
+directly to the Raspberry Pi’s onboard GPIO pins, simplifying the hardware
+architecture and reducing per-node costs.
 
 **Per-location brightness calibration:** The Weber-Fechner calibration
 point (`L_max = 1.0`) was fixed for our prototype. Real campus
@@ -112,6 +115,14 @@ transducer). Alert administrators before hardware failures occur.
 signage content from the university’s event calendar, class schedule,
 and room booking systems. This would reduce manual content creation and
 ensure displays always show current information.
+
+**AI-based content integrity and semantic validation:** Implement computer
+vision and natural language processing (NLP) models to automatically
+verify that the visual content of a post (image or video) aligns with its
+provided title and description. This would serve as an automated
+moderation layer, ensuring that organizational communications remain
+relevant and preventing the broadcast of off-topic or semantically
+mismatched media.
 
 **Kubernetes deployment and horizontal scaling:** Containerize the
 backend services and deploy on a Kubernetes cluster for automatic
