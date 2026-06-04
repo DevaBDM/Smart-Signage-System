@@ -1,8 +1,8 @@
-# Appendices
+# Appendices {.title}
 
 Comprehensive supplementary material for all chapters
 
-## Appendix A - Database Entity-Relationship Diagram
+## Appendix A - Database Entity-Relationship Diagram {.subtitle}
 
 <figure>
 <img src="./assets/media/fig_prisma_erd.png"
@@ -17,7 +17,7 @@ Deployment, Session, SignageState, SignageCommand) with relationships,
 foreign keys, and indexes. Generated from `backend/prisma/schema.prisma`
 using `prisma-erd-generator`.
 
-## Appendix B - Complete REST API Endpoint Reference
+## Appendix B - Complete REST API Endpoint Reference {.subtitle}
 
 <caption>Complete REST API Endpoint Reference</caption>
 | Route | Method | Auth | Description | Key Query Params |
@@ -50,7 +50,7 @@ using `prisma-erd-generator`.
 | `/api/health` | GET | \- | Server health check | \- |
 
 
-## Appendix C - Socket.IO Event Protocol Reference
+## Appendix C - Socket.IO Event Protocol Reference {.subtitle}
 
 Client → Server Events (Authenticated Pi)
 
@@ -78,71 +78,66 @@ Server → Client Events (Pi Receivers)
 | `duplicate_connection` | `{}` | Same token connects from second socket |
 
 
-## Appendix D - Arduino Firmware (`sensors.ino`)
+## Appendix D - Arduino Firmware (`sensors.ino`) {.subtitle}
 
+<figure>
 <img src="./assets/media/code_sensors_ino.png"
-style="width:5.68175in;height:8.55026in" alt="Code A.D" />
+style="width:5.68175in;height:8.55026in" alt="" />
+<figcaption><p>Arduino Mega 2560 sensor firmware. Reads three HC-SR04 ultrasonic sensors</p></figcaption>
+</figure>
 
-Code A.D
-
-**Code A.D -** Arduino Mega 2560 sensor firmware. Reads three HC-SR04
-ultrasonic sensors, one LDR light-dependent resistor, and one
+, one LDR light-dependent resistor, and one
 potentiometer. Formats output as
 `SENSOR:motion:X,brightness:XXX,rain:X.X` and transmits via Serial at
 9600 baud every 500 ms.
 
-## Appendix E - Raspberry Pi Agent Configuration (`config.py`)
+## Appendix E - Raspberry Pi Agent Configuration (`config.py`) {.subtitle}
 
+<figure>
 <img src="./assets/media/code_config_py.png"
-style="width:5.83333in;height:5.23296in" alt="Code A.E" />
+style="width:5.83333in;height:5.23296in" alt="" />
+<figcaption><p>Anthias device configuration file. Defines per-device overrides:</p></figcaption>
+</figure>
 
-Code A.E
-
-**Code A.E -** Anthias device configuration file. Defines per-device
-overrides: `DEVICE_ID`, `DEVICE_NAME`, `LOCATION`, `SERVER_URL`,
+ `DEVICE_ID`, `DEVICE_NAME`, `LOCATION`, `SERVER_URL`,
 `SERIAL_PORT`, `DISPLAY_BACKEND`, and `EMERGENCY_ASSET_PATH`.
 
-## Appendix F - Prisma Schema Excerpt (Key Models)
+## Appendix F - Prisma Schema Excerpt (Key Models) {.subtitle}
 
+<figure>
 <img src="./assets/media/code_prisma_schema.png"
 style="width:2.06226in;height:3.73333in" /><img src="./assets/media/code_prisma_schema.png"
 style="width:2.06319in;height:3.69715in" /><img src="./assets/media/code_prisma_schema.png"
-style="width:2.06166in;height:3.659in" />
-
-<caption>Code A.F</caption>
-| Code A.F |
-|----------|
+style="width:2.06166in;height:3.659in" alt="" />
+<figcaption><p>Prisma schema excerpt showing User, Group, Device, Post, and SensorLog models with relationships, indexes, and enum definitions.</p></figcaption>
+</figure>
 
 
-**Code A.F -** Prisma schema excerpt showing User, Group, Device, Post,
-and SensorLog models with relationships, indexes, and enum definitions.
+## Appendix G - Network Configuration Files {.subtitle}
 
-## Appendix G - Network Configuration Files
+dnsmasq Configuration (`/etc/dnsmasq.conf`)
 
-G.1 dnsmasq Configuration (`/etc/dnsmasq.conf`)
-
+<figure>
 <img src="./assets/media/code_dnsmasq_conf.png"
-style="width:4.81665in;height:3.85494in" alt="Code A.G1" />
+style="width:4.81665in;height:3.85494in" alt="" />
+<figcaption><p>dnsmasq configuration for DHCP reservation, DNS forwarding,</p></figcaption>
+</figure>
 
-Code A.G1
-
-**Code A.G1 -** dnsmasq configuration for DHCP reservation, DNS
-forwarding, and domain resolution within the signage LAN
+ and domain resolution within the signage LAN
 (`10.20.0.0/22`).
 
 G.2 nftables Rules (`/etc/nftables.conf`)
 
+<figure>
 <img src="./assets/media/code_nftables_conf.png"
-style="width:5.464in;height:3.84295in" />
+style="width:5.464in;height:3.84295in" alt="" />
+<figcaption><p>nftables firewall rules implementing default-deny policy,</p></figcaption>
+</figure>
 
-<caption>Code A.G2</caption>
-| Code A.G2 |
-|-----------|
-
-
-**Code A.G2 -** nftables firewall rules implementing default-deny
-policy, allowing only HTTP/HTTPS from campus LAN, SSH from admin VLAN,
+ allowing only HTTP/HTTPS from campus LAN, SSH from admin VLAN,
 and blocking Pi-initiated outbound connections.
+
+## Appendix H - Frontend Component Hierarchy {.subtitle}
 
 <caption>Frontend component hierarchy</caption>
 | Component | File | Props | State |
@@ -158,10 +153,7 @@ and blocking Pi-initiated outbound connections.
 | `LoginPage` | `pages/LoginPage.jsx` | \- | `email`, `password`, `error` |
 | `LiveStreamManager` | `components/LiveStreamManager.jsx` | `streams` | `activeStream`, `previewUrl` |
 
-
-## Appendix H - Frontend Component Hierarchy
-
-## Appendix I - Systemd Service Units
+## Appendix I - Systemd Service Units {.subtitle}
 
 <caption>Systemd service units</caption>
 | Service | File | Purpose | Restart Policy |
@@ -173,7 +165,7 @@ and blocking Pi-initiated outbound connections.
 | `api-server.service` | `pm2` or `systemd` | Node.js Express server | `on-failure`, 30 s delay |
 
 
-## Appendix J - Security Vulnerability Detail Cards
+## Appendix J - Security Vulnerability Detail Cards {.subtitle}
 
 <caption>Security vulnerability detail cards</caption>
 | CVE / ID | Severity | Location | Description | Remediation | Status |
@@ -189,7 +181,7 @@ and blocking Pi-initiated outbound connections.
 | V-009 | P2 | `devices.js` | No audit log for admin actions | `AuditLog` model + middleware (deferred) | Open |
 
 
-## Appendix K - Risk Register
+## Appendix K - Risk Register {.subtitle}
 
 <caption>Risk register</caption>
 | Risk ID | Risk | Probability | Impact | Mitigation | Owner |
@@ -204,7 +196,7 @@ and blocking Pi-initiated outbound connections.
 | R-008 | Sensor calibration drift | Medium | Low | Annual recalibration, automated anomaly detection | Hardware team |
 
 
-## Appendix L - Glossary of Terms
+## Appendix L - Glossary of Terms {.subtitle}
 
 <caption>Glossary of terms</caption>
 | Term | Definition |

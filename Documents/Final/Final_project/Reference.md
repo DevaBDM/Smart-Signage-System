@@ -1,4 +1,4 @@
-# References
+# References {.title}
 
 \[1\]–\[10\] Digital Signage Platforms
 
