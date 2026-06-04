@@ -1,35 +1,42 @@
-<img src="./assets/media/woldia_logo.jpg"
-style="width:2.26744in;height:1.33705in" />
+<img src="./assets/media/woldia_logo.jpg" style="width:2.26744in;height:1.33705in" /> {.Cover}
 
 **WOLDIA UNIVERSITY** {.Cover}
 
 **INSTITUTE OF TECHNOLOGY** {.Cover}
 
-
 **SCHOOL OF ELECTRICAL AND COMPUTER ENGINEERING** {.Cover}
-
 
 **COMPUTER ENGINEERING STREAM** {.Cover}
 
+<br>
+
+<br>
+
 **TITLE: DESIGN AND IMPLEMENTATION OF SMART DIGITAL SIGNAGE SYSTEM FOR THE PURPOSE OF ORGANIZATIONAL INFORMATION DISSEMINATION** {.Cover}
+
+<br>
+
+<br>
 
 **PREPARED BY:** {.Cover}
 
-**GROUP NAME ID NO** {.Cover}
+DAWIT BERHAN (WDU1304696) {.Cover}
 
-1.  **DAWIT BERHAN WDU1304696** {.Cover}
+CHEREKA WAKSHUM (WDU1300748) {.Cover}
 
-2.  **CHEREKA WAKSHUM WDU1300748** {.Cover}
+ARSEMA DANIEL (WDU1300391) {.Cover}
 
-3.  **ARSEMA DANIEL WDU1300391** {.Cover}
+<br>
 
-**ACADEMIC ADVISOR ALI Y. (MSc.)** {.Signature}
+<br>
 
-**SUBMITTED TO: ECE Department** {.Signature}
+ACADEMIC ADVISOR ALI YIMAM (MSc.) {.Signature}
 
-**SUBMITTED DATE 20/09/2018 E.C.** {.Signature}
+SUBMITTED TO: ECE Department {.Signature}
 
-**WOLDIA, ETHIOPIA** {.Signature}
+SUBMITTED DATE 20/09/2018 E.C. {.Signature}
+
+WOLDIA, ETHIOPIA {.Signature}
 
 <!-- SECTION_BREAK_ROMAN -->
 # Declaration {.title}
@@ -41,48 +48,48 @@ student's work or from any other source except where due reference or
 acknowledgment is made explicitly in the text, nor has any part been
 written for us by another person.
 
-**Student’s Name** **Signature** {.Strong}
+**Student’s Name** [tab][tab][tab] **Signature** {.Strong}
 
-Dawit Berhan \_\_\_\_\_\_\_\_\_\_
+Dawit Berhan [tab][tab][tab][tab] _____________  
 
-Chereka Wakshum \_\_\_\_\_\_\_\_\_\_
+Chereka Wakshum [tab][tab][tab] _____________  
 
-Arsema Daniel \_\_\_\_\_\_\_\_\_\_
+Arsema Daniel [tab][tab][tab] _____________  
+
 
 **Advisor’s Approval** {.Strong}
 
 The project has been submitted for examination with approval as a
 university advisor.
 
-**Advisor’s Name Signature Date** {.Strong}
+**Advisor’s Name** [tab][tab] **Signature** [tab][tab] **Date** {.Strong}
 
-**Mr. Ali Yimam (MSc.) \_\_\_\_\_\_\_\_\_\_ \_\_\_\_\_\_\_\_\_\_**
+Mr. Ali Yimam (MSc.) [tab] _____________ [tab] _____________  
 
-**Examiner Committee Signature Date** {.Strong}
+**Examiner Committee** [tab] **Signature** [tab] [tab][tab] **Date** {.Strong}
 
-1\. \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_ \_\_\_\_\_\_\_\_\_\_\_
-\_\_\_\_\_\_\_\_\_\_\_
+1.  _____________ [tab] [tab] _____________ [tab] [tab] _____________  
 
-2\. \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_ \_\_\_\_\_\_\_\_\_\_\_
-\_\_\_\_\_\_\_\_\_\_\_
+2. _____________ [tab] [tab] _____________ [tab][tab] _____________  
 
-3\. \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_ \_\_\_\_\_\_\_\_\_\_\_
-\_\_\_\_\_\_\_\_\_\_\_
+3. _____________ [tab][tab] _____________ [tab][tab] _____________  
 
 \newpage
+
 # Acknowledgements {.title}
 
 We would like to express our sincere gratitude to our advisor, Mr. Ali
-Y, for the guidance, encouragement, and technical insight provided
-throughout this capstone project. His feedback at every milestone was
-instrumental in shaping both the architecture and the presentation of
-our work.
+Yimam (MSc.), for his invaluable guidance, encouragement, and technical
+insights provided throughout this capstone project. His feedback at
+every milestone was instrumental in shaping both the architecture and
+the presentation of our work.
 
-We thank the Department of Electrical and Computer Engineering for
-providing the laboratory facilities and equipment that enabled us to
-assemble and test the sensor hardware prototype. We also acknowledge our
-fellow students and peers whose discussions and suggestions refined our
-design decisions.
+We extend our thanks to the Department of Electrical and Computer
+Engineering, particularly Mr. Feqade (Lab Assistant) and Mr. Abera (Head
+of Department), for providing the laboratory facilities and equipment
+that enabled us to assemble and test the sensor hardware prototype. We
+also acknowledge our fellow students and peers whose discussions and
+suggestions helped refine our design decisions.
 
 This project was completed collaboratively by three final-year students
 working as a group. All system design, hardware assembly, software
@@ -94,7 +101,7 @@ with each member contributing to every subsystem.
 
 University campuses lack an integrated, cost-effective digital signage platform that combines environmental sensing, role-based content management, offline resilience, and emergency broadcast capabilities, while existing commercial solutions carry prohibitive licensing costs and open-source alternatives omit sensor integration and device authentication. This project employed a Design-Based Research methodology with iterative build-test cycles utilizing an Arduino Mega 2560 sensor bridge, Raspberry Pi 4B edge nodes, a Node.js/Express backend with Socket.IO real-time messaging, a React 19 frontend with role-based dashboards, PostgreSQL with Prisma ORM, FFmpeg for stream relay, and a dual-player architecture supporting both Anthias and MPV playback engines. The system was validated through 56 backend tests across 7 suites including real FFmpeg stream relay integration, and 73 frontend end-to-end tests, demonstrating 25–40% power reduction via adaptive brightness, sub-second emergency broadcast propagation, 72-hour offline content playback, and a projected 60% five-year total cost of ownership reduction compared to commercial alternatives over 130 nodes. Twelve security vulnerabilities were remediated across four critical and five high-severity categories, confirming that an open-source, sensor-integrated, multi-tenant digital signage platform with hardware-triggered emergency broadcast, device-token security, and concurrency control is both technically feasible and economically advantageous at zero licensing cost.
 
-**Keywords:** digital signage; IoT; RBAC; Raspberry Pi; adaptive brightness; campus network; Socket.IO; sensor integration; emergency broadcast; offline resilience
+**Keywords:** Smart Digital Signage, Internet of Things (IoT), Role-Based Access Control (RBAC), Adaptive Brightness, Emergency Broadcast System, Network Security, Node.js, Raspberry Pi, Arduino
 
 \newpage
 # Table of Contents {.title}
