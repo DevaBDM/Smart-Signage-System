@@ -212,7 +212,7 @@ enterprise-grade alternative to proprietary signage ecosystems.
 
 Institutions gain a self-managed, secure, and energy-efficient display infrastructure with a 60% reduction in five-year total cost of ownership.
 
-## Report Structure
+## Organization of the report
 
 The remainder of this report is organized as follows:
 

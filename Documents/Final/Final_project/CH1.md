@@ -272,7 +272,7 @@ consumption, unified management, and improved emergency preparedness.
 Our open-source implementation eliminates vendor lock-in and enables
 customization for domain-specific requirements.
 
-## Report Structure
+## Organization of the report
 
 The remainder of this report is organized as follows.
 
