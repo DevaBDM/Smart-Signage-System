@@ -130,14 +130,12 @@ style="width:4.98326in;height:3.24074in" />
 We implemented the Weber-Fechner logarithmic brightness mapping on the
 Debian node using the formula:
 
-``` math
-B_{display} = B_{\min} + \left( B_{\max} - B_{\min} \right) \cdot L_{ambient}
-```
+$$B_{display} = B_{min} + (B_{max} - B_{min}) \cdot L_{ambient}$$
 
-where (B<sub>min</sub>= 10%) is the minimum readable brightness,
-(B<sub>max</sub> = 100%) is the maximum brightness,
-(L<sub>ambient</sub>) is the normalized LDR reading (0–1023 mapped to
-0–1), and (L<sub>max</sub> = 1.0) is the maximum ambient light
+where ($B_{min} = 10\%$) is the minimum readable brightness,
+($B_{max} = 100\%$) is the maximum brightness,
+($L_{ambient}$) is the normalized LDR reading ($0$–$1023$ mapped to
+$0$–$1$), and ($L_{max} = 1.0$) is the maximum ambient light
 calibration point.
 
 When the Debian node receives a sensor packet, it extracts the
